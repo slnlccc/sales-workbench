@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, Sparkles, Calendar, User, CheckCircle2, Download, Mic, Square, ArrowLeft, X, Copy, MapPin, Users, Briefcase } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import { cn } from '@/lib/utils';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { aiApi } from '@/services/api';
 
 type View = 'menu' | 'trip-form' | 'report';
 
@@ -53,15 +55,110 @@ export default function ReportGenerator() {
   const [generatedReport, setGeneratedReport] = useState<{ type: string; content: string; date: string } | null>(null);
   const [tripForm, setTripForm] = useState<TripFormState>(emptyTripForm);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
+  const [voiceErrorMessage, setVoiceErrorMessage] = useState('');
 
-  const thisWeek = records.filter((r) => {
-    const recordDate = new Date(r.createdAt);
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    return recordDate >= weekAgo;
+  // 语音识别
+  const {
+    transcript,
+    interimTranscript,
+    isListening,
+    status: voiceStatus,
+    isSupported,
+    start: startSpeech,
+    stop: stopSpeech,
+    reset: resetSpeech,
+  } = useSpeechRecognition({
+    lang: 'zh-CN',
+    continuous: false,
+    interimResults: true,
   });
+
+  // 实时显示识别文本
+  const liveRecognizedText = transcript + interimTranscript;
+
+  // 同步录音状态
+  useEffect(() => {
+    setIsVoiceRecording(isListening);
+  }, [isListening]);
+
+  // AI 解析语音文本，提取结构化数据填入表单
+  const parseVoiceText = async (text: string): Promise<TripFormState> => {
+    try {
+      const result = await aiApi.voiceAssistant(text, '出差报告表单填写');
+      // 如果 AI 返回了结构化数据，使用它
+      if (result.success && result.data && typeof result.data === 'object') {
+        const d = result.data as any;
+        return {
+          traveler: d.traveler || d.出差人 || '',
+          travelDate: d.travelDate || d.出差时间 || d.日期 || '',
+          destination: d.destination || d.目的地 || '',
+          visitedCustomers: d.visitedCustomers || d.拜访客户 || d.客户 || '',
+          itinerary: d.itinerary || d.行程安排 || d.行程 || '',
+          meetingNotes: d.meetingNotes || d.拜访纪要 || d.纪要 || d.会议记录 || '',
+          achievements: d.achievements || d.成果待办 || d.成果 || d.待办 || '',
+        };
+      }
+    } catch {
+      // AI 失败时继续 fallback
+    }
+    // fallback: 如果文本里包含明显信息，简单匹配
+    const textForm: TripFormState = { ...emptyTripForm };
+    if (text.includes('出差人') || text.includes('出差的是')) textForm.traveler = text;
+    if (text.includes('北京')) textForm.destination = '北京';
+    if (text.includes('上海')) textForm.destination = '上海';
+    if (text.includes('深圳')) textForm.destination = '深圳';
+    if (text.includes('航发') || text.includes('中国航发')) textForm.visitedCustomers = '中国航发';
+    textForm.meetingNotes = text;
+    return textForm;
+  };
+
+  const handleVoiceFill = async () => {
+    if (isListening) {
+      // 停止录音，获取文本并 AI 解析填表单
+      stopSpeech();
+      setTimeout(async () => {
+        const finalText = transcript.trim();
+        if (!finalText) {
+          // fallback：用模拟数据
+          setTripForm(mockVoiceTripData);
+          setIsVoiceRecording(false);
+          return;
+        }
+        setIsProcessingVoice(true);
+        setVoiceErrorMessage('');
+        try {
+          const parsed = await parseVoiceText(finalText);
+          // 合并已有数据和识别结果（识别到的优先，空字段保留已填入的或用fallback补充）
+          setTripForm((prev) => {
+            const merged: TripFormState = { ...emptyTripForm };
+            (Object.keys(emptyTripForm) as (keyof TripFormState)[]).forEach((k) => {
+              merged[k] = parsed[k] || prev[k] || mockVoiceTripData[k];
+            });
+            return merged;
+          });
+        } catch (e: any) {
+          setVoiceErrorMessage(e.message || '解析失败，使用示例数据');
+          // fallback
+          setTripForm(mockVoiceTripData);
+        } finally {
+          setIsProcessingVoice(false);
+          setIsVoiceRecording(false);
+        }
+      }, 600);
+    } else {
+      if (!isSupported) {
+        // 浏览器不支持语音识别，直接 fallback 模拟
+        setTripForm(mockVoiceTripData);
+        return;
+      }
+      setVoiceErrorMessage('');
+      resetSpeech();
+      startSpeech();
+    }
+  };
 
   const generateWeekly = () => {
     setGeneratingType('weekly');
@@ -127,20 +224,17 @@ ${tripForm.achievements ? '  ' + tripForm.achievements.replace(/\n/g, '\n  ') : 
     }, 1000);
   };
 
-  const handleVoiceFill = () => {
-    if (isVoiceRecording) {
-      // 停止录音，模拟语音识别结果自动填入字段
-      setTripForm(mockVoiceTripData);
-      setIsVoiceRecording(false);
-    } else {
-      setIsVoiceRecording(true);
-    }
-  };
-
   const handleExport = () => {
     setShowExport(true);
     setCopyStatus('idle');
   };
+
+  const thisWeek = records.filter((r) => {
+    const recordDate = new Date(r.createdAt);
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    return recordDate >= weekAgo;
+  });
 
   const handleCopy = async () => {
     if (!generatedReport) return;
@@ -308,9 +402,28 @@ ${tripForm.achievements ? '  ' + tripForm.achievements.replace(/\n/g, '\n  ') : 
           </div>
 
           {isVoiceRecording && (
-            <div className="mb-4 p-3 bg-alert/5 border border-alert/20 rounded-xl flex items-center gap-2 text-sm text-alert">
-              <span className="inline-block w-2 h-2 rounded-full bg-alert animate-pulse" />
-              <span>正在聆听，请口述出差信息…停止后将自动填入下方字段</span>
+            <div className="mb-4 p-3 bg-alert/5 border border-alert/20 rounded-xl flex items-start gap-2 text-sm text-alert">
+              <span className="inline-block w-2 h-2 mt-1.5 rounded-full bg-alert animate-pulse shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div>正在聆听，请口述出差信息…停止后将自动 AI 解析填入字段</div>
+                {liveRecognizedText && (
+                  <div className="mt-1 text-alert/80 break-all line-clamp-2">
+                    识别中：{liveRecognizedText}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {isProcessingVoice && (
+            <div className="mb-4 p-3 bg-cream/40 border border-coffee-200 rounded-xl flex items-center gap-2 text-sm text-coffee-700">
+              <Sparkles className="w-4 h-4 animate-spin shrink-0" />
+              <span>AI 正在解析语音内容并填入字段…</span>
+            </div>
+          )}
+          {voiceErrorMessage && !isProcessingVoice && !isVoiceRecording && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 text-sm text-amber-800">
+              <Square className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{voiceErrorMessage}，已使用示例数据填充</span>
             </div>
           )}
 

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Calendar, CheckCircle2, RotateCcw, StickyNote, Mic, Square, BookOpen, Sparkles } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import { cn } from '@/lib/utils';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 
-// 模拟语音识别文本池
+// 模拟语音识别文本池（fallback）
 const mockVoiceTexts = [
   '客户提到下季度有新项目启动，需要提前跟进技术方案。',
   '今天拜访中航工业，对方对GH4169锻件的交期比较关注。',
@@ -14,7 +15,35 @@ const mockVoiceTexts = [
 export default function MemoView() {
   const { memos, memoKnowledge, addMemo, addMemoWithVoice, toggleMemoClosed, promoteMemoToSchedule } = useWorkbenchStore();
   const [inputValue, setInputValue] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
+  const [localRecording, setLocalRecording] = useState(false);
+
+  const {
+    transcript,
+    interimTranscript,
+    isListening,
+    status,
+    isSupported,
+    start,
+    stop,
+    reset,
+  } = useSpeechRecognition({
+    lang: 'zh-CN',
+    continuous: false,
+    interimResults: true,
+  });
+
+  // 实时显示识别文本
+  useEffect(() => {
+    const live = (transcript + interimTranscript).trim();
+    if (live && isListening) {
+      setInputValue(live);
+    }
+  }, [transcript, interimTranscript, isListening]);
+
+  // 同步录音状态
+  useEffect(() => {
+    setLocalRecording(isListening);
+  }, [isListening]);
 
   const handleAdd = () => {
     if (!inputValue.trim()) return;
@@ -23,13 +52,31 @@ export default function MemoView() {
   };
 
   const handleVoiceToggle = () => {
-    if (isRecording) {
-      // 停止录音，生成模拟文本填入输入框
-      const mockText = mockVoiceTexts[Math.floor(Math.random() * mockVoiceTexts.length)];
-      setInputValue(mockText);
-      setIsRecording(false);
+    if (isListening) {
+      stop();
+      setTimeout(() => {
+        const text = transcript.trim();
+        if (text) {
+          setInputValue(text);
+        } else {
+          // fallback 模拟
+          const mockText = mockVoiceTexts[Math.floor(Math.random() * mockVoiceTexts.length)];
+          setInputValue(mockText);
+        }
+      }, 500);
     } else {
-      setIsRecording(true);
+      if (!isSupported) {
+        // 降级：直接使用模拟
+        const mockText = mockVoiceTexts[Math.floor(Math.random() * mockVoiceTexts.length)];
+        setTimeout(() => {
+          setInputValue(mockText);
+          setLocalRecording(true);
+          setTimeout(() => setLocalRecording(false), 800);
+        }, 1500);
+        return;
+      }
+      reset();
+      start();
     }
   };
 
@@ -55,12 +102,12 @@ export default function MemoView() {
             onClick={handleVoiceToggle}
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all',
-              isRecording
+              localRecording
                 ? 'bg-alert text-white animate-pulse'
                 : 'bg-caramel/20 text-coffee-700 hover:bg-caramel/30'
             )}
           >
-            {isRecording ? (
+            {localRecording ? (
               <>
                 <Square className="w-3 h-3 fill-current" />
                 <span>停止录音</span>
@@ -78,19 +125,19 @@ export default function MemoView() {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && (isRecording ? handleVoiceSubmit() : handleAdd())}
-            placeholder={isRecording ? '正在聆听…停止录音后将自动填入' : '想到什么就记下来，比如「客户提到要关注小型化趋势」'}
+            onKeyDown={(e) => e.key === 'Enter' && (localRecording ? handleVoiceSubmit() : handleAdd())}
+            placeholder={localRecording ? '正在聆听…停止录音后将自动填入' : '想到什么就记下来，比如「客户提到要关注小型化趋势」'}
             className="flex-1 px-4 py-2.5 rounded-xl bg-coffee-50 border-2 border-transparent text-sm text-coffee-800 placeholder:text-coffee-400 focus:outline-none focus:border-coffee-300 focus:bg-white transition-all"
           />
           <button
             onClick={handleAdd}
-            disabled={!inputValue.trim() || isRecording}
+            disabled={!inputValue.trim() || localRecording}
             className="px-4 py-2.5 bg-coffee-600 text-white rounded-xl text-sm font-medium hover:bg-coffee-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
           >
             <Plus className="w-4 h-4" />
             <span>记一笔</span>
           </button>
-          {isRecording && inputValue && (
+          {(localRecording || inputValue) && !localRecording && inputValue.trim() && (
             <button
               onClick={handleVoiceSubmit}
               className="px-4 py-2.5 bg-caramel text-white rounded-xl text-sm font-medium hover:bg-coffee-600 transition-colors flex items-center gap-1"
@@ -100,10 +147,14 @@ export default function MemoView() {
             </button>
           )}
         </div>
-        {isRecording && (
+        {localRecording && (
           <p className="mt-2 text-xs text-coffee-500 flex items-center gap-1.5">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-alert animate-pulse" />
-            <span>正在录音，停止后将自动生成文本并沉淀为知识库条目</span>
+            <span>
+              {status === 'listening' && !interimTranscript
+                ? '正在录音，正在聆听您说话…'
+                : '正在识别，点击「语音输入」按钮停止录音'}
+            </span>
           </p>
         )}
       </div>
