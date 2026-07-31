@@ -11,8 +11,8 @@ const connectDB = async () => {
   if (mongoUri) {
     try {
       await mongoose.connect(mongoUri, {
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 5000,
+        serverSelectionTimeoutMS: 3000,
+        connectTimeoutMS: 3000,
       })
       console.log('MongoDB 连接成功:', mongoUri.replace(/\/\/.*:.*@/, '//***:***@'))
       return
@@ -31,7 +31,7 @@ const connectDB = async () => {
     console.log('内存 MongoDB 连接成功（仅开发/演示用，数据不持久化）')
   } catch (memErr) {
     console.error('内存 MongoDB 也连接失败:', memErr.message)
-    process.exit(1)
+    console.warn('数据库不可用，服务将以无数据库模式运行')
   }
 }
 

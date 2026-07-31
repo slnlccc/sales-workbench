@@ -69,11 +69,15 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 3001
 const HOST = process.env.HOST || '0.0.0.0'
 
-initDB().then(() => {
-  app.listen(PORT, HOST, () => {
-    console.log(`服务器运行在 ${HOST}:${PORT}`)
-    console.log(`网络访问模式: 公网开放模式（支持HTTP/HTTPS、公网IP、动态IP、云端域名）`)
-    console.log(`安全策略: JWT鉴权已启用，IP白名单已关闭`)
+// 先启动 HTTP 服务器（让健康检查能通过）
+const server = app.listen(PORT, HOST, () => {
+  console.log(`服务器运行在 ${HOST}:${PORT}`)
+  console.log(`网络访问模式: 公网开放模式（支持HTTP/HTTPS、公网IP、动态IP、云端域名）`)
+  console.log(`安全策略: JWT鉴权已启用，IP白名单已关闭`)
+
+  // 异步初始化数据库（不阻塞服务器启动）
+  initDB().then(() => {
+    console.log('数据库初始化完成')
 
     // 启动每日数据更新定时任务
     const { startScheduler } = require('./services/dailyUpdateService')
@@ -85,8 +89,7 @@ initDB().then(() => {
     } else {
       console.log('AI 服务: 未配置 DEEPSEEK_API_KEY，AI 功能暂不可用')
     }
+  }).catch(err => {
+    console.error('数据库初始化失败（不影响服务启动）:', err.message)
   })
-}).catch(err => {
-  console.error('服务器启动失败:', err)
-  process.exit(1)
 })
