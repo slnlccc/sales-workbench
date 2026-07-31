@@ -7,7 +7,7 @@
     "startCommand": "cd server && node src/server.js",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
-    "healthcheckPath": "/api/users/profile",
+    "healthcheckPath": "/health",
     "healthcheckTimeout": 300
   }
 }

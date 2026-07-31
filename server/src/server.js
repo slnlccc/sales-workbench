@@ -48,6 +48,11 @@ const initDB = async () => {
 
 app.use(express.static(path.join(__dirname, '../../dist')))
 
+// 健康检查端点（无需认证，供 Railway 健康检查使用）
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime() })
+})
+
 app.use('/api/users', require('./routes/userRoutes'))
 app.use('/api/projects', require('./routes/projectRoutes'))
 app.use('/api/contracts', require('./routes/contractRoutes'))
