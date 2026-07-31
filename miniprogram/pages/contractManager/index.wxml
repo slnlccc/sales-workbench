@@ -1,0 +1,229 @@
+<view class="container">
+  <!-- Actions -->
+  <view class="flex gap-2 mb-3">
+    <button class="btn-primary btn-sm" bindtap="openAddModal">+ 新增合同</button>
+    <button class="btn-secondary btn-sm" bindtap="goProjectManager">📋 项目管家</button>
+  </view>
+
+  <!-- Search & Filters -->
+  <view class="card mb-3">
+    <input class="input mb-2" placeholder="搜索客户/合同号..." value="{{search}}" bindinput="onSearchInput" bindconfirm="onSearchConfirm" />
+    <view class="flex gap-2" style="flex-wrap:wrap;">
+      <picker mode="selector" range="{{paymentStatusOptions}}" value="{{paymentStatusIndex}}" bindchange="onPaymentStatusChange">
+        <view class="picker">{{paymentStatusOptions[paymentStatusIndex]}}</view>
+      </picker>
+      <button class="btn-secondary btn-sm" bindtap="clearFilters">清除</button>
+    </view>
+  </view>
+
+  <!-- Stats -->
+  <view class="card mb-3 stats-bar">
+    <text>共 <text class="font-bold">{{stats.total}}</text> 个</text>
+    <text class="text-coffee-400">|</text>
+    <text>总额 <text class="font-bold">{{fmtCurrency(stats.totalAmount)}}</text></text>
+    <text class="text-coffee-400">|</text>
+    <text>已回款 <text class="font-bold">{{fmtCurrency(stats.received)}}</text></text>
+    <text class="text-coffee-400">|</text>
+    <text>部分 <text class="font-bold">{{fmtCurrency(stats.partial)}}</text></text>
+    <text class="text-coffee-400">|</text>
+    <text>待回 <text class="font-bold">{{fmtCurrency(stats.pending)}}</text></text>
+  </view>
+
+  <!-- Table -->
+  <view class="card mb-3" style="padding:0;overflow:hidden;">
+    <scroll-view scroll-x class="table-scroll">
+      <view class="table-header-row table-row">
+        <view class="table-cell" style="min-width:70rpx;">序号</view>
+        <view class="table-cell" style="min-width:180rpx;">合同号</view>
+        <view class="table-cell" style="min-width:160rpx;">客户单位</view>
+        <view class="table-cell" style="min-width:110rpx;">关联项目</view>
+        <view class="table-cell" style="min-width:130rpx;">合同总额</view>
+        <view class="table-cell" style="min-width:110rpx;">回款状态</view>
+        <view class="table-cell" style="min-width:130rpx;">开票日期</view>
+        <view class="table-cell" style="min-width:130rpx;">回款日期</view>
+        <view class="table-cell" style="min-width:130rpx;">部分回款</view>
+        <view class="table-cell" style="min-width:140rpx;">付款方式</view>
+        <view class="table-cell" style="min-width:100rpx;">风险</view>
+        <view class="table-cell" style="min-width:170rpx;">操作</view>
+      </view>
+      <block wx:for="{{pagedContracts}}" wx:key="_id">
+        <view class="table-row">
+          <view class="table-cell" style="min-width:70rpx;">{{(page-1)*pageSize + index + 1}}</view>
+          <view class="table-cell" style="min-width:180rpx;">
+            <text class="tag tag-blue">{{item.clientContractNo}}</text>
+          </view>
+          <view class="table-cell" style="min-width:160rpx;">{{item.customer}}</view>
+          <view class="table-cell" style="min-width:110rpx;">
+            <text class="tag tag-gray">{{item.linkedProjects}} 个</text>
+          </view>
+          <view class="table-cell" style="min-width:130rpx;">{{item.totalAmount}}</view>
+          <view class="table-cell" style="min-width:110rpx;">{{item.paymentStatus}}</view>
+          <view class="table-cell" style="min-width:130rpx;">{{item.invoiceDate}}</view>
+          <view class="table-cell" style="min-width:130rpx;">{{item.paymentDate}}</view>
+          <view class="table-cell" style="min-width:130rpx;">{{item.partialAmount}}</view>
+          <view class="table-cell" style="min-width:140rpx;">{{item.contractPaymentMethod}}</view>
+          <view class="table-cell" style="min-width:100rpx;">
+            <risk-badge risk="{{item.risk}}" />
+          </view>
+          <view class="table-cell" style="min-width:170rpx;">
+            <view class="flex gap-1">
+              <text class="action-link text-blue" bindtap="openViewModal" data-id="{{item._id}}">查看</text>
+              <text class="action-link text-amber" bindtap="openEditModal" data-id="{{item._id}}">编辑</text>
+              <text class="action-link text-red" bindtap="openDeleteModal" data-id="{{item._id}}">删除</text>
+            </view>
+          </view>
+        </view>
+      </block>
+    </scroll-view>
+    <view wx:if="{{pagedContracts.length === 0}}" class="empty-state">暂无数据</view>
+  </view>
+
+  <!-- Pagination -->
+  <view class="flex justify-between items-center mb-3">
+    <text class="text-xs text-coffee-500">共 {{total}} 条，第 {{page}} / {{totalPages}} 页</text>
+    <view class="flex gap-1">
+      <button class="btn-secondary btn-sm" bindtap="prevPage" disabled="{{page === 1}}">上一页</button>
+      <button class="btn-secondary btn-sm" bindtap="nextPage" disabled="{{page >= totalPages}}">下一页</button>
+    </view>
+  </view>
+</view>
+
+<!-- ========== Edit Modal ========== -->
+<view wx:if="{{showEditModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" catchtap="stopPropagation">
+    <view class="modal-header">
+      <text class="text-lg font-semibold">{{editingItem._id ? '编辑合同' : '新增合同'}}</text>
+      <text class="text-coffee-400" style="font-size:32rpx;" bindtap="closeModal">✕</text>
+    </view>
+    <scroll-view scroll-y class="modal-body">
+      <view class="grid-2">
+        <view class="form-item">
+          <text class="form-label">客户端合同号</text>
+          <input class="input" value="{{editingItem.clientContractNo}}" data-field="clientContractNo" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">客户单位</text>
+          <input class="input" value="{{editingItem.customer}}" data-field="customer" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">关联项目数</text>
+          <input class="input" type="digit" value="{{editingItem.linkedProjects}}" data-field="linkedProjects" bindinput="onNumberChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">合同总额</text>
+          <input class="input" type="digit" value="{{editingItem.totalAmount}}" data-field="totalAmount" bindinput="onNumberChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">回款状态</text>
+          <picker mode="selector" range="{{paymentStatusOptions}}" value="{{paymentStatusOptions.indexOf(editingItem.paymentStatus)}}" bindchange="onPaymentStatusSelect">
+            <view class="picker">{{editingItem.paymentStatus}}</view>
+          </picker>
+        </view>
+        <view class="form-item">
+          <text class="form-label">开票日期</text>
+          <input class="input" value="{{editingItem.invoiceDate}}" data-field="invoiceDate" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">回款日期</text>
+          <input class="input" value="{{editingItem.paymentDate}}" data-field="paymentDate" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">部分回款金额</text>
+          <input class="input" type="digit" value="{{editingItem.partialAmount}}" data-field="partialAmount" bindinput="onNumberChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">合同付款方式</text>
+          <input class="input" value="{{editingItem.contractPaymentMethod}}" data-field="contractPaymentMethod" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">实际付款方式</text>
+          <input class="input" value="{{editingItem.actualPaymentMethod}}" data-field="actualPaymentMethod" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">风险</text>
+          <picker mode="selector" range="{{riskOptions}}" value="{{riskIndex}}" bindchange="onRiskChange">
+            <view class="picker">{{riskOptions[riskIndex]}}</view>
+          </picker>
+        </view>
+      </view>
+    </scroll-view>
+    <view class="modal-footer">
+      <button class="btn-secondary btn-sm" bindtap="closeModal">取消</button>
+      <button class="btn-primary btn-sm" bindtap="saveContract">保存</button>
+    </view>
+  </view>
+</view>
+
+<!-- ========== View Modal ========== -->
+<view wx:if="{{showViewModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" catchtap="stopPropagation" style="max-height:80vh;">
+    <view class="modal-header">
+      <view>
+        <text class="text-lg font-semibold">合同详情</text>
+        <text class="text-xs text-coffee-500" style="display:block;">{{viewingItem.clientContractNo}}</text>
+      </view>
+      <text class="text-coffee-400" style="font-size:32rpx;" bindtap="closeModal">✕</text>
+    </view>
+    <scroll-view scroll-y class="modal-body">
+      <view class="grid-2">
+        <view class="form-item"><text class="form-label">合同号</text><text class="form-value">{{viewingItem.clientContractNo}}</text></view>
+        <view class="form-item"><text class="form-label">客户单位</text><text class="form-value">{{viewingItem.customer}}</text></view>
+        <view class="form-item"><text class="form-label">关联项目数</text><text class="form-value">{{viewingItem.linkedProjects}} 个</text></view>
+        <view class="form-item"><text class="form-label">合同总额</text><text class="form-value">{{viewingItem.totalAmount}}</text></view>
+        <view class="form-item"><text class="form-label">回款状态</text><text class="form-value">{{viewingItem.paymentStatus}}</text></view>
+        <view class="form-item"><text class="form-label">开票日期</text><text class="form-value">{{viewingItem.invoiceDate}}</text></view>
+        <view class="form-item"><text class="form-label">回款日期</text><text class="form-value">{{viewingItem.paymentDate}}</text></view>
+        <view class="form-item"><text class="form-label">部分回款</text><text class="form-value">{{viewingItem.partialAmount}}</text></view>
+        <view class="form-item"><text class="form-label">付款方式</text><text class="form-value">{{viewingItem.contractPaymentMethod}}</text></view>
+        <view class="form-item"><text class="form-label">风险</text><risk-badge risk="{{viewingItem.risk}}" /></view>
+      </view>
+
+      <!-- Linked Projects -->
+      <view class="mt-3">
+        <text class="text-sm font-semibold text-coffee-800" style="display:block;margin-bottom:12rpx;">关联生产项目</text>
+        <block wx:if="{{getLinkedProjects(viewingItem.clientContractNo).length === 0}}">
+          <text class="text-xs text-coffee-400">暂无关联项目</text>
+        </block>
+        <block wx:else>
+          <view class="linked-table">
+            <view class="linked-row linked-header">
+              <text class="linked-cell">生产编号</text>
+              <text class="linked-cell">产品名称</text>
+              <text class="linked-cell">规格</text>
+              <text class="linked-cell">数量</text>
+              <text class="linked-cell">总价</text>
+            </view>
+            <block wx:for="{{getLinkedProjects(viewingItem.clientContractNo)}}" wx:key="_id">
+              <view class="linked-row">
+                <text class="linked-cell font-medium">{{item.productionNo}}</text>
+                <text class="linked-cell">{{item.productName}}</text>
+                <text class="linked-cell">{{item.spec}}</text>
+                <text class="linked-cell">{{item.quantity}}</text>
+                <text class="linked-cell">{{item.totalPrice}}</text>
+              </view>
+            </block>
+          </view>
+        </block>
+      </view>
+    </scroll-view>
+    <view class="modal-footer">
+      <button class="btn-primary btn-sm" bindtap="closeModal">关闭</button>
+    </view>
+  </view>
+</view>
+
+<!-- ========== Delete Modal ========== -->
+<view wx:if="{{showDeleteModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" style="max-width:560rpx;" catchtap="stopPropagation">
+    <view class="modal-header" style="justify-content:center;">
+      <text class="text-lg font-semibold">确认删除？</text>
+    </view>
+    <view class="modal-body text-center">
+      <text class="text-sm text-coffee-500">删除后不可恢复，请确认。</text>
+    </view>
+    <view class="modal-footer" style="justify-content:center;">
+      <button class="btn-secondary btn-sm" bindtap="closeModal">取消</button>
+      <button class="btn-danger btn-sm" bindtap="confirmDelete">确认删除</button>
+    </view>
+  </view>
+</view>

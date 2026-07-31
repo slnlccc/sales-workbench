@@ -1,0 +1,9 @@
+{
+  "name": "projects",
+  "version": "1.0.0",
+  "description": "生产项目管理 CRUD",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -1,0 +1,93 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #FAF5EF;
+  color: #5D4E37;
+  /* 移动端字体渲染优化 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* 防止 iOS 横屏时字体放大 */
+  -webkit-text-size-adjust: 100%;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* 移动端触摸优化 */
+@media (max-width: 768px) {
+  /* 增大触摸目标尺寸 */
+  button,
+  a,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 防止表单元素在 iOS 上缩放 */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* 优化滚动体验 */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .gradient-cream {
+    background: linear-gradient(135deg, #5D4E37 0%, #8B7355 50%, #B8A99A 100%);
+  }
+
+  .gradient-cream-light {
+    background: linear-gradient(135deg, #8B7355 0%, #B8A99A 100%);
+  }
+
+  .glass-cream {
+    background: rgba(250, 245, 239, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4C4B5;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B8A99A;
+}

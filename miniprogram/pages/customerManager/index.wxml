@@ -1,0 +1,140 @@
+<view class="container">
+  <view class="card mb-3" style="background:#6F4E37;color:#fff;">
+    <view class="flex justify-between items-center">
+      <view>
+        <text class="text-lg font-bold">客户管家</text>
+        <text class="text-xs opacity-70" style="display:block;">客户画像 · 项目跟踪 · 生产进度</text>
+      </view>
+      <button class="btn-secondary btn-sm" bindtap="openCustomerModal" style="color:#6F4E37;">+ 新增客户</button>
+    </view>
+  </view>
+
+  <view wx:for="{{customers}}" wx:key="id" class="card mb-3">
+    <view class="flex justify-between items-start mb-2">
+      <view>
+        <text class="text-lg font-bold">{{item.name}}</text>
+        <view class="flex gap-2" style="margin-top:4rpx;">
+          <text class="tag" style="background:{{getLevelColor(item.level)}}20;color:{{getLevelColor(item.level)}};">{{item.level}}级</text>
+          <text wx:for="{{item.tags}}" wx:key="index" class="tag tag-gray">{{item}}</text>
+        </view>
+      </view>
+      <view class="flex gap-1">
+        <text class="action-link text-amber" bindtap="openCustomerModal" data-idx="{{index}}">编辑</text>
+        <text class="action-link text-red" bindtap="deleteCustomer" data-idx="{{index}}">删除</text>
+      </view>
+    </view>
+
+    <view class="grid-2" style="margin-bottom:16rpx;">
+      <view>
+        <text class="text-xs text-coffee-400">联系人</text>
+        <text class="text-sm">{{item.contact}}</text>
+      </view>
+      <view>
+        <text class="text-xs text-coffee-400">电话</text>
+        <text class="text-sm">{{item.phone}}</text>
+      </view>
+      <view>
+        <text class="text-xs text-coffee-400">邮箱</text>
+        <text class="text-sm">{{item.email}}</text>
+      </view>
+      <view>
+        <text class="text-xs text-coffee-400">备注</text>
+        <text class="text-sm">{{item.remark}}</text>
+      </view>
+    </view>
+
+    <view>
+      <view class="flex justify-between items-center mb-2">
+        <text class="text-sm font-medium text-coffee-800">项目跟踪</text>
+        <button class="btn-secondary btn-sm" bindtap="openProjectModal" data-cidx="{{index}}">+ 新增项目</button>
+      </view>
+      <view wx:if="{{item.projects.length === 0}}" class="empty-state">暂无项目</view>
+      <view wx:for="{{item.projects}}" wx:key="id" class="project-item">
+        <view class="flex justify-between items-center">
+          <text class="text-sm font-medium">{{item.name}}</text>
+          <text class="tag tag-blue">{{item.status}}</text>
+        </view>
+        <view class="progress-bar">
+          <view class="progress-fill" style="width:{{item.progress}}%;"></view>
+        </view>
+        <text class="text-xs text-coffee-400" style="display:block;margin-top:4rpx;">进度 {{item.progress}}%</text>
+        <view class="flex gap-1" style="margin-top:8rpx;">
+          <text class="action-link text-amber" bindtap="openProjectModal" data-cidx="{{index}}" data-pidx="{{index}}">编辑</text>
+          <text class="action-link text-red" bindtap="deleteProject" data-cidx="{{index}}" data-pidx="{{index}}">删除</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- Customer Modal -->
+<view wx:if="{{showCustomerModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" catchtap="stopPropagation">
+    <view class="modal-header">
+      <text class="text-lg font-semibold">{{editingCustomer.id ? '编辑客户' : '新增客户'}}</text>
+      <text class="text-coffee-400" style="font-size:32rpx;" bindtap="closeModal">✕</text>
+    </view>
+    <view class="modal-body">
+      <view class="form-item">
+        <text class="form-label">客户名称</text>
+        <input class="input" value="{{editingCustomer.name}}" bindinput="onCustomerFieldChange" data-field="name" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">联系人</text>
+        <input class="input" value="{{editingCustomer.contact}}" bindinput="onCustomerFieldChange" data-field="contact" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">电话</text>
+        <input class="input" value="{{editingCustomer.phone}}" bindinput="onCustomerFieldChange" data-field="phone" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">邮箱</text>
+        <input class="input" value="{{editingCustomer.email}}" bindinput="onCustomerFieldChange" data-field="email" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">客户等级</text>
+        <picker mode="selector" range="{{levelOptions}}" value="{{levelOptions.indexOf(editingCustomer.level)}}" bindchange="onLevelChange">
+          <view class="picker">{{editingCustomer.level}}</view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="form-label">备注</text>
+        <textarea class="input" style="height:100rpx;" value="{{editingCustomer.remark}}" bindinput="onCustomerFieldChange" data-field="remark" />
+      </view>
+    </view>
+    <view class="modal-footer">
+      <button class="btn-secondary btn-sm" bindtap="closeModal">取消</button>
+      <button class="btn-primary btn-sm" bindtap="saveCustomer">保存</button>
+    </view>
+  </view>
+</view>
+
+<!-- Project Modal -->
+<view wx:if="{{showProjectModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" catchtap="stopPropagation">
+    <view class="modal-header">
+      <text class="text-lg font-semibold">{{editingProject.id ? '编辑项目' : '新增项目'}}</text>
+      <text class="text-coffee-400" style="font-size:32rpx;" bindtap="closeModal">✕</text>
+    </view>
+    <view class="modal-body">
+      <view class="form-item">
+        <text class="form-label">项目名称</text>
+        <input class="input" value="{{editingProject.name}}" bindinput="onProjectFieldChange" data-field="name" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">状态</text>
+        <picker mode="selector" range="{{statusOptions}}" value="{{statusOptions.indexOf(editingProject.status)}}" bindchange="onStatusChange">
+          <view class="picker">{{editingProject.status}}</view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="form-label">进度(%)</text>
+        <input class="input" type="digit" value="{{editingProject.progress}}" bindinput="onProjectFieldChange" data-field="progress" />
+      </view>
+    </view>
+    <view class="modal-footer">
+      <button class="btn-secondary btn-sm" bindtap="closeModal">取消</button>
+      <button class="btn-primary btn-sm" bindtap="saveProject">保存</button>
+    </view>
+  </view>
+</view>

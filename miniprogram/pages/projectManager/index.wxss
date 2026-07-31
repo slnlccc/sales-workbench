@@ -1,0 +1,42 @@
+.stats-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  font-size: 26rpx;
+  color: #6F4E37;
+}
+
+.action-link {
+  font-size: 24rpx;
+  padding: 4rpx 10rpx;
+  border-radius: 8rpx;
+  background: rgba(0,0,0,0.03);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20rpx;
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-label {
+  font-size: 24rpx;
+  color: #9C8574;
+  margin-bottom: 8rpx;
+}
+
+.form-value {
+  font-size: 28rpx;
+  color: #4A3728;
+  font-weight: 500;
+}
+
+button[disabled] {
+  opacity: 0.4;
+}

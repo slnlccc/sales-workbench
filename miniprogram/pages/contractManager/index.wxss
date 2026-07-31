@@ -1,0 +1,67 @@
+.stats-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  font-size: 26rpx;
+  color: #6F4E37;
+}
+
+.action-link {
+  font-size: 24rpx;
+  padding: 4rpx 10rpx;
+  border-radius: 8rpx;
+  background: rgba(0,0,0,0.03);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20rpx;
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-label {
+  font-size: 24rpx;
+  color: #9C8574;
+  margin-bottom: 8rpx;
+}
+
+.form-value {
+  font-size: 28rpx;
+  color: #4A3728;
+  font-weight: 500;
+}
+
+.linked-table {
+  border: 2rpx solid #EDE6DE;
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+
+.linked-row {
+  display: flex;
+  padding: 16rpx 20rpx;
+  border-bottom: 2rpx solid #F0EBE5;
+  font-size: 24rpx;
+}
+
+.linked-header {
+  background: #F5F3F0;
+  font-weight: 500;
+  color: #6F4E37;
+}
+
+.linked-cell {
+  flex: 1;
+  min-width: 120rpx;
+  color: #4A3728;
+}
+
+button[disabled] {
+  opacity: 0.4;
+}

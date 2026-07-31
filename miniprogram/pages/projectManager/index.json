@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "项目管家",
+  "usingComponents": {
+    "risk-badge": "/components/riskBadge/riskBadge"
+  }
+}

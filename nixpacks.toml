@@ -1,0 +1,19 @@
+# 销售工作台 - Railway 部署配置
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = [
+  "cd server && npm install",
+  "npm install"
+]
+
+[phases.build]
+cmds = [
+  "npm run build",
+  "cp -r dist server/dist"
+]
+
+[start]
+cmd = "cd server && node src/server.js"

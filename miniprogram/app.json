@@ -1,0 +1,22 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/projectManager/index",
+    "pages/contractManager/index",
+    "pages/voiceWorkbench/index",
+    "pages/calendar/index",
+    "pages/marketRadar/index",
+    "pages/customerManager/index",
+    "pages/report/index",
+    "pages/performanceReview/index"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#6F4E37",
+    "navigationBarTitleText": "销售工作台",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#F9F5F0"
+  },
+  "sitemapLocation": "sitemap.json",
+  "cloud": true
+}

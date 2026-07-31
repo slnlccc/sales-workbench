@@ -1,0 +1,28 @@
+.report-type-card {
+  flex: 1;
+  padding: 24rpx;
+  background: #F5F3F0;
+  border-radius: 16rpx;
+  text-align: center;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+}
+
+.form-item {
+  margin-bottom: 16rpx;
+}
+
+.form-label {
+  font-size: 24rpx;
+  color: #9C8574;
+  margin-bottom: 8rpx;
+  display: block;
+}
+
+button[disabled] {
+  opacity: 0.5;
+}

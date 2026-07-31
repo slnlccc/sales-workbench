@@ -1,0 +1,63 @@
+<view class="container">
+  <view class="card mb-3" style="background:#6F4E37;color:#fff;">
+    <view>
+      <text class="text-lg font-bold">市情雷达</text>
+      <text class="text-xs opacity-70" style="display:block;">行业动态 · 原材料价格 · 智能推荐</text>
+    </view>
+  </view>
+
+  <view class="card mb-3">
+    <view class="flex justify-between items-center mb-2">
+      <text class="text-sm font-medium text-coffee-800">行业动态</text>
+      <text class="text-xs text-coffee-400">每日更新</text>
+    </view>
+    <view class="flex gap-2 mb-3">
+      <text 
+        wx:for="{{categories}}" 
+        wx:key="index"
+        class="category-tag"
+        bindtap="filterNews"
+        data-idx="{{index}}"
+        style="{{selectedCategory === item ? 'background:#6F4E37;color:#fff;' : ''}}"
+      >{{item}}</text>
+    </view>
+    <view wx:for="{{getFilteredNews()}}" wx:key="id" class="news-item" bindtap="goDetail" data-id="{{item.id}}">
+      <view class="flex justify-between items-start">
+        <view class="flex-1">
+          <text class="text-sm font-medium">{{item.title}}</text>
+          <text class="text-xs text-coffee-400" style="display:block;margin-top:4rpx;">{{item.source}} · {{item.date}}</text>
+        </view>
+        <text wx:if="{{item.tag}}" class="tag tag-red" style="margin-left:12rpx;">{{item.tag}}</text>
+      </view>
+      <text class="text-xs text-coffee-500" style="display:block;margin-top:8rpx;">{{item.summary}}</text>
+    </view>
+  </view>
+
+  <view class="card mb-3">
+    <view class="flex justify-between items-center mb-2">
+      <text class="text-sm font-medium text-coffee-800">原材料价格</text>
+      <text class="text-xs text-coffee-400">每周一更新 · 数据来源：中国金属网</text>
+    </view>
+    <view class="material-list">
+      <view wx:for="{{materials}}" wx:key="name" class="material-item">
+        <text class="text-sm font-medium">{{item.name}}</text>
+        <view class="flex items-center">
+          <text class="text-sm">{{item.price}} {{item.unit}}</text>
+          <text class="text-xs" style="{{item.trend === 'up' ? 'color:#EF4444;' : 'color:#16A34A;'}}">
+            {{item.trend === 'up' ? '↑' : '↓'}}{{item.change}}
+          </text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card mb-3">
+    <view class="flex justify-between items-center mb-2">
+      <text class="text-sm font-medium text-coffee-800">行业见解</text>
+      <text class="text-xs text-coffee-400">AI智能分析</text>
+    </view>
+    <view wx:for="{{insights}}" wx:key="index" class="insight-item">
+      <text class="text-xs text-coffee-600">• {{item}}</text>
+    </view>
+  </view>
+</view>

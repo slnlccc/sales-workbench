@@ -1,0 +1,100 @@
+<view class="container">
+  <view class="card mb-3" style="background:#6F4E37;color:#fff;">
+    <text class="text-lg font-bold">报告生成</text>
+    <text class="text-xs opacity-70" style="display:block;">周报 · 出差报告 · AI自动生成</text>
+  </view>
+
+  <view class="card mb-3">
+    <text class="text-sm font-medium text-coffee-800" style="display:block;margin-bottom:16rpx;">选择报告类型开始生成</text>
+    <view class="flex gap-3">
+      <view 
+        wx:for="{{reportTypes}}" 
+        wx:key="id" 
+        class="report-type-card"
+        bindtap="selectReportType"
+        data-id="{{item.id}}"
+        style="{{reportType === item.id ? 'background:#6F4E37;color:#fff;' : ''}}"
+      >
+        <text class="text-lg font-bold">{{item.name}}</text>
+        <text class="text-xs opacity-70" style="display:block;">{{item.desc}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{reportType === 'weekly'}}" class="card mb-3">
+    <text class="text-sm font-medium text-coffee-800" style="display:block;margin-bottom:16rpx;">周报设置</text>
+    <view class="empty-state" style="padding:40rpx;">
+      <text class="text-sm">周报将自动汇总：</text>
+      <text class="text-xs text-coffee-400" style="display:block;margin-top:8rpx;">• 日程日历中的会议记录</text>
+      <text class="text-xs text-coffee-400" style="display:block;">• 工作记录与事项</text>
+      <text class="text-xs text-coffee-400" style="display:block;">• 数据统计与项目进展</text>
+    </view>
+    <button class="btn-primary" style="width:100%;margin-top:16rpx;" bindtap="generateWeekly" disabled="{{isGenerating}}">
+      <text wx:if="{{!isGenerating}}">📝 一键生成周报</text>
+      <text wx:else>⏳ 生成中...</text>
+    </button>
+  </view>
+
+  <view wx:if="{{reportType === 'business'}}" class="card mb-3">
+    <text class="text-sm font-medium text-coffee-800" style="display:block;margin-bottom:16rpx;">出差报告</text>
+    
+    <view class="grid-2">
+      <view class="form-item">
+        <text class="form-label">出差日期</text>
+        <picker mode="date" value="{{businessReport.date}}" bindchange="onFieldChange" data-field="date">
+          <view class="picker">{{businessReport.date || '选择日期'}}</view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="form-label">出差地点</text>
+        <input class="input" placeholder="如：西安" value="{{businessReport.destination}}" bindinput="onFieldChange" data-field="destination" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">出差目的</text>
+        <input class="input" placeholder="如：客户拜访" value="{{businessReport.purpose}}" bindinput="onFieldChange" data-field="purpose" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">参会人员</text>
+        <input class="input" placeholder="如：赵部长" value="{{businessReport.attendees}}" bindinput="onFieldChange" data-field="attendees" />
+      </view>
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">会议要点</text>
+      <textarea class="input" style="height:120rpx;" placeholder="请输入会议要点..." value="{{businessReport.keyPoints}}" bindinput="onFieldChange" data-field="keyPoints" />
+      <button class="btn-secondary btn-sm" style="margin-top:8rpx;width:100%;" bindtap="startRecording">
+        <text wx:if="{{!isRecording}}">🎙️ 语音输入</text>
+        <text wx:else>⏹️ 录音中...</text>
+      </button>
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">费用明细</text>
+      <input class="input" placeholder="如：交通费500元" value="{{businessReport.expenses}}" bindinput="onFieldChange" data-field="expenses" />
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">下一步计划</text>
+      <textarea class="input" style="height:100rpx;" placeholder="请输入下一步计划..." value="{{businessReport.nextSteps}}" bindinput="onFieldChange" data-field="nextSteps" />
+    </view>
+
+    <button class="btn-primary" style="width:100%;margin-top:16rpx;" bindtap="generateBusiness">📝 生成出差报告</button>
+  </view>
+</view>
+
+<!-- Report Modal -->
+<view wx:if="{{showReportModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" catchtap="stopPropagation" style="max-height:85vh;">
+    <view class="modal-header">
+      <text class="text-lg font-semibold">生成结果</text>
+      <text class="text-coffee-400" style="font-size:32rpx;" bindtap="closeModal">✕</text>
+    </view>
+    <scroll-view scroll-y class="modal-body" style="white-space:pre-wrap;">
+      <text class="text-sm text-coffee-800">{{generatedReport}}</text>
+    </scroll-view>
+    <view class="modal-footer">
+      <button class="btn-secondary btn-sm" bindtap="closeModal">关闭</button>
+      <button class="btn-primary btn-sm" bindtap="copyReport">复制内容</button>
+    </view>
+  </view>
+</view>
