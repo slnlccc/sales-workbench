@@ -17,10 +17,12 @@ dist-ssr
 server/dist
 *.local
 
-# Environment files (contain secrets!)
-.env
-server/.env
+# Environment files (contain secrets!) - 匹配所有子目录
+**/.env
 *.env.local
+
+# 发布目录（旧的打包产物，含敏感配置）
+release/
 
 # Editor directories and files
 .vscode/*
