@@ -1,13 +1,36 @@
 const express = require('express')
 const router = express.Router()
 const { callDeepSeek, streamDeepSeek } = require('../services/deepseekService')
+const { correctForgeText } = require('../services/forgeCorrectionService')
 const { protect: auth } = require('../middleware/auth')
 
-// ============ 语音工作台助手 ============
+// ============ 锻造专业文本矫正 ============
+
+/**
+ * POST /api/ai/forge-correct
+ * 独立的锻造专业文本矫正接口
+ * 接收 ASR 原始文本，返回矫正后的标准锻造专业文本
+ */
+router.post('/forge-correct', auth, async (req, res) => {
+  try {
+    const { text, useAI = true } = req.body
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: '请提供待矫正文本' })
+    }
+
+    const result = await correctForgeText(text, { useAI })
+    res.json({ success: true, data: result })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ============ 语音工作台助手（已集成锻造文本矫正） ============
 
 /**
  * POST /api/ai/voice-assistant
- * 语音指令智能解析
+ * 语音指令智能解析（流程：ASR原文 → 锻造专业矫正 → DeepSeek语义解析）
  */
 router.post('/voice-assistant', auth, async (req, res) => {
   try {
@@ -17,10 +40,17 @@ router.post('/voice-assistant', auth, async (req, res) => {
       return res.status(400).json({ error: '请提供语音指令内容' })
     }
 
+    // Step 1: 锻造专业文本矫正
+    const correctionResult = await correctForgeText(message, { useAI: true })
+    const correctedText = correctionResult.correctedText
+
+    // Step 2: 使用矫正后的文本进行语义解析
     const systemPrompt = `你是销售工作台的智能语音助手。你的职责是：
 1. 解析销售人员的语音指令，提取关键信息（客户名称、项目、金额、时间、事项类型等）
 2. 根据指令内容，判断应执行的操作（创建记录、更新数据、查询信息、生成报告等）
 3. 以结构化 JSON 格式返回解析结果
+
+注意：所有内容默认属于金属锻造、锻件热处理、航空锻件领域。
 
 返回格式示例：
 {
@@ -39,14 +69,30 @@ router.post('/voice-assistant', auth, async (req, res) => {
 
 当前工作台上下文：${context || '无'}`
 
-    const result = await callDeepSeek(systemPrompt, message)
+    const result = await callDeepSeek(systemPrompt, correctedText)
 
+    let parsed
     try {
-      const parsed = JSON.parse(result)
-      res.json({ success: true, data: parsed })
+      parsed = JSON.parse(result)
     } catch {
-      res.json({ success: true, data: { intent: 'general', reply: result } })
+      parsed = { intent: 'general', reply: result }
     }
+
+    // 返回矫正前后的完整信息
+    res.json({
+      success: true,
+      data: parsed,
+      // 锻造专业矫正信息
+      correction: {
+        originalText: correctionResult.originalText,
+        correctedText: correctionResult.correctedText,
+        hasCorrection: correctionResult.originalText !== correctionResult.correctedText,
+        localCorrections: correctionResult.localCorrections,
+        aiCorrections: correctionResult.aiCorrections,
+        isForgeRelated: correctionResult.isForgeRelated,
+        note: correctionResult.note,
+      },
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

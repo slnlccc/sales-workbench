@@ -134,6 +134,10 @@ export const aiApi = {
   /** 行业资讯智能摘要 */
   marketInsight: (newsItems?: any[], industry?: string) =>
     request('/ai/market-insight', { method: 'POST', body: JSON.stringify({ newsItems, industry }) }),
+
+  /** 锻造专业文本矫正（独立接口） */
+  forgeCorrect: (text: string, useAI = true) =>
+    request('/ai/forge-correct', { method: 'POST', body: JSON.stringify({ text, useAI }) }),
 }
 
 // ============ 数据服务 API ============

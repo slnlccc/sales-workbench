@@ -3,6 +3,7 @@ import { Plus, Calendar, CheckCircle2, RotateCcw, StickyNote, Mic, Square, BookO
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import { cn } from '@/lib/utils';
 import { useVoiceAssistant, VoiceParseResult } from '@/hooks/useVoiceAssistant';
+import ForgeCorrectionCard from './ForgeCorrectionCard';
 
 const mockVoiceTexts = [
   '客户提到下季度有新项目启动，需要提前跟进技术方案。',
@@ -209,6 +210,11 @@ export default function MemoView() {
             <p className="text-xs text-coffee-500 mt-2 pt-2 border-t border-coffee-100">
               建议操作：{parseResult.action}
             </p>
+          )}
+          {parseResult.correction && parseResult.correction.hasCorrection && (
+            <div className="mt-2">
+              <ForgeCorrectionCard correction={parseResult.correction} variant="light" />
+            </div>
           )}
           {parseError && (
             <p className="text-xs text-amber-600 mt-2">

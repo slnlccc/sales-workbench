@@ -3,6 +3,7 @@ import { Mic, Wand2, AlertCircle, Sparkles, Loader2, CheckCircle2, Calendar, Use
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import { cn } from '@/lib/utils';
 import { useVoiceAssistant, VoiceParseResult } from '@/hooks/useVoiceAssistant';
+import ForgeCorrectionCard from './ForgeCorrectionCard';
 
 const mockVoiceTexts = [
   '明天早上8点我要交出差报告，客户是中国航发的',
@@ -209,6 +210,12 @@ export default function VoiceCard() {
           </div>
           {parseResult.action && (
             <p className="mt-2 text-xs text-cream-200">建议操作：{parseResult.action}</p>
+          )}
+          {/* 锻造专业文本矫正信息 */}
+          {parseResult.correction && parseResult.correction.hasCorrection && (
+            <div className="mt-3">
+              <ForgeCorrectionCard correction={parseResult.correction} variant="dark" />
+            </div>
           )}
         </div>
       )}

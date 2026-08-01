@@ -4,6 +4,7 @@ import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import { cn } from '@/lib/utils';
 import AIChatPanel from './AIChatPanel';
 import { useVoiceAssistant, VoiceParseResult } from '@/hooks/useVoiceAssistant';
+import ForgeCorrectionCard from './ForgeCorrectionCard';
 
 const mockVoiceTexts = [
   '明天早上8点交出差报告，客户是中国航发',
@@ -182,6 +183,11 @@ export default function FloatingMic() {
               <p className="text-xs text-coffee-500 pt-1 border-t border-coffee-100">
                 建议操作：{parseResult.action}
               </p>
+            )}
+            {parseResult.correction && parseResult.correction.hasCorrection && (
+              <div className="mt-2">
+                <ForgeCorrectionCard correction={parseResult.correction} variant="light" />
+              </div>
             )}
           </div>
         </div>

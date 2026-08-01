@@ -2,6 +2,17 @@ import { useState, useCallback, useRef } from 'react';
 import { useSpeechRecognition } from './useSpeechRecognition';
 import { aiApi } from '@/services/api';
 
+/** 锻造专业矫正信息 */
+export interface ForgeCorrectionInfo {
+  originalText: string;
+  correctedText: string;
+  hasCorrection: boolean;
+  localCorrections: Array<{ from: string; to: string; type?: string }>;
+  aiCorrections: Array<{ from: string; to: string; reason?: string }>;
+  isForgeRelated: boolean | null;
+  note: string;
+}
+
 export interface VoiceParseResult {
   intent: string;
   entities: {
@@ -18,6 +29,8 @@ export interface VoiceParseResult {
   action: string;
   reply: string;
   rawText: string;
+  /** 锻造专业矫正信息 */
+  correction?: ForgeCorrectionInfo;
 }
 
 interface UseVoiceAssistantOptions {
@@ -46,6 +59,10 @@ interface UseVoiceAssistantReturn {
   parseResult: VoiceParseResult | null;
   parseError: string | null;
 
+  // 锻造矫正状态
+  isCorrecting: boolean;
+  correction: ForgeCorrectionInfo | null;
+
   // 完整流程状态
   isBusy: boolean; // isListening || isParsing
 
@@ -60,7 +77,7 @@ interface UseVoiceAssistantReturn {
 
 /**
  * 语音助手 Hook
- * 封装 "Web Speech API 语音识别 → DeepSeek AI 解析" 的完整流程
+ * 封装 "Web Speech API 语音识别 → DeepSeek AI 解析（含锻造专业文本矫正）" 的完整流程
  *
  * 使用方式：
  * const { isListening, isParsing, parseResult, toggle } = useVoiceAssistant({
@@ -74,6 +91,8 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
   const [isParsing, setIsParsing] = useState(false);
   const [parseResult, setParseResult] = useState<VoiceParseResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [isCorrecting, setIsCorrecting] = useState(false);
+  const [correction, setCorrection] = useState<ForgeCorrectionInfo | null>(null);
 
   // 保存最新的最终文本，用于 stop 后解析
   const finalTextRef = useRef('');
@@ -99,7 +118,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
   });
 
   /**
-   * 调用 DeepSeek AI 解析语音文本
+   * 调用 DeepSeek AI 解析语音文本（后端会先进行锻造专业矫正）
    */
   const parse = useCallback(
     async (text?: string): Promise<VoiceParseResult | null> => {
@@ -112,19 +131,37 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
       }
 
       setIsParsing(true);
+      setIsCorrecting(true);
       setParseError(null);
 
       try {
         const result = await aiApi.voiceAssistant(inputText, context);
+
+        // 提取锻造矫正信息
+        const correctionInfo: ForgeCorrectionInfo | undefined = result.correction
+          ? {
+              originalText: result.correction.originalText,
+              correctedText: result.correction.correctedText,
+              hasCorrection: result.correction.hasCorrection,
+              localCorrections: result.correction.localCorrections || [],
+              aiCorrections: result.correction.aiCorrections || [],
+              isForgeRelated: result.correction.isForgeRelated,
+              note: result.correction.note || '',
+            }
+          : undefined;
+
+        setIsCorrecting(false);
 
         const parsed: VoiceParseResult = {
           intent: result.data?.intent || 'general',
           entities: result.data?.entities || {},
           action: result.data?.action || '',
           reply: result.data?.reply || result.data || '',
-          rawText: inputText,
+          rawText: correctionInfo?.correctedText || inputText,
+          correction: correctionInfo,
         };
 
+        setCorrection(correctionInfo || null);
         setParseResult(parsed);
         onParsed?.(parsed);
         return parsed;
@@ -146,6 +183,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
         return fallback;
       } finally {
         setIsParsing(false);
+        setIsCorrecting(false);
       }
     },
     [transcript, context, onParsed, onParseError]
@@ -154,6 +192,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
   const start = useCallback(() => {
     setParseResult(null);
     setParseError(null);
+    setCorrection(null);
     finalTextRef.current = '';
     resetSpeech();
     startSpeech();
@@ -187,6 +226,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
     resetSpeech();
     setParseResult(null);
     setParseError(null);
+    setCorrection(null);
     finalTextRef.current = '';
   }, [resetSpeech]);
 
@@ -202,6 +242,9 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
     isParsing,
     parseResult,
     parseError,
+
+    isCorrecting,
+    correction,
 
     isBusy,
 
