@@ -104,7 +104,7 @@ const localRegister = (username: string, email: string, password: string, name?:
 }
 
 // 尝试后端登录，失败则使用本地登录
-const tryBackendLogin = async (username: string, password: string): Promise<User | null> => {
+const tryBackendLogin = async (username: string, password: string): Promise<{ user: User; token: string } | null> => {
   try {
     const response = await fetch('/api/users/login', {
       method: 'POST',
@@ -113,13 +113,17 @@ const tryBackendLogin = async (username: string, password: string): Promise<User
     })
     if (!response.ok) return null
     const data = await response.json()
-    return { _id: data._id, username: data.username, email: data.email, name: data.name }
+    if (!data.token) return null
+    return {
+      user: { _id: data._id, username: data.username, email: data.email, name: data.name },
+      token: data.token,
+    }
   } catch {
     return null
   }
 }
 
-const tryBackendRegister = async (username: string, email: string, password: string, name?: string): Promise<User | null> => {
+const tryBackendRegister = async (username: string, email: string, password: string, name?: string): Promise<{ user: User; token: string } | null> => {
   try {
     const response = await fetch('/api/users/register', {
       method: 'POST',
@@ -128,7 +132,11 @@ const tryBackendRegister = async (username: string, email: string, password: str
     })
     if (!response.ok) return null
     const data = await response.json()
-    return { _id: data._id, username: data.username, email: data.email, name: data.name }
+    if (!data.token) return null
+    return {
+      user: { _id: data._id, username: data.username, email: data.email, name: data.name },
+      token: data.token,
+    }
   } catch {
     return null
   }
@@ -162,11 +170,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (username: string, password: string) => {
     setLoading(true)
     try {
-      // 优先尝试后端登录
-      const backendUser = await tryBackendLogin(username, password)
-      const loggedInUser = backendUser ?? localLogin(username, password)
+      // 优先尝试后端登录（获取真实 JWT）
+      const backendResult = await tryBackendLogin(username, password)
+      let loggedInUser: User
+      let newToken: string
 
-      const newToken = generateLocalToken(loggedInUser._id)
+      if (backendResult) {
+        // 后端登录成功，使用真实 JWT
+        loggedInUser = backendResult.user
+        newToken = backendResult.token
+      } else {
+        // 后端不可用，降级到本地登录
+        loggedInUser = localLogin(username, password)
+        newToken = generateLocalToken(loggedInUser._id)
+      }
+
       localStorage.setItem(LOCAL_TOKEN_KEY, newToken)
       localStorage.setItem('sw_current_user', JSON.stringify(loggedInUser))
       setUser(loggedInUser)
@@ -179,11 +197,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const register = async (username: string, email: string, password: string, name?: string) => {
     setLoading(true)
     try {
-      // 优先尝试后端注册
-      const backendUser = await tryBackendRegister(username, email, password, name)
-      const registeredUser = backendUser ?? localRegister(username, email, password, name)
+      // 优先尝试后端注册（获取真实 JWT）
+      const backendResult = await tryBackendRegister(username, email, password, name)
+      let registeredUser: User
+      let newToken: string
 
-      const newToken = generateLocalToken(registeredUser._id)
+      if (backendResult) {
+        registeredUser = backendResult.user
+        newToken = backendResult.token
+      } else {
+        registeredUser = localRegister(username, email, password, name)
+        newToken = generateLocalToken(registeredUser._id)
+      }
+
       localStorage.setItem(LOCAL_TOKEN_KEY, newToken)
       localStorage.setItem('sw_current_user', JSON.stringify(registeredUser))
       setUser(registeredUser)
