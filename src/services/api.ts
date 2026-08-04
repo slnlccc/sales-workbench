@@ -15,6 +15,13 @@ const request = async (url: string, options: RequestInit = {}) => {
   const response = await fetch(`${API_BASE}${url}`, { ...options, headers })
   const data = await response.json()
 
+  if (response.status === 401) {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    window.location.href = '/login'
+    throw new Error('登录已过期，请重新登录')
+  }
+
   if (!response.ok) {
     throw new Error(data.message || '请求失败')
   }
