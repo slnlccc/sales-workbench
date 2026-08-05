@@ -44,19 +44,14 @@ export default function FloatingMic() {
     if (isListening) {
       toggleListening();
       showNotification('info', '录音结束，AI 正在解析…');
-      // 3秒后自动处理解析结果
       setTimeout(() => {
         const state = useVoiceStore.getState();
         if (state.parseResult) {
           const result = state.parseResult;
+          addVoiceTask(result.rawText);
           setShowParseResult(true);
           const shortText = result.rawText.length > 30 ? result.rawText.slice(0, 30) + '…' : result.rawText;
           showNotification('success', `AI 解析完成：${shortText}`);
-          setTimeout(() => {
-            addVoiceTask(result.rawText);
-            setActiveTab('calendar');
-            setShowParseResult(false);
-          }, 3500);
         }
         if (state.parseError) {
           showNotification('error', `AI 解析失败：${state.parseError}`);
@@ -83,13 +78,9 @@ export default function FloatingMic() {
     const result = await parseText(text);
 
     if (result) {
+      addVoiceTask(result.rawText);
       setShowParseResult(true);
       showNotification('success', `解析完成：${result.intent}`);
-      setTimeout(() => {
-        addVoiceTask(result.rawText);
-        setActiveTab('calendar');
-        setShowParseResult(false);
-      }, 3500);
     }
   };
 
@@ -219,17 +210,24 @@ export default function FloatingMic() {
 
       {/* AI 解析结果浮窗 */}
       {showParseResult && parseResult && !isParsing && (
-        <div className="fixed bottom-24 right-4 md:bottom-28 md:right-6 z-50 max-w-[340px] bg-white rounded-2xl shadow-float border border-coffee-100 overflow-hidden animate-slide-up">
+        <div
+          className="fixed bottom-24 right-4 md:bottom-28 md:right-6 z-50 max-w-[340px] bg-white rounded-2xl shadow-float border border-coffee-100 overflow-hidden animate-slide-up"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="px-4 py-3 bg-gradient-to-r from-coffee-600 to-cream-700 text-white flex items-center gap-2">
             <Sparkles className="w-4 h-4" />
             <span className="text-sm font-medium flex-1">AI 解析结果</span>
             <span className="px-2 py-0.5 rounded-full bg-white/20 text-xs">{parseResult.intent}</span>
             <button
-              onClick={() => setShowParseResult(false)}
-              className="ml-1 w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTab('calendar');
+                setShowParseResult(false);
+              }}
+              className="ml-1 w-7 h-7 rounded-full bg-white/30 hover:bg-white/50 flex items-center justify-center transition-colors cursor-pointer"
               aria-label="关闭"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
           <div className="p-4 space-y-2">
