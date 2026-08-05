@@ -33,19 +33,34 @@ router.post('/forge-correct', auth, async (req, res) => {
  * 语音指令智能解析（流程：ASR原文 → 锻造专业矫正 → DeepSeek语义解析）
  */
 router.post('/voice-assistant', auth, async (req, res) => {
+  const { message, context } = req.body
+
+  if (!message) {
+    return res.status(400).json({ error: '请提供语音指令内容' })
+  }
+
+  let correctionResult = null
+
   try {
-    const { message, context } = req.body
-
-    if (!message) {
-      return res.status(400).json({ error: '请提供语音指令内容' })
+    // Step 1: 锻造专业文本矫正（本地词典兜底，不会抛错）
+    correctionResult = await correctForgeText(message, { useAI: true })
+  } catch (err) {
+    // 即使矫正失败，也继续用原文解析
+    correctionResult = {
+      originalText: message,
+      correctedText: message,
+      hasCorrection: false,
+      localCorrections: [],
+      aiCorrections: [],
+      isForgeRelated: true,
+      note: '矫正服务暂不可用，已使用原文',
     }
+  }
 
-    // Step 1: 锻造专业文本矫正
-    const correctionResult = await correctForgeText(message, { useAI: true })
-    const correctedText = correctionResult.correctedText
+  const correctedText = correctionResult.correctedText
 
-    // Step 2: 使用矫正后的文本进行语义解析
-    const systemPrompt = `你是销售工作台的智能语音助手。你的职责是：
+  // Step 2: 使用矫正后的文本进行语义解析（DeepSeek 失败则返回兜底结果）
+  const systemPrompt = `你是销售工作台的智能语音助手。你的职责是：
 1. 解析销售人员的语音指令，提取关键信息（客户名称、项目、金额、时间、事项类型等）
 2. 根据指令内容，判断应执行的操作（创建记录、更新数据、查询信息、生成报告等）
 3. 以结构化 JSON 格式返回解析结果
@@ -54,10 +69,11 @@ router.post('/voice-assistant', auth, async (req, res) => {
 
 返回格式示例：
 {
-  "intent": "create_record|update_data|query_info|generate_report|schedule_meeting",
+  "intent": "create_record|update_data|query_info|generate_report|schedule_meeting|customer_research",
   "entities": {
     "customer": "客户名称",
     "project": "项目名称",
+    "material": "材料牌号（如GH4169）",
     "amount": 金额数字,
     "date": "日期",
     "type": "事项类型",
@@ -69,6 +85,7 @@ router.post('/voice-assistant', auth, async (req, res) => {
 
 当前工作台上下文：${context || '无'}`
 
+  try {
     const result = await callDeepSeek(systemPrompt, correctedText)
 
     let parsed
@@ -78,23 +95,85 @@ router.post('/voice-assistant', auth, async (req, res) => {
       parsed = { intent: 'general', reply: result }
     }
 
-    // 返回矫正前后的完整信息
-    res.json({
+    return res.json({
       success: true,
       data: parsed,
-      // 锻造专业矫正信息
       correction: {
         originalText: correctionResult.originalText,
         correctedText: correctionResult.correctedText,
         hasCorrection: correctionResult.originalText !== correctionResult.correctedText,
-        localCorrections: correctionResult.localCorrections,
-        aiCorrections: correctionResult.aiCorrections,
-        isForgeRelated: correctionResult.isForgeRelated,
-        note: correctionResult.note,
+        localCorrections: correctionResult.localCorrections || [],
+        aiCorrections: correctionResult.aiCorrections || [],
+        isForgeRelated: correctionResult.isForgeRelated ?? null,
+        note: correctionResult.note || '',
       },
     })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    // AI 不可用时，返回本地兜底解析结果，不抛 500
+    const aiErrorMsg = err.message || 'AI 暂不可用'
+
+    // 简易本地规则解析（从原文提取客户/项目/材料关键词）
+    let customer = ''
+    let material = ''
+    let projectType = ''
+
+    // 匹配客户名：抓取"抓取XX的信息"/"关于XX" 等模式
+    const customerMatch = correctedText.match(/(抓取|关于|查询|分析|查看|了解|找|搜索)([^\s的公司厂商厂客户信息商原材料供应商]+?)(的|公司|厂|厂商|供应商|客商|客户|信息|)/)
+    if (customerMatch) customer = customerMatch[2]
+    else {
+      // 取最长的中文词作为客户名兜底
+      const words = correctedText.split(/[\s，。,。!！？?、:：的了和与及/]+/).filter(w => w.length >= 2)
+      if (words.length) customer = words.sort((a, b) => b.length - a.length)[0]
+    }
+
+    // 匹配材料牌号：如 GH4169、45#、20CrMnTi 等
+    const materialMatch = correctedText.match(/(GH|H|T|Cr|Ti|Mo|V|Nb|Al|Fe|Ni|Co|W|A)\d+[A-Za-z\d]*/i)
+      || correctedText.match(/(\d+Cr[A-Za-z\d]+)/i)
+      || correctedText.match(/(\d+号钢|\d+#钢)/i)
+    if (materialMatch) material = materialMatch[0].toUpperCase()
+
+    // 判断意图
+    let intent = 'customer_research'
+    if (/展会|参展|博览会|会议/.test(correctedText)) intent = 'query_info'
+    else if (/周报|日报|出差|拜访|纪要|方案|报告/.test(correctedText)) intent = 'generate_report'
+    else if (/时间|几点|周|月|号|明天|今天|后天|上午|下午/.test(correctedText)) intent = 'schedule_meeting'
+    else if (/价格|行情|走势|多少钱|报价/.test(correctedText)) intent = 'query_info'
+    else if (/抓取|分析|客户|画像|跟进|商机|商情|供应商|原材料/.test(correctedText)) intent = 'customer_research'
+    else if (/修改|更新|添加|删除|改/.test(correctedText)) intent = 'update_data'
+
+    const fallbackReply = `我收到您的请求：${correctedText}
+
+📌 识别结果：
+- 意图：${intent === 'customer_research' ? '客户/商机调研' : intent}
+${customer ? `- 目标客户：${customer}\n` : ''}${material ? `- 关注材料：${material}\n` : ''}
+💡 建议：您可以在「客户管理」模块搜索 ${customer || '相关客户'} 查看跟进历史；或在「市场行情雷达」查看 ${material || '金属材料'} 最新行情。
+
+⚠️ 注意：AI 深度解析暂不可用（${aiErrorMsg}），已使用本地规则识别。如已在 Railway 配置 DEEPSEEK_API_KEY 仍看到此消息，请重启服务后再试。`
+
+    return res.json({
+      success: true,
+      data: {
+        intent,
+        entities: {
+          customer: customer || undefined,
+          material: material || undefined,
+          description: correctedText,
+        },
+        action: customer ? `在客户管理中搜索 ${customer}，查看商机和跟进记录` : '请在对应模块操作',
+        reply: fallbackReply,
+      },
+      correction: {
+        originalText: correctionResult.originalText,
+        correctedText: correctionResult.correctedText,
+        hasCorrection: correctionResult.originalText !== correctionResult.correctedText,
+        localCorrections: correctionResult.localCorrections || [],
+        aiCorrections: correctionResult.aiCorrections || [],
+        isForgeRelated: correctionResult.isForgeRelated ?? true,
+        note: correctionResult.note || `AI 暂不可用：${aiErrorMsg}，已使用本地规则解析`,
+      },
+      fallback: true,
+      aiError: aiErrorMsg,
+    })
   }
 })
 

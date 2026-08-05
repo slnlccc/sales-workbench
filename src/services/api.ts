@@ -23,7 +23,8 @@ const request = async (url: string, options: RequestInit = {}) => {
   }
 
   if (!response.ok) {
-    throw new Error(data.message || '请求失败')
+    // 兼容后端两种错误字段格式：message 和 error
+    throw new Error(data.message || data.error || '请求失败')
   }
 
   return data
