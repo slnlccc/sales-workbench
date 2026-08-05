@@ -217,15 +217,22 @@ const detectTypes = (text: string): { types: string[]; labels: string[] } => {
     if (!types.includes('memo')) { types.push('memo'); labels.push('备忘录'); }
   }
 
-  // 2. 日程提醒：只有明确是会议/拜访等需要安排日程的事项时才添加（报告/报价/合同等纯待办不加 schedule）
+  // 2. 日程提醒：只有明确是会议/拜访等需要安排日程的事项才加（纯报告+提醒不加日程日历，只保留 report 类型）
   const hasTimeKeyword = /(明天|后天|大后天|今天|下周|本周|周[一二三四五六日天]|星期[一二三四五六日天]|\d{1,2}[日号]|\d{1,2}[点时:：])/.test(text);
+  const isReportOnly = types.includes('report') &&
+    !types.includes('meeting') &&
+    !types.includes('visit');
+  const isReminderForReport = /提醒|记得|别忘了/.test(text) && isReportOnly;
+
   const shouldAddSchedule =
     types.includes('meeting') ||
     types.includes('visit') ||
     // 没有任何类型，但有时间关键词 => 当成日程提醒
     (types.length === 0 && hasTimeKeyword) ||
-    // 提醒类明确的待办（如"提醒我XXX"）
-    /提醒|记得|别忘了/.test(text);
+    // 只有纯提醒类（非报告/非报价/非合同等业务待办）+ 时间关键词 => 日程
+    (/提醒|记得|别忘了/.test(text) && !isReminderForReport &&
+      !types.includes('quote') && !types.includes('contract') &&
+      !types.includes('order') && !types.includes('call'));
 
   if (shouldAddSchedule && !types.includes('schedule')) {
     types.unshift('schedule');
