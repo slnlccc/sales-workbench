@@ -220,12 +220,17 @@ export default function FloatingMic() {
       {/* AI 解析结果浮窗 */}
       {showParseResult && parseResult && !isParsing && (
         <div className="fixed bottom-24 right-4 md:bottom-28 md:right-6 z-50 max-w-[340px] bg-white rounded-2xl shadow-float border border-coffee-100 overflow-hidden animate-slide-up">
-          <div className="px-4 py-3 bg-gradient-to-r from-coffee-600 to-cream-700 text-white">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4" />
-              <span className="text-sm font-medium">AI 解析结果</span>
-              <span className="ml-auto px-2 py-0.5 rounded-full bg-white/20 text-xs">{parseResult.intent}</span>
-            </div>
+          <div className="px-4 py-3 bg-gradient-to-r from-coffee-600 to-cream-700 text-white flex items-center gap-2">
+            <Sparkles className="w-4 h-4" />
+            <span className="text-sm font-medium flex-1">AI 解析结果</span>
+            <span className="px-2 py-0.5 rounded-full bg-white/20 text-xs">{parseResult.intent}</span>
+            <button
+              onClick={() => setShowParseResult(false)}
+              className="ml-1 w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+              aria-label="关闭"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
           <div className="p-4 space-y-2">
             <p className="text-sm text-coffee-800 font-medium whitespace-pre-wrap">{parseResult.reply}</p>

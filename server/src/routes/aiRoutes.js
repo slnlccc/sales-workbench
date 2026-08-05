@@ -111,122 +111,184 @@ router.post('/voice-assistant', auth, async (req, res) => {
   } catch (err) {
     // AI 不可用时，返回本地兜底解析结果，不抛 500
     const aiErrorMsg = err.message || 'AI 暂不可用'
+    const text = correctedText.trim()
 
-    // 简易本地规则解析（从原文提取客户/项目/材料关键词）
+    // ===== 1. 意图判断（先看整体意图，再提取实体）=====
+    const INTENT_RULES = [
+      // 提醒/任务：含"提醒/记得/别忘了/要...完成/需要做"
+      { pattern: /提醒|记得|别忘了|要.*(完成|做|提交|准备|写|处理|发|联系|跟进)|需要做|得做/, intent: 'set_reminder', label: '设置提醒' },
+      // 日程/会议：含具体时间
+      { pattern: /(周[一二三四五六日天]|星期[一二三四五六日天]|今天|明天|后天|大后天).*(点|时|:：)|(上午|下午|晚上).*(点|时)/, intent: 'schedule', label: '日程安排' },
+      // 报告/纪要
+      { pattern: /周报|日报|月报|出差报告|拜访纪要|会议纪要|总结|报告/, intent: 'generate_report', label: '生成报告' },
+      // 查询/信息：价格/行情
+      { pattern: /价格|行情|走势|多少钱|报价|多少钱一吨|市场|资讯|新闻/, intent: 'query_info', label: '行情查询' },
+      // 展会/会议
+      { pattern: /展会|参展|博览会|论坛/, intent: 'query_info', label: '展会信息' },
+      // 客户/商机调研
+      { pattern: /客户|画像|商机|跟进|抓取|供应商|厂商|原材料|客户管理/, intent: 'customer_research', label: '客户/商机调研' },
+      // 修改/更新
+      { pattern: /修改|更新|添加|删除|删除|改/, intent: 'update_data', label: '更新数据' },
+    ]
+
+    let intent = 'general'
+    let intentLabel = '通用指令'
+    for (const rule of INTENT_RULES) {
+      if (rule.pattern.test(text)) {
+        intent = rule.intent
+        intentLabel = rule.label
+        break
+      }
+    }
+
+    // ===== 2. 实体提取 =====
     let customer = ''
     let material = ''
-    let projectType = ''
+    let task = ''
+    let timeStr = ''
+    let dateStr = ''
 
-    // ===== 客户名提取：按优先级尝试多种规则 =====
-    // 动作动词黑名单（在客户名里必须剥掉）
-    const ACTION_VERBS = /^(抓取|关于|查询|查找|搜索|分析|查看|了解|找|研究|对比|比较|梳理|整理|记录|填写|生成|写|做|发|提交|发送|准备|对接|沟通|跟进|联系|拜访|会见|接待|洽谈|洽谈见|见|和|与|跟|同)/
-
-    // 1) 匹配「XXX公司/集团/科技/股份/厂/工业/制造/重工/航空/航天/材料/精密/机械/电气/动力/贸易/金属/锻造/铸造」等企业后缀
-    const suffixMatch = correctedText.match(/([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,}(?:股份有限公司|有限责任公司|有限公司|公司|集团|股份|科技|厂|工业|制造|重工|航空|航天|材料|精密|机械|电气|动力|贸易|金属|锻造|铸造))/u)
-    if (suffixMatch) customer = suffixMatch[1]
-
-    // 2) 匹配「动作动词 + XX + 名词（的信息/客户/原材料/公司/厂商/供应商...）」
-    if (!customer) {
-      const actionMatch = correctedText.match(/(关于|查询|分析|查看|了解|搜索|找|查询查找|抓取)[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,30}?)(?=(?:的|之)?(?:信息|商机|画像|跟进|数据|情况|公司|厂|厂商|供应商|客商|客户|厂家|名单|原材料|报价|价格|行情|走势|动态|新闻|$|，|。|,))/u)
-      if (actionMatch && actionMatch[2] && actionMatch[2].trim().length >= 2) {
-        customer = actionMatch[2].trim()
+    // --- 时间提取 ---
+    const timeMatch = text.match(/(\d{1,2})[点时:：](\d{1,2})?/)
+    if (timeMatch) {
+      let hour = parseInt(timeMatch[1], 10)
+      const minute = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0
+      const periodMatch = text.match(/(上午|下午|晚上|中午|早上|凌晨)/)
+      if (periodMatch && periodMatch[1] && (hour < 12 || periodMatch[1] === '下午' || periodMatch[1] === '晚上')) {
+        if (periodMatch[1] === '下午' || periodMatch[1] === '晚上') hour += 12
       }
+      timeStr = `${hour}:${minute.toString().padStart(2, '0')}`
     }
 
-    // 3) 匹配「和/与/拜访/会见/接待/洽谈 + XX + 的/总/先生/女士...」
-    if (!customer) {
-      const relationMatch = correctedText.match(/(和|与|拜访|会见|接待|洽谈|对接|跟|见)[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,20}?)(?=(?:的|$|，|。|,|总|先生|女士|经理|老板|总监|工程师|负责人))/u)
-      if (relationMatch && relationMatch[2] && relationMatch[2].trim().length >= 2) {
-        customer = relationMatch[2].trim()
-      }
-    }
+    // --- 日期提取 ---
+    const dateMatch = text.match(/(周[一二三四五六日天]|星期[一二三四五六日天]|今天|明天|后天|大后天|下周[一二三四五六日天]?)/)
+    if (dateMatch) dateStr = dateMatch[1]
 
-    // 4) 「抓取XX原材料/供应商/厂商」等特殊模式
-    if (!customer) {
-      const grabMatch = correctedText.match(/抓取[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,30}?)(?=(?:的)?(?:原材料|供应商|厂商|厂家|公司|名单|信息|$))/u)
-      if (grabMatch && grabMatch[1] && grabMatch[1].trim().length >= 2) {
-        customer = grabMatch[1].trim()
-      }
-    }
-
-    // 5) 兜底：去除纯时间/日期/报告类噪声后，取 3-12 字最长的中文长词
-    if (!customer) {
-      const cleaned = correctedText
-        .replace(/(今天|明天|后天|昨天|上午|下午|晚上|点|分|周[一二三四五六日天]|月|日|号|周报|日报|月报|报告|纪要|出差|拜访|方案|计划|总结|一份|上周|本周|下周|上个月|下个月|抓取|关于|查询|分析|查看|了解|搜索|找)/g, ' ')
-      const words = cleaned.split(/[\s，。,。!！？?、:：的了和与及/\(\)\[\]【】]+/).filter(w => w.length >= 3 && /[\u4e00-\u9fa5]/.test(w))
-      if (words.length) {
-        const preferred = words.filter(w => w.length <= 12)
-        const pool = preferred.length ? preferred : words
-        customer = pool.sort((a, b) => b.length - a.length)[0]
-      }
-    }
-
-    customer = (customer || '').trim()
-    // 剥掉前缀动作动词
-    customer = customer.replace(ACTION_VERBS, '').trim()
-    // 剥掉结尾多余助词
-    customer = customer.replace(/(的|了|在|是|有|和|与)$/, '').trim()
-    // 如果清洗后 <2 字符，清空让前端跳过
-    if (customer.length < 2) customer = ''
-
-    // 匹配材料牌号：如 GH4169、45#、20CrMnTi 等
-    const materialMatch = correctedText.match(/(GH|H|T|Cr|Ti|Mo|V|Nb|Al|Fe|Ni|Co|W|A)\d+[A-Za-z\d]*/i)
-      || correctedText.match(/(\d+Cr[A-Za-z\d]+)/i)
-      || correctedText.match(/(\d+号钢|\d+#钢)/i)
+    // --- 材料提取 ---
+    const materialMatch = text.match(/(GH\d+|H\d+|Cr\d+[A-Za-z\d]+|Ti\d+|Nb\d+|Al\d+|Ni\d+|Co\d+|W\d+|Mo\d+|V\d+|45#|20CrMnTi|40Cr|35CrMo|304|316)/i)
     if (materialMatch) material = materialMatch[0].toUpperCase()
 
-    // 判断意图
-    let intent = 'customer_research'
-    if (/展会|参展|博览会|会议/.test(correctedText)) intent = 'query_info'
-    else if (/周报|日报|出差|拜访|纪要|方案|报告/.test(correctedText)) intent = 'generate_report'
-    else if (/时间|几点|周|月|号|明天|今天|后天|上午|下午/.test(correctedText)) intent = 'schedule_meeting'
-    else if (/价格|行情|走势|多少钱|报价/.test(correctedText)) intent = 'query_info'
-    else if (/抓取|分析|客户|画像|跟进|商机|商情|供应商|原材料/.test(correctedText)) intent = 'customer_research'
-    else if (/修改|更新|添加|删除|改/.test(correctedText)) intent = 'update_data'
+    // --- 客户名提取（只有在客户调研意图下才提取，且必须有企业后缀）---
+    if (intent === 'customer_research' || /客户|公司|厂商|供应商/.test(text)) {
+      const suffixMatch = text.match(/([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,})(?:股份有限公司|有限责任公司|有限公司|公司|集团|股份|科技|厂|工业|制造|重工|航空|航天|材料|精密|机械|电气|动力|贸易|金属|锻造|铸造)/u)
+      if (suffixMatch) customer = suffixMatch[1] + (suffixMatch[0].match(/(?:股份有限公司|有限责任公司|有限公司|公司|集团|股份|科技|厂|工业|制造|重工|航空|航天|材料|精密|机械|电气|动力|贸易|金属|锻造|铸造)/) || '')
 
-    // 关键词清洗，避免「无」「相关」等无意义搜索词出现在建议里
-    const customerDisplay = customer && !/^(无|相关|的|了|抓取|关于|查询|分析|查看|一份|今天|明天|上周|本周|)$/.test(customer) ? customer : ''
-    const materialDisplay = material || ''
+      // 关系匹配
+      if (!customer) {
+        const relationMatch = text.match(/(和|与|跟|同|拜访|会见|接待|洽谈|对接|联系)[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,10}?)(?=(?:的|总|先生|女士|经理|负责人|$|，|。))/u)
+        if (relationMatch && relationMatch[2] && relationMatch[2].trim().length >= 2) {
+          customer = relationMatch[2].trim()
+        }
+      }
 
-    let suggestion = ''
-    if (customerDisplay && materialDisplay) {
-      suggestion = `💡 建议：在「客户管理」搜索「${customerDisplay}」查看客商跟进历史；在「市场行情雷达」查看「${materialDisplay}」最新价格。`
-    } else if (customerDisplay) {
-      suggestion = `💡 建议：前往「客户管理」搜索「${customerDisplay}」，查看跟进记录和商机。`
-    } else if (materialDisplay) {
-      suggestion = `💡 建议：前往「市场行情雷达」查看「${materialDisplay}」价格走势和行业资讯。`
-    } else {
-      suggestion = `💡 建议：请在「客户管理」搜索客户名称，或在「市场行情雷达」查看金属市场行情。`
+      // 兜底：抓取模式
+      if (!customer) {
+        const grabMatch = text.match(/抓取[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,20}?)(?=(?:的)?(?:原材料|供应商|厂商|厂家|公司|名单|信息|$))/u)
+        if (grabMatch && grabMatch[1] && grabMatch[1].trim().length >= 2) {
+          customer = grabMatch[1].trim()
+        }
+      }
+
+      // 清理
+      customer = customer.replace(/^(抓取|关于|查询|分析|查看|了解|搜索|找|研究|对比)/, '').trim()
+      customer = customer.replace(/(的|了|在|是|有)$/, '').trim()
+      if (customer.length < 2) customer = ''
     }
 
-    const intentLabel = {
-      create_record: '创建工作记录',
-      update_data: '更新数据',
-      query_info: '查询信息',
-      generate_report: '生成报告',
-      schedule_meeting: '日程/会议',
-      customer_research: '客户/商机调研',
-    }[intent] || intent
+    // --- 任务提取 ---
+    const taskMatch = text.match(/(提醒我|要我|我要|记得)[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,30}?)(?=(?:$|，|。|,))/u)
+    if (taskMatch && taskMatch[2]) {
+      task = taskMatch[2].trim()
+    }
+    // 直接提取动作短语
+    if (!task) {
+      const actionMatch = text.match(/(完成|提交|写|准备|处理|做|发|生成|汇报|准备好)[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{1,20}?)(?=(?:$|，|。|,|的)/u)
+      if (actionMatch) task = actionMatch[0]
+    }
+    if (!task) {
+      // 核心内容提取
+      const cleaned = text
+        .replace(/(提醒我|要我|我要|记得|别忘了|需要|得)/g, '')
+        .replace(/(周[一二三四五六日天]|星期[一二三四五六日天]|今天|明天|后天|大后天)/g, '')
+        .replace(/(上午|下午|晚上|中午|早上|凌晨|\d{1,2}[点时:：]\d{0,2})/g, '')
+        .replace(/(之前|之前|前|的时候)/g, '')
+        .replace(/[，。,！？、:：的了和与及\(\)\[\]【】]+/g, ' ')
+        .trim()
+      task = cleaned || text
+    }
 
-    const fallbackReply = `我收到您的请求：${correctedText}
+    // ===== 3. 构建回复和建议 =====
+    let suggestion = ''
+    let replyText = ''
+
+    if (intent === 'set_reminder') {
+      const timeDisplay = [dateStr, timeStr].filter(Boolean).join(' ') || '指定时间'
+      replyText = `好的，我会在 ${timeDisplay} 前提醒您：${task}`
+      suggestion = `💡 建议：已创建提醒，可在「日程日历」中查看和编辑。`
+    } else if (intent === 'schedule') {
+      const timeDisplay = [dateStr, timeStr].filter(Boolean).join(' ')
+      replyText = `已为您安排：${timeDisplay} - ${task}`
+      suggestion = `💡 建议：前往「日程日历」查看详情，可设置提前提醒。`
+    } else if (intent === 'generate_report') {
+      replyText = `好的，已为您准备生成：${task}`
+      suggestion = `💡 建议：前往「报告生成」模块，选择对应报告类型快速生成。`
+    } else if (intent === 'query_info') {
+      replyText = `正在为您查询：${material || task}`
+      if (material) {
+        suggestion = `💡 建议：前往「市场行情雷达」查看「${material}」最新价格和行业资讯。`
+      } else {
+        suggestion = `💡 建议：前往「市场行情雷达」查看金属市场行情和行业资讯。`
+      }
+    } else if (intent === 'customer_research') {
+      if (customer && material) {
+        replyText = `已为您找到「${customer}」相关信息，并匹配到「${material}」材料。`
+        suggestion = `💡 建议：在「客户管理」搜索「${customer}」查看跟进历史；在「市场行情雷达」查看「${material}」价格。`
+      } else if (customer) {
+        replyText = `已为您找到「${customer}」的相关信息。`
+        suggestion = `💡 建议：前往「客户管理」搜索「${customer}」，查看跟进记录和商机。`
+      } else if (material) {
+        replyText = `已为您查询「${material}」的市场行情。`
+        suggestion = `💡 建议：前往「市场行情雷达」查看「${material}」价格走势。`
+      } else {
+        replyText = `已收到您的指令：${text}`
+        suggestion = `💡 建议：请在「客户管理」搜索客户，或在「市场行情雷达」查看金属行情。`
+      }
+    } else if (intent === 'update_data') {
+      replyText = `已记录您的更新需求：${task}`
+      suggestion = `💡 建议：前往对应模块进行修改操作。`
+    } else {
+      replyText = `已收到您的指令：${text}`
+      suggestion = `💡 您可以在对应功能模块中完成操作。`
+    }
+
+    const displayEntities = []
+    if (customer) displayEntities.push(`目标客户：${customer}`)
+    if (material) displayEntities.push(`关注材料：${material}`)
+    if (dateStr) displayEntities.push(`日期：${dateStr}`)
+    if (timeStr) displayEntities.push(`时间：${timeStr}`)
+    if (task && intent !== 'customer_research') displayEntities.push(`任务：${task}`)
+
+    const fallbackReply = `${replyText}
 
 📌 识别结果：
-- 意图：${intentLabel}${customerDisplay ? '\n- 目标客户：' + customerDisplay : ''}${materialDisplay ? '\n- 关注材料：' + materialDisplay : ''}
+- 意图：${intentLabel}${displayEntities.length ? '\n' + displayEntities.map(e => '- ' + e).join('\n') : ''}
 ${suggestion}
 
 ⚠️ 注意：AI 深度解析暂不可用（${aiErrorMsg}），已使用本地规则识别。
-如已在 Railway Variables 配置了 DEEPSEEK_API_KEY 仍看到此消息：请确认 Key 有效并有余额；或前往 deepseek.com 充值。`
+如需要更精准的 AI 解析，请在 Railway Variables 配置 DEEPSEEK_API_KEY 并确保余额充足。`
 
     return res.json({
       success: true,
       data: {
         intent,
         entities: {
-          customer: customer || undefined,
-          material: material || undefined,
-          description: correctedText,
+          ...(customer ? { customer } : {}),
+          ...(material ? { material } : {}),
+          ...(dateStr ? { date: dateStr } : {}),
+          ...(timeStr ? { time: timeStr } : {}),
+          description: text,
         },
-        action: customer ? `在客户管理中搜索 ${customer}，查看商机和跟进记录` : '请在对应模块操作',
+        action: suggestion.replace(/^💡 建议：/, ''),
         reply: fallbackReply,
       },
       correction: {
@@ -235,7 +297,7 @@ ${suggestion}
         hasCorrection: correctionResult.originalText !== correctionResult.correctedText,
         localCorrections: correctionResult.localCorrections || [],
         aiCorrections: correctionResult.aiCorrections || [],
-        isForgeRelated: correctionResult.isForgeRelated ?? true,
+        isForgeRelated: correctionResult.isForgeRelated ?? null,
         note: correctionResult.note || `AI 暂不可用：${aiErrorMsg}，已使用本地规则解析`,
       },
       fallback: true,

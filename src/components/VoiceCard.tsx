@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mic, Wand2, AlertCircle, Sparkles, Loader2, CheckCircle2, Calendar, User, MapPin } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import { useVoiceStore } from '@/store/useVoiceStore';
 import { cn } from '@/lib/utils';
-import type { VoiceParseResult } from '@/store/useVoiceStore';
 import ForgeCorrectionCard from './ForgeCorrectionCard';
 
 const mockVoiceTexts = [
@@ -15,6 +14,7 @@ const mockVoiceTexts = [
 export default function VoiceCard() {
   const { addVoiceTask, setActiveTab } = useWorkbenchStore();
   const [showResult, setShowResult] = useState(false);
+  const [tip, setTip] = useState<{ type: 'success' | 'info'; msg: string } | null>(null);
 
   const {
     transcript,
@@ -28,30 +28,37 @@ export default function VoiceCard() {
     toggleListening,
   } = useVoiceStore();
 
+  const showNotification = (type: 'success' | 'info', msg: string) => {
+    setTip({ type, msg });
+    setTimeout(() => setTip(null), 2500);
+  };
+
   const displayText = transcript + interimTranscript;
   const hasText = displayText.trim().length > 0;
 
   const handleClick = () => {
     if (isListening) {
       toggleListening();
-      // 解析完成后自动创建任务
-      setTimeout(() => {
-        const state = useVoiceStore.getState();
-        if (state.parseResult) {
-          addVoiceTask(state.parseResult.rawText);
-          setShowResult(true);
-          setTimeout(() => {
-            setActiveTab('calendar');
-            useVoiceStore.getState().setShowParseResult(false);
-            setShowResult(false);
-          }, 3000);
-        }
-      }, 100);
+      showNotification('info', '录音结束，AI 正在解析…');
     } else if (!isParsing) {
       setShowResult(false);
       toggleListening();
     }
   };
+
+  // 监听解析完成，自动显示结果并创建任务
+  useEffect(() => {
+    if (parseResult && !isParsing) {
+      setShowResult(true);
+      // 3 秒后自动创建任务并跳转
+      const timer = setTimeout(() => {
+        addVoiceTask(parseResult.rawText);
+        setActiveTab('calendar');
+        setShowResult(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [parseResult, isParsing, addVoiceTask, setActiveTab]);
 
   if (!isSupported) {
     return (
@@ -188,6 +195,12 @@ export default function VoiceCard() {
 
       <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3 blur-2xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/5 rounded-full translate-y-1/2 -translate-x-1/3 blur-2xl pointer-events-none" />
+
+      {tip && (
+        <div className="absolute top-3 left-3 px-3 py-1.5 rounded-full bg-white/90 text-coffee-800 text-xs font-medium shadow z-10 animate-fade-in">
+          {tip.msg}
+        </div>
+      )}
     </div>
   );
 }
