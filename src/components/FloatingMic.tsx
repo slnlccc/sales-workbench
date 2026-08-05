@@ -1,16 +1,10 @@
-import { useState, useEffect } from 'react';
-import { Mic, Sparkles, AlertTriangle, CheckCircle, Loader2, User, Calendar, MapPin } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Mic, Sparkles, AlertTriangle, CheckCircle, Loader2, User, Calendar, MapPin, Keyboard, Send, X } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import { cn } from '@/lib/utils';
 import AIChatPanel from './AIChatPanel';
 import { useVoiceAssistant, VoiceParseResult } from '@/hooks/useVoiceAssistant';
 import ForgeCorrectionCard from './ForgeCorrectionCard';
-
-const mockVoiceTexts = [
-  '明天早上8点交出差报告，客户是中国航发',
-  '后天下午3点拜访航天科工，讨论钛合金方案',
-  '下周一上午10点和中航工业开项目会',
-];
 
 export default function FloatingMic() {
   const { isRecording, setIsRecording, addVoiceTask, setActiveTab } = useWorkbenchStore();
@@ -19,9 +13,13 @@ export default function FloatingMic() {
   const [tipType, setTipType] = useState<'success' | 'error' | 'info'>('info');
   const [tipMessage, setTipMessage] = useState('');
   const [showParseResult, setShowParseResult] = useState(false);
+  const [textMode, setTextMode] = useState(false);
+  const [textInput, setTextInput] = useState('');
+  const textInputRef = useRef<HTMLInputElement>(null);
 
   const {
     transcript,
+    interimTranscript,
     isListening,
     isParsing,
     isBusy,
@@ -30,15 +28,15 @@ export default function FloatingMic() {
     parseResult,
     parseError,
     toggle,
+    parse,
   } = useVoiceAssistant({
     context: '悬浮麦克风 - 快速语音指令',
     autoParse: true,
     onParsed: (result: VoiceParseResult) => {
       setShowParseResult(true);
       const shortText = result.rawText.length > 30 ? result.rawText.slice(0, 30) + '…' : result.rawText;
-      showNotification('success', `AI 解析完成: ${shortText}`);
+      showNotification('success', `AI 解析完成：${shortText}`);
 
-      // 3秒后自动创建任务
       setTimeout(() => {
         addVoiceTask(result.rawText);
         setActiveTab('calendar');
@@ -47,18 +45,16 @@ export default function FloatingMic() {
       }, 3500);
     },
     onParseError: (err: string) => {
-      showNotification('error', `AI 解析失败: ${err}`);
+      showNotification('error', `AI 解析失败：${err}`);
     },
   });
 
-  // 同步录音状态
   useEffect(() => {
     if (isBusy !== isRecording) {
       setIsRecording(isBusy);
     }
   }, [isBusy, isRecording, setIsRecording]);
 
-  // 错误提示
   useEffect(() => {
     if (speechError) {
       showNotification('error', speechError);
@@ -74,18 +70,14 @@ export default function FloatingMic() {
 
   const handleMicClick = () => {
     if (isListening) {
-      // 停止录音，自动触发 AI 解析
       toggle();
       showNotification('info', '录音结束，AI 正在解析…');
     } else if (!isParsing) {
       if (!isSupported) {
-        showNotification('error', '当前浏览器不支持语音识别，请用 Chrome/Edge 打开');
-        // 降级：使用模拟
-        const mockText = mockVoiceTexts[Math.floor(Math.random() * mockVoiceTexts.length)];
-        setTimeout(() => {
-          addVoiceTask(mockText);
-          setActiveTab('calendar');
-        }, 1000);
+        // 语音不可用时，自动切换到文本输入
+        setTextMode(true);
+        showNotification('info', '当前浏览器不支持语音，已切换为文本输入');
+        setTimeout(() => textInputRef.current?.focus(), 100);
         return;
       }
       setShowParseResult(false);
@@ -94,15 +86,56 @@ export default function FloatingMic() {
     }
   };
 
+  const handleTextSubmit = async () => {
+    const text = textInput.trim();
+    if (!text || isParsing) return;
+
+    setShowParseResult(false);
+    setTextInput('');
+
+    showNotification('info', 'AI 正在解析…');
+    const result = await parse(text);
+
+    if (result) {
+      // onParsed 回调会处理后续
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleTextSubmit();
+    } else if (e.key === 'Escape') {
+      setTextMode(false);
+    }
+  };
+
   return (
     <>
       {/* AI 助手按钮 */}
       <button
         onClick={() => setShowAI(true)}
-        className="fixed bottom-6 right-20 md:bottom-8 md:right-24 z-50 w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110 bg-cream-700 hover:bg-cream-800"
+        className="fixed bottom-6 right-[calc(3rem+0.5rem)] md:bottom-8 md:right-[calc(3.5rem+0.5rem)] z-50 w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110 bg-cream-700 hover:bg-cream-800"
         aria-label="AI 助手"
       >
         <Sparkles className="w-6 h-6 text-white" />
+      </button>
+
+      {/* 键盘/文本输入切换按钮 */}
+      <button
+        onClick={() => {
+          setTextMode(!textMode);
+          if (!textMode) {
+            setTimeout(() => textInputRef.current?.focus(), 100);
+          }
+        }}
+        className={cn(
+          'fixed bottom-6 right-[calc(6rem+0.5rem)] md:bottom-8 md:right-[calc(7rem+0.5rem)] z-50 w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110',
+          textMode ? 'bg-cream-800' : 'bg-cream-700 hover:bg-cream-800'
+        )}
+        aria-label={textMode ? '关闭文本输入' : '打开文本输入'}
+      >
+        {textMode ? <X className="w-5 h-5 text-white" /> : <Keyboard className="w-5 h-5 text-white" />}
       </button>
 
       {/* 语音录音按钮 */}
@@ -123,6 +156,55 @@ export default function FloatingMic() {
           <span className="absolute inset-0 rounded-full border-2 border-coffee-300/40 animate-pulse-ring" />
         )}
       </button>
+
+      {/* 文本输入栏 */}
+      {textMode && (
+        <div className="fixed bottom-20 right-6 md:bottom-24 md:right-8 z-50 max-w-[320px] w-[calc(100%-3rem)] md:w-[320px] bg-white rounded-2xl shadow-float border border-coffee-200 overflow-hidden animate-slide-up">
+          <div className="px-3 py-2 bg-coffee-50 border-b border-coffee-100 flex items-center gap-2">
+            <Keyboard className="w-4 h-4 text-coffee-600" />
+            <span className="text-xs font-medium text-coffee-700">
+              {isSupported ? '文字输入（语音不可用时的备选）' : '文字输入'}
+            </span>
+          </div>
+          <div className="p-3 flex gap-2">
+            <input
+              ref={textInputRef}
+              type="text"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="输入指令，如：抓取无锡派克的GH4169原材料信息"
+              className="flex-1 px-3 py-2 rounded-xl bg-coffee-50 border border-coffee-200 text-sm focus:outline-none focus:border-cream-600 focus:ring-1 focus:ring-cream-600"
+              disabled={isParsing}
+            />
+            <button
+              onClick={handleTextSubmit}
+              disabled={isParsing || !textInput.trim()}
+              className="px-3 py-2 rounded-xl bg-cream-600 text-white hover:bg-cream-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+          {!isSupported && (
+            <div className="px-3 pb-2 text-xs text-amber-600 bg-amber-50">
+              💡 您的浏览器不支持语音识别，建议使用文字输入或 Chrome/Edge 浏览器
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 语音识别实时文本 */}
+      {isListening && (
+        <div className="fixed bottom-20 right-6 md:bottom-24 md:right-8 z-50 max-w-[300px] bg-white/95 backdrop-blur rounded-2xl shadow-float border border-coffee-200 px-4 py-3 animate-slide-up">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-xs text-coffee-500">正在录音…</span>
+          </div>
+          <p className="text-sm text-coffee-800 min-h-[1.5rem]">
+            {transcript || interimTranscript || '请对着麦克风说话'}
+          </p>
+        </div>
+      )}
 
       {/* 操作提示 Toast */}
       {showTip && (
@@ -154,7 +236,7 @@ export default function FloatingMic() {
             </div>
           </div>
           <div className="p-4 space-y-2">
-            <p className="text-sm text-coffee-800 font-medium">{parseResult.reply}</p>
+            <p className="text-sm text-coffee-800 font-medium whitespace-pre-wrap">{parseResult.reply}</p>
             {parseResult.rawText && (
               <p className="text-xs text-coffee-400 italic">"{parseResult.rawText}"</p>
             )}

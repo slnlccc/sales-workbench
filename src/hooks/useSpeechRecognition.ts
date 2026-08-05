@@ -22,11 +22,6 @@ interface UseSpeechRecognitionReturn {
   reset: () => void;
 }
 
-/**
- * Web Speech API 语音识别 Hook
- * 支持 Chrome / Edge / Safari 浏览器（移动端 Safari 支持有限）
- * 在不支持的浏览器中优雅降级
- */
 export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}): UseSpeechRecognitionReturn {
   const {
     lang = 'zh-CN',
@@ -45,11 +40,11 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}):
 
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef('');
+  const shouldContinueRef = useRef(false);
 
-  // 检测浏览器支持
   useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SR) {
       setIsSupported(true);
     } else {
       setIsSupported(false);
@@ -63,11 +58,11 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}):
       let finalText = '';
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
+        const text = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalText += transcript;
+          finalText += text;
         } else {
-          interim += transcript;
+          interim += text;
         }
       }
 
@@ -87,70 +82,56 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}):
 
   const handleError = useCallback(
     (event: any) => {
-      let msg = '语音识别失败';
-      switch (event.error) {
-        case 'no-speech':
-          msg = '未检测到语音，请对着麦克风说话';
-          break;
-        case 'audio-capture':
-          msg = '未检测到麦克风设备，请检查麦克风权限';
-          break;
-        case 'not-allowed':
-          msg = '麦克风权限被拒绝，请在浏览器设置中允许访问麦克风';
-          break;
-        case 'network':
-          msg = '网络错误，请检查网络连接';
-          break;
-        case 'aborted':
-          return; // 用户主动停止，不算错误
-        default:
-          msg = `语音识别错误: ${event.error}`;
-      }
+      // 用户主动 stop 触发的 aborted 不算错误
+      if (event.error === 'aborted') return;
+      if (event.error === 'no-speech') return;
+
+      const msgMap: Record<string, string> = {
+        'audio-capture': '未检测到麦克风，请检查设备',
+        'not-allowed': '麦克风权限被拒绝，请在浏览器地址栏点击权限图标允许访问',
+        'service-not-allowed': '语音服务被禁用',
+        'network': '网络异常，语音识别需要联网',
+        'security': '安全限制：语音识别需在 HTTPS 下使用',
+      };
+      const msg = msgMap[event.error] || `语音识别错误: ${event.error}`;
       setError(msg);
       setStatus('error');
       setIsListening(false);
+      shouldContinueRef.current = false;
       onError?.(msg);
     },
     [onError]
   );
 
   const handleEnd = useCallback(() => {
-    // continuous 模式下自动重新开始（解决移动端单次识别限制）
-    if (continuous && recognitionRef.current && recognitionRef.current._shouldContinue) {
+    // 移动端 / 部分浏览器：continuous 模式下也需要自动重启
+    if (shouldContinueRef.current) {
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SR) return;
       try {
-        recognitionRef.current.start();
+        // 关键：重新创建实例（避免浏览器不允许重启已停止的 recognition）
+        const newRec = new SR();
+        newRec.lang = lang;
+        newRec.continuous = continuous;
+        newRec.interimResults = interimResults;
+        newRec.maxAlternatives = 1;
+        newRec.onstart = () => { setIsListening(true); setStatus('listening'); };
+        newRec.onresult = handleResult;
+        newRec.onerror = handleError;
+        newRec.onend = handleEnd;
+        recognitionRef.current = newRec;
+        newRec.start();
       } catch {
-        // 忽略重复启动错误
+        // 自动重启失败，停掉
+        setIsListening(false);
+        setStatus('idle');
+        shouldContinueRef.current = false;
       }
     } else {
       setIsListening(false);
       setStatus('idle');
     }
-  }, [continuous]);
-
-  const handleStart = useCallback(() => {
-    setIsListening(true);
-    setStatus('listening');
-    setError(null);
-  }, []);
-
-  const initRecognition = useCallback(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return null;
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = lang;
-    recognition.continuous = continuous;
-    recognition.interimResults = interimResults;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = handleStart;
-    recognition.onresult = handleResult;
-    recognition.onerror = handleError;
-    recognition.onend = handleEnd;
-
-    return recognition;
-  }, [lang, continuous, interimResults, handleStart, handleResult, handleError, handleEnd]);
+  }, [lang, continuous, interimResults, handleResult, handleError]);
 
   const start = useCallback(() => {
     if (!isSupported) {
@@ -159,35 +140,52 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}):
       return;
     }
 
-    if (!recognitionRef.current) {
-      recognitionRef.current = initRecognition();
-    }
-
-    if (!recognitionRef.current) {
-      setError('语音识别初始化失败');
-      setStatus('error');
-      return;
-    }
-
     try {
+      shouldContinueRef.current = true;
       finalTranscriptRef.current = '';
       setTranscript('');
       setInterimTranscript('');
-      recognitionRef.current._shouldContinue = true;
-      recognitionRef.current.start();
-    } catch (err: any) {
-      if (err.name === 'InvalidStateError') {
-        // 已经在运行中
+      setError(null);
+
+      // 关键：每次 start 都创建全新的 recognition 实例
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SR) {
+        setError('语音识别不可用');
+        setStatus('error');
         return;
       }
-      setError(`启动语音识别失败: ${err.message}`);
+
+      const recognition = new SR();
+      recognition.lang = lang;
+      recognition.continuous = continuous;
+      recognition.interimResults = interimResults;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setStatus('listening');
+        setError(null);
+      };
+      recognition.onresult = handleResult;
+      recognition.onerror = handleError;
+      recognition.onend = handleEnd;
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
+      if (err.name === 'InvalidStateError') {
+        return;
+      }
+      setError(`启动语音识别失败：${err.message}`);
       setStatus('error');
+      setIsListening(false);
+      shouldContinueRef.current = false;
     }
-  }, [isSupported, initRecognition]);
+  }, [isSupported, lang, continuous, interimResults, handleResult, handleError, handleEnd]);
 
   const stop = useCallback(() => {
+    shouldContinueRef.current = false;
     if (recognitionRef.current) {
-      recognitionRef.current._shouldContinue = false;
       try {
         recognitionRef.current.stop();
       } catch {
@@ -199,20 +197,27 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}):
   }, []);
 
   const reset = useCallback(() => {
-    stop();
+    shouldContinueRef.current = false;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // 忽略
+      }
+    }
     finalTranscriptRef.current = '';
     setTranscript('');
     setInterimTranscript('');
     setError(null);
     setStatus('idle');
-  }, [stop]);
+    setIsListening(false);
+  }, []);
 
-  // 页面卸载时清理
   useEffect(() => {
     return () => {
+      shouldContinueRef.current = false;
       if (recognitionRef.current) {
         try {
-          recognitionRef.current._shouldContinue = false;
           recognitionRef.current.stop();
         } catch {
           // 忽略清理错误
