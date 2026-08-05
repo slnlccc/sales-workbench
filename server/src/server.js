@@ -34,7 +34,7 @@ const HOST = process.env.HOST || '0.0.0.0'
 
 // ============ 健康检查端点（最优先注册）============
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime(), version: 'v2.1' })
+  res.json({ status: 'ok', uptime: process.uptime(), version: 'v2.2' })
 })
 
 // ============ API 路由 ============
@@ -59,7 +59,7 @@ app.get('*', (req, res) => {
 const server = app.listen(PORT, HOST, () => {
   console.log(`========================================`)
   console.log(`服务器运行在 ${HOST}:${PORT}`)
-  console.log(`版本: v2.1`)
+  console.log(`版本: v2.2`)
   console.log(`========================================`)
 
   // 延迟初始化数据库（不阻塞启动，健康检查先通过）
