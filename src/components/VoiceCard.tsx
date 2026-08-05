@@ -36,9 +36,13 @@ export default function VoiceCard() {
         addVoiceTask(result.rawText);
         setActiveTab('calendar');
         setIsRecording(false);
+        setShowResult(false);
       }, 3000);
     },
   });
+
+  // 如果全局有另一个实例在占用，显示提示而不是自己的状态
+  const isPreempted = isListening && !isBusy;
 
   // 同步录音状态
   useEffect(() => {

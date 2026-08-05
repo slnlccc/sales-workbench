@@ -2,6 +2,10 @@ import { useState, useCallback, useRef } from 'react';
 import { useSpeechRecognition } from './useSpeechRecognition';
 import { aiApi } from '@/services/api';
 
+// 模块级单例追踪：确保全局只有一个 useVoiceAssistant 实例处于活跃状态
+let activeInstanceId: string | null = null;
+let instanceCounter = 0;
+
 /** 锻造专业矫正信息 */
 export interface ForgeCorrectionInfo {
   originalText: string;
@@ -88,6 +92,9 @@ interface UseVoiceAssistantReturn {
 export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVoiceAssistantReturn {
   const { context, autoParse = true, onListening, onParsed, onParseError } = options;
 
+  const instanceId = useRef(`va-${++instanceCounter}`);
+  const isActiveOwner = useRef(false);
+
   const [isParsing, setIsParsing] = useState(false);
   const [parseResult, setParseResult] = useState<VoiceParseResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -96,6 +103,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
 
   // 保存最新的最终文本，用于 stop 后解析
   const finalTextRef = useRef('');
+  const pendingParseRef = useRef(false);
 
   const {
     transcript,
@@ -111,7 +119,7 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
     continuous: true,
     interimResults: true,
     onResult: (text, isFinal) => {
-      if (isFinal) {
+      if (isFinal && isActiveOwner.current) {
         finalTextRef.current = text;
       }
     },
@@ -190,6 +198,14 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
   );
 
   const start = useCallback(() => {
+    // 只有一个实例能成为活跃所有者
+    if (activeInstanceId && activeInstanceId !== instanceId.current) {
+      // 另一个实例正在使用，停止它
+      activeInstanceId = null;
+    }
+    activeInstanceId = instanceId.current;
+    isActiveOwner.current = true;
+
     setParseResult(null);
     setParseError(null);
     setCorrection(null);
@@ -200,16 +216,28 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
   }, [resetSpeech, startSpeech, onListening]);
 
   const stop = useCallback(() => {
-    stopSpeech();
+    if (isActiveOwner.current) {
+      stopSpeech();
 
-    // 自动模式下，停止后自动调用 AI 解析
-    if (autoParse) {
-      const textToParse = finalTextRef.current || transcript;
-      if (textToParse.trim()) {
-        // 延迟一点确保获取到最终文本
-        setTimeout(() => {
-          parse(textToParse);
-        }, 300);
+      // 自动模式下，停止后自动调用 AI 解析
+      if (autoParse) {
+        const textToParse = finalTextRef.current || transcript;
+        if (textToParse.trim()) {
+          pendingParseRef.current = true;
+          // 延迟一点确保获取到最终文本
+          setTimeout(() => {
+            if (pendingParseRef.current) {
+              pendingParseRef.current = false;
+              parse(textToParse);
+            }
+          }, 300);
+        }
+      }
+
+      // 释放所有权
+      isActiveOwner.current = false;
+      if (activeInstanceId === instanceId.current) {
+        activeInstanceId = null;
       }
     }
   }, [stopSpeech, autoParse, transcript, parse]);
@@ -228,6 +256,11 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}): UseVo
     setParseError(null);
     setCorrection(null);
     finalTextRef.current = '';
+    pendingParseRef.current = false;
+    isActiveOwner.current = false;
+    if (activeInstanceId === instanceId.current) {
+      activeInstanceId = null;
+    }
   }, [resetSpeech]);
 
   const isBusy = isListening || isParsing;

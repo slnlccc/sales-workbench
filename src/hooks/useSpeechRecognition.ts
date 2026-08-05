@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { speechService } from '@/services/speechService';
 
 type SpeechRecognitionStatus = 'idle' | 'listening' | 'processing' | 'error' | 'unsupported';
 
@@ -38,100 +39,54 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}):
   const [error, setError] = useState<string | null>(null);
   const [isSupported, setIsSupported] = useState(false);
 
-  const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef('');
-  const shouldContinueRef = useRef(false);
+  const onResultRef = useRef(onResult);
+  const onErrorRef = useRef(onError);
+
+  onResultRef.current = onResult;
+  onErrorRef.current = onError;
 
   useEffect(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SR) {
-      setIsSupported(true);
-    } else {
-      setIsSupported(false);
+    setIsSupported(speechService.isSupported());
+    if (!speechService.isSupported()) {
       setStatus('unsupported');
     }
   }, []);
 
-  const handleResult = useCallback(
-    (event: any) => {
-      let interim = '';
-      let finalText = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const text = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalText += text;
-        } else {
-          interim += text;
-        }
-      }
-
-      if (finalText) {
-        finalTranscriptRef.current += finalText;
+  useEffect(() => {
+    const unsub = speechService.onStateChange((state: any) => {
+      if (state.type === 'start') {
+        setIsListening(true);
+        setStatus('listening');
+        setError(null);
+      } else if (state.type === 'final') {
+        finalTranscriptRef.current += state.text;
         setTranscript(finalTranscriptRef.current);
-        onResult?.(finalTranscriptRef.current, true);
-      }
-
-      setInterimTranscript(interim);
-      if (interim) {
-        onResult?.(interim, false);
-      }
-    },
-    [onResult]
-  );
-
-  const handleError = useCallback(
-    (event: any) => {
-      // 用户主动 stop 触发的 aborted 不算错误
-      if (event.error === 'aborted') return;
-      if (event.error === 'no-speech') return;
-
-      const msgMap: Record<string, string> = {
-        'audio-capture': '未检测到麦克风，请检查设备',
-        'not-allowed': '麦克风权限被拒绝，请在浏览器地址栏点击权限图标允许访问',
-        'service-not-allowed': '语音服务被禁用',
-        'network': '网络异常，语音识别需要联网',
-        'security': '安全限制：语音识别需在 HTTPS 下使用',
-      };
-      const msg = msgMap[event.error] || `语音识别错误: ${event.error}`;
-      setError(msg);
-      setStatus('error');
-      setIsListening(false);
-      shouldContinueRef.current = false;
-      onError?.(msg);
-    },
-    [onError]
-  );
-
-  const handleEnd = useCallback(() => {
-    // 移动端 / 部分浏览器：continuous 模式下也需要自动重启
-    if (shouldContinueRef.current) {
-      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SR) return;
-      try {
-        // 关键：重新创建实例（避免浏览器不允许重启已停止的 recognition）
-        const newRec = new SR();
-        newRec.lang = lang;
-        newRec.continuous = continuous;
-        newRec.interimResults = interimResults;
-        newRec.maxAlternatives = 1;
-        newRec.onstart = () => { setIsListening(true); setStatus('listening'); };
-        newRec.onresult = handleResult;
-        newRec.onerror = handleError;
-        newRec.onend = handleEnd;
-        recognitionRef.current = newRec;
-        newRec.start();
-      } catch {
-        // 自动重启失败，停掉
+        onResultRef.current?.(finalTranscriptRef.current, true);
+      } else if (state.type === 'interim') {
+        setInterimTranscript(state.text);
+        onResultRef.current?.(state.text, false);
+      } else if (state.type === 'error') {
+        const msgMap: Record<string, string> = {
+          'audio-capture': '未检测到麦克风，请检查设备',
+          'not-allowed': '麦克风权限被拒绝，请在浏览器地址栏点击权限图标允许访问',
+          'service-not-allowed': '语音服务被禁用',
+          'network': '网络异常，语音识别需要联网',
+          'security': '安全限制：语音识别需在 HTTPS 下使用',
+        };
+        const msg = msgMap[state.error] || `语音识别错误: ${state.error}`;
+        setError(msg);
+        setStatus('error');
+        setIsListening(false);
+        onErrorRef.current?.(msg);
+      } else if (state.type === 'end') {
         setIsListening(false);
         setStatus('idle');
-        shouldContinueRef.current = false;
       }
-    } else {
-      setIsListening(false);
-      setStatus('idle');
-    }
-  }, [lang, continuous, interimResults, handleResult, handleError]);
+    });
+
+    return () => { unsub(); };
+  }, []);
 
   const start = useCallback(() => {
     if (!isSupported) {
@@ -140,71 +95,26 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}):
       return;
     }
 
-    try {
-      shouldContinueRef.current = true;
-      finalTranscriptRef.current = '';
-      setTranscript('');
-      setInterimTranscript('');
-      setError(null);
+    finalTranscriptRef.current = '';
+    setTranscript('');
+    setInterimTranscript('');
+    setError(null);
 
-      // 关键：每次 start 都创建全新的 recognition 实例
-      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SR) {
-        setError('语音识别不可用');
-        setStatus('error');
-        return;
-      }
-
-      const recognition = new SR();
-      recognition.lang = lang;
-      recognition.continuous = continuous;
-      recognition.interimResults = interimResults;
-      recognition.maxAlternatives = 1;
-
-      recognition.onstart = () => {
-        setIsListening(true);
-        setStatus('listening');
-        setError(null);
-      };
-      recognition.onresult = handleResult;
-      recognition.onerror = handleError;
-      recognition.onend = handleEnd;
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err: any) {
-      if (err.name === 'InvalidStateError') {
-        return;
-      }
-      setError(`启动语音识别失败：${err.message}`);
+    const result = speechService.start({ lang, continuous, interimResults });
+    if (!result.ok) {
+      setError(`启动语音识别失败：${result.error}`);
       setStatus('error');
-      setIsListening(false);
-      shouldContinueRef.current = false;
     }
-  }, [isSupported, lang, continuous, interimResults, handleResult, handleError, handleEnd]);
+  }, [isSupported, lang, continuous, interimResults]);
 
   const stop = useCallback(() => {
-    shouldContinueRef.current = false;
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        // 忽略停止错误
-      }
-    }
+    speechService.stop();
     setIsListening(false);
     setStatus('idle');
   }, []);
 
   const reset = useCallback(() => {
-    shouldContinueRef.current = false;
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        // 忽略
-      }
-    }
+    speechService.reset();
     finalTranscriptRef.current = '';
     setTranscript('');
     setInterimTranscript('');
@@ -215,14 +125,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}):
 
   useEffect(() => {
     return () => {
-      shouldContinueRef.current = false;
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch {
-          // 忽略清理错误
-        }
-      }
+      // 不清理全局实例——其他组件可能在用
     };
   }, []);
 
