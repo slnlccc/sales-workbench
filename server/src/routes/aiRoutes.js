@@ -117,14 +117,57 @@ router.post('/voice-assistant', auth, async (req, res) => {
     let material = ''
     let projectType = ''
 
-    // 匹配客户名：抓取"抓取XX的信息"/"关于XX" 等模式
-    const customerMatch = correctedText.match(/(抓取|关于|查询|分析|查看|了解|找|搜索)([^\s的公司厂商厂客户信息商原材料供应商]+?)(的|公司|厂|厂商|供应商|客商|客户|信息|)/)
-    if (customerMatch) customer = customerMatch[2]
-    else {
-      // 取最长的中文词作为客户名兜底
-      const words = correctedText.split(/[\s，。,。!！？?、:：的了和与及/]+/).filter(w => w.length >= 2)
-      if (words.length) customer = words.sort((a, b) => b.length - a.length)[0]
+    // ===== 客户名提取：按优先级尝试多种规则 =====
+    // 动作动词黑名单（在客户名里必须剥掉）
+    const ACTION_VERBS = /^(抓取|关于|查询|查找|搜索|分析|查看|了解|找|研究|对比|比较|梳理|整理|记录|填写|生成|写|做|发|提交|发送|准备|对接|沟通|跟进|联系|拜访|会见|接待|洽谈|洽谈见|见|和|与|跟|同)/
+
+    // 1) 匹配「XXX公司/集团/科技/股份/厂/工业/制造/重工/航空/航天/材料/精密/机械/电气/动力/贸易/金属/锻造/铸造」等企业后缀
+    const suffixMatch = correctedText.match(/([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,}(?:股份有限公司|有限责任公司|有限公司|公司|集团|股份|科技|厂|工业|制造|重工|航空|航天|材料|精密|机械|电气|动力|贸易|金属|锻造|铸造))/u)
+    if (suffixMatch) customer = suffixMatch[1]
+
+    // 2) 匹配「动作动词 + XX + 名词（的信息/客户/原材料/公司/厂商/供应商...）」
+    if (!customer) {
+      const actionMatch = correctedText.match(/(关于|查询|分析|查看|了解|搜索|找|查询查找|抓取)[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,30}?)(?=(?:的|之)?(?:信息|商机|画像|跟进|数据|情况|公司|厂|厂商|供应商|客商|客户|厂家|名单|原材料|报价|价格|行情|走势|动态|新闻|$|，|。|,))/u)
+      if (actionMatch && actionMatch[2] && actionMatch[2].trim().length >= 2) {
+        customer = actionMatch[2].trim()
+      }
     }
+
+    // 3) 匹配「和/与/拜访/会见/接待/洽谈 + XX + 的/总/先生/女士...」
+    if (!customer) {
+      const relationMatch = correctedText.match(/(和|与|拜访|会见|接待|洽谈|对接|跟|见)[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,20}?)(?=(?:的|$|，|。|,|总|先生|女士|经理|老板|总监|工程师|负责人))/u)
+      if (relationMatch && relationMatch[2] && relationMatch[2].trim().length >= 2) {
+        customer = relationMatch[2].trim()
+      }
+    }
+
+    // 4) 「抓取XX原材料/供应商/厂商」等特殊模式
+    if (!customer) {
+      const grabMatch = correctedText.match(/抓取[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,30}?)(?=(?:的)?(?:原材料|供应商|厂商|厂家|公司|名单|信息|$))/u)
+      if (grabMatch && grabMatch[1] && grabMatch[1].trim().length >= 2) {
+        customer = grabMatch[1].trim()
+      }
+    }
+
+    // 5) 兜底：去除纯时间/日期/报告类噪声后，取 3-12 字最长的中文长词
+    if (!customer) {
+      const cleaned = correctedText
+        .replace(/(今天|明天|后天|昨天|上午|下午|晚上|点|分|周[一二三四五六日天]|月|日|号|周报|日报|月报|报告|纪要|出差|拜访|方案|计划|总结|一份|上周|本周|下周|上个月|下个月|抓取|关于|查询|分析|查看|了解|搜索|找)/g, ' ')
+      const words = cleaned.split(/[\s，。,。!！？?、:：的了和与及/\(\)\[\]【】]+/).filter(w => w.length >= 3 && /[\u4e00-\u9fa5]/.test(w))
+      if (words.length) {
+        const preferred = words.filter(w => w.length <= 12)
+        const pool = preferred.length ? preferred : words
+        customer = pool.sort((a, b) => b.length - a.length)[0]
+      }
+    }
+
+    customer = (customer || '').trim()
+    // 剥掉前缀动作动词
+    customer = customer.replace(ACTION_VERBS, '').trim()
+    // 剥掉结尾多余助词
+    customer = customer.replace(/(的|了|在|是|有|和|与)$/, '').trim()
+    // 如果清洗后 <2 字符，清空让前端跳过
+    if (customer.length < 2) customer = ''
 
     // 匹配材料牌号：如 GH4169、45#、20CrMnTi 等
     const materialMatch = correctedText.match(/(GH|H|T|Cr|Ti|Mo|V|Nb|Al|Fe|Ni|Co|W|A)\d+[A-Za-z\d]*/i)
@@ -141,14 +184,38 @@ router.post('/voice-assistant', auth, async (req, res) => {
     else if (/抓取|分析|客户|画像|跟进|商机|商情|供应商|原材料/.test(correctedText)) intent = 'customer_research'
     else if (/修改|更新|添加|删除|改/.test(correctedText)) intent = 'update_data'
 
+    // 关键词清洗，避免「无」「相关」等无意义搜索词出现在建议里
+    const customerDisplay = customer && !/^(无|相关|的|了|抓取|关于|查询|分析|查看|一份|今天|明天|上周|本周|)$/.test(customer) ? customer : ''
+    const materialDisplay = material || ''
+
+    let suggestion = ''
+    if (customerDisplay && materialDisplay) {
+      suggestion = `💡 建议：在「客户管理」搜索「${customerDisplay}」查看客商跟进历史；在「市场行情雷达」查看「${materialDisplay}」最新价格。`
+    } else if (customerDisplay) {
+      suggestion = `💡 建议：前往「客户管理」搜索「${customerDisplay}」，查看跟进记录和商机。`
+    } else if (materialDisplay) {
+      suggestion = `💡 建议：前往「市场行情雷达」查看「${materialDisplay}」价格走势和行业资讯。`
+    } else {
+      suggestion = `💡 建议：请在「客户管理」搜索客户名称，或在「市场行情雷达」查看金属市场行情。`
+    }
+
+    const intentLabel = {
+      create_record: '创建工作记录',
+      update_data: '更新数据',
+      query_info: '查询信息',
+      generate_report: '生成报告',
+      schedule_meeting: '日程/会议',
+      customer_research: '客户/商机调研',
+    }[intent] || intent
+
     const fallbackReply = `我收到您的请求：${correctedText}
 
 📌 识别结果：
-- 意图：${intent === 'customer_research' ? '客户/商机调研' : intent}
-${customer ? `- 目标客户：${customer}\n` : ''}${material ? `- 关注材料：${material}\n` : ''}
-💡 建议：您可以在「客户管理」模块搜索 ${customer || '相关客户'} 查看跟进历史；或在「市场行情雷达」查看 ${material || '金属材料'} 最新行情。
+- 意图：${intentLabel}${customerDisplay ? '\n- 目标客户：' + customerDisplay : ''}${materialDisplay ? '\n- 关注材料：' + materialDisplay : ''}
+${suggestion}
 
-⚠️ 注意：AI 深度解析暂不可用（${aiErrorMsg}），已使用本地规则识别。如已在 Railway 配置 DEEPSEEK_API_KEY 仍看到此消息，请重启服务后再试。`
+⚠️ 注意：AI 深度解析暂不可用（${aiErrorMsg}），已使用本地规则识别。
+如已在 Railway Variables 配置了 DEEPSEEK_API_KEY 仍看到此消息：请确认 Key 有效并有余额；或前往 deepseek.com 充值。`
 
     return res.json({
       success: true,
