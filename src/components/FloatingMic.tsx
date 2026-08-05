@@ -112,16 +112,17 @@ export default function FloatingMic() {
 
   return (
     <>
-      {/* AI 助手按钮 */}
+      {/* AI 助手按钮 - 中间 */}
       <button
         onClick={() => setShowAI(true)}
-        className="fixed bottom-6 right-[calc(3rem+0.5rem)] md:bottom-8 md:right-[calc(3.5rem+0.5rem)] z-50 w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110 bg-cream-700 hover:bg-cream-800"
+        className="fixed z-50 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110 bg-cream-700 hover:bg-cream-800 w-12 h-12 md:w-14 md:h-14 bottom-6 md:bottom-8"
+        style={{ right: '4.5rem' }}
         aria-label="AI 助手"
       >
         <Sparkles className="w-6 h-6 text-white" />
       </button>
 
-      {/* 键盘/文本输入切换按钮 */}
+      {/* 键盘/文本输入切换按钮 - 最左 */}
       <button
         onClick={() => {
           setTextMode(!textMode);
@@ -130,19 +131,23 @@ export default function FloatingMic() {
           }
         }}
         className={cn(
-          'fixed bottom-6 right-[calc(6rem+0.5rem)] md:bottom-8 md:right-[calc(7rem+0.5rem)] z-50 w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110',
+          'fixed z-50 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110 w-12 h-12 md:w-14 md:h-14 bottom-6 md:bottom-8',
           textMode ? 'bg-cream-800' : 'bg-cream-700 hover:bg-cream-800'
         )}
+        style={{ right: '8.5rem' }}
         aria-label={textMode ? '关闭文本输入' : '打开文本输入'}
       >
         {textMode ? <X className="w-5 h-5 text-white" /> : <Keyboard className="w-5 h-5 text-white" />}
       </button>
 
-      {/* 语音录音按钮 */}
+      {/* 语音录音按钮 - 最右 */}
       <button
         onClick={handleMicClick}
         className={cn(
-          'fixed bottom-6 right-6 md:bottom-8 md:right-8 z-50 w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110 hover:shadow-[0_16px_48px_rgba(107,74,48,0.35)]',
+          'fixed z-50 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110',
+          'w-12 h-12 md:w-14 md:h-14',
+          'bottom-6 right-6 md:bottom-8 md:right-8',
+          'hover:shadow-[0_16px_48px_rgba(107,74,48,0.35)]',
           isListening ? 'bg-alert animate-pulse' : isParsing ? 'bg-cream-700' : 'gradient-coffee'
         )}
         aria-label={isListening ? '停止录音' : isParsing ? 'AI 解析中' : '开始录音'}
