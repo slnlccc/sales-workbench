@@ -205,7 +205,7 @@ router.post('/voice-assistant', auth, async (req, res) => {
     }
     // 直接提取动作短语
     if (!task) {
-      const actionMatch = text.match(/(完成|提交|写|准备|处理|做|发|生成|汇报|准备好)[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{1,20}?)(?=(?:$|，|。|,|的)/u)
+      const actionMatch = text.match(/(完成|提交|写|准备|处理|做|发|生成|汇报|准备好)[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{1,20}?)(?=(?:$|，|。|,|的))/u)
       if (actionMatch) task = actionMatch[0]
     }
     if (!task) {
