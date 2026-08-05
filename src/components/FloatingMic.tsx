@@ -1,18 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Mic, Sparkles, AlertTriangle, CheckCircle, Loader2, User, Calendar, MapPin, Keyboard, Send, X } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
+import { useVoiceStore } from '@/store/useVoiceStore';
 import { cn } from '@/lib/utils';
 import AIChatPanel from './AIChatPanel';
-import { useVoiceAssistant, VoiceParseResult } from '@/hooks/useVoiceAssistant';
 import ForgeCorrectionCard from './ForgeCorrectionCard';
 
 export default function FloatingMic() {
-  const { isRecording, setIsRecording, addVoiceTask, setActiveTab } = useWorkbenchStore();
+  const { setIsRecording, addVoiceTask, setActiveTab } = useWorkbenchStore();
   const [showAI, setShowAI] = useState(false);
   const [showTip, setShowTip] = useState(false);
   const [tipType, setTipType] = useState<'success' | 'error' | 'info'>('info');
   const [tipMessage, setTipMessage] = useState('');
-  const [showParseResult, setShowParseResult] = useState(false);
   const [textMode, setTextMode] = useState(false);
   const [textInput, setTextInput] = useState('');
   const textInputRef = useRef<HTMLInputElement>(null);
@@ -22,44 +21,17 @@ export default function FloatingMic() {
     interimTranscript,
     isListening,
     isParsing,
-    isBusy,
     isSupported,
     speechError,
     parseResult,
     parseError,
-    toggle,
-    parse,
-  } = useVoiceAssistant({
-    context: '悬浮麦克风 - 快速语音指令',
-    autoParse: true,
-    onParsed: (result: VoiceParseResult) => {
-      setShowParseResult(true);
-      const shortText = result.rawText.length > 30 ? result.rawText.slice(0, 30) + '…' : result.rawText;
-      showNotification('success', `AI 解析完成：${shortText}`);
+    showParseResult,
+    toggleListening,
+    parseText,
+    setShowParseResult,
+  } = useVoiceStore();
 
-      setTimeout(() => {
-        addVoiceTask(result.rawText);
-        setActiveTab('calendar');
-        setIsRecording(false);
-        setShowParseResult(false);
-      }, 3500);
-    },
-    onParseError: (err: string) => {
-      showNotification('error', `AI 解析失败：${err}`);
-    },
-  });
-
-  useEffect(() => {
-    if (isBusy !== isRecording) {
-      setIsRecording(isBusy);
-    }
-  }, [isBusy, isRecording, setIsRecording]);
-
-  useEffect(() => {
-    if (speechError) {
-      showNotification('error', speechError);
-    }
-  }, [speechError]);
+  const isBusy = isListening || isParsing;
 
   const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
     setTipType(type);
@@ -70,18 +42,34 @@ export default function FloatingMic() {
 
   const handleMicClick = () => {
     if (isListening) {
-      toggle();
+      toggleListening();
       showNotification('info', '录音结束，AI 正在解析…');
+      // 3秒后自动处理解析结果
+      setTimeout(() => {
+        const state = useVoiceStore.getState();
+        if (state.parseResult) {
+          const result = state.parseResult;
+          setShowParseResult(true);
+          const shortText = result.rawText.length > 30 ? result.rawText.slice(0, 30) + '…' : result.rawText;
+          showNotification('success', `AI 解析完成：${shortText}`);
+          setTimeout(() => {
+            addVoiceTask(result.rawText);
+            setActiveTab('calendar');
+            setShowParseResult(false);
+          }, 3500);
+        }
+        if (state.parseError) {
+          showNotification('error', `AI 解析失败：${state.parseError}`);
+        }
+      }, 100);
     } else if (!isParsing) {
       if (!isSupported) {
-        // 语音不可用时，自动切换到文本输入
         setTextMode(true);
         showNotification('info', '当前浏览器不支持语音，已切换为文本输入');
         setTimeout(() => textInputRef.current?.focus(), 100);
         return;
       }
-      setShowParseResult(false);
-      toggle();
+      toggleListening();
       showNotification('info', '请对着麦克风说话，再次点击停止');
     }
   };
@@ -90,14 +78,18 @@ export default function FloatingMic() {
     const text = textInput.trim();
     if (!text || isParsing) return;
 
-    setShowParseResult(false);
     setTextInput('');
-
     showNotification('info', 'AI 正在解析…');
-    const result = await parse(text);
+    const result = await parseText(text);
 
     if (result) {
-      // onParsed 回调会处理后续
+      setShowParseResult(true);
+      showNotification('success', `解析完成：${result.intent}`);
+      setTimeout(() => {
+        addVoiceTask(result.rawText);
+        setActiveTab('calendar');
+        setShowParseResult(false);
+      }, 3500);
     }
   };
 
@@ -112,7 +104,7 @@ export default function FloatingMic() {
 
   return (
     <>
-      {/* 按钮组容器 - 从右到左：麦克风 / AI助手 / 键盘 */}
+      {/* 按钮组容器 */}
       <div className="fixed bottom-6 right-4 md:bottom-8 md:right-6 z-50 flex flex-row-reverse items-center gap-3">
         {/* 麦克风 */}
         <button
@@ -166,9 +158,7 @@ export default function FloatingMic() {
         <div className="fixed bottom-20 right-4 md:bottom-24 md:right-6 z-50 max-w-[320px] w-[calc(100%-2rem)] md:w-[320px] bg-white rounded-2xl shadow-float border border-coffee-200 overflow-hidden animate-slide-up">
           <div className="px-3 py-2 bg-coffee-50 border-b border-coffee-100 flex items-center gap-2">
             <Keyboard className="w-4 h-4 text-coffee-600" />
-            <span className="text-xs font-medium text-coffee-700">
-              {isSupported ? '文字输入（语音不可用时的备选）' : '文字输入'}
-            </span>
+            <span className="text-xs font-medium text-coffee-700">文字输入</span>
           </div>
           <div className="p-3 flex gap-2">
             <input
@@ -191,7 +181,7 @@ export default function FloatingMic() {
           </div>
           {!isSupported && (
             <div className="px-3 pb-2 text-xs text-amber-600 bg-amber-50">
-              💡 您的浏览器不支持语音识别，建议使用文字输入或 Chrome/Edge 浏览器
+              💡 您的浏览器不支持语音识别，请使用文字输入
             </div>
           )}
         </div>
@@ -234,9 +224,7 @@ export default function FloatingMic() {
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
               <span className="text-sm font-medium">AI 解析结果</span>
-              <span className="ml-auto px-2 py-0.5 rounded-full bg-white/20 text-xs">
-                {parseResult.intent}
-              </span>
+              <span className="ml-auto px-2 py-0.5 rounded-full bg-white/20 text-xs">{parseResult.intent}</span>
             </div>
           </div>
           <div className="p-4 space-y-2">
@@ -246,34 +234,20 @@ export default function FloatingMic() {
             )}
             <div className="flex flex-wrap gap-1.5 pt-1">
               {parseResult.entities.customer && (
-                <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-coffee-50 text-xs text-coffee-700">
-                  <User className="w-3 h-3" />
-                  {parseResult.entities.customer}
-                </span>
+                <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-coffee-50 text-xs text-coffee-700"><User className="w-3 h-3" />{parseResult.entities.customer}</span>
               )}
               {parseResult.entities.date && (
-                <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-coffee-50 text-xs text-coffee-700">
-                  <Calendar className="w-3 h-3" />
-                  {parseResult.entities.date}
-                  {parseResult.entities.time ? ` ${parseResult.entities.time}` : ''}
-                </span>
+                <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-coffee-50 text-xs text-coffee-700"><Calendar className="w-3 h-3" />{parseResult.entities.date}{parseResult.entities.time ? ` ${parseResult.entities.time}` : ''}</span>
               )}
               {parseResult.entities.location && (
-                <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-coffee-50 text-xs text-coffee-700">
-                  <MapPin className="w-3 h-3" />
-                  {parseResult.entities.location}
-                </span>
+                <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-coffee-50 text-xs text-coffee-700"><MapPin className="w-3 h-3" />{parseResult.entities.location}</span>
               )}
             </div>
             {parseResult.action && (
-              <p className="text-xs text-coffee-500 pt-1 border-t border-coffee-100">
-                建议操作：{parseResult.action}
-              </p>
+              <p className="text-xs text-coffee-500 pt-1 border-t border-coffee-100">建议操作：{parseResult.action}</p>
             )}
             {parseResult.correction && parseResult.correction.hasCorrection && (
-              <div className="mt-2">
-                <ForgeCorrectionCard correction={parseResult.correction} variant="light" />
-              </div>
+              <div className="mt-2"><ForgeCorrectionCard correction={parseResult.correction} variant="light" /></div>
             )}
           </div>
         </div>

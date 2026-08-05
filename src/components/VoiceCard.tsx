@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Mic, Wand2, AlertCircle, Sparkles, Loader2, CheckCircle2, Calendar, User, MapPin } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
+import { useVoiceStore } from '@/store/useVoiceStore';
 import { cn } from '@/lib/utils';
-import { useVoiceAssistant, VoiceParseResult } from '@/hooks/useVoiceAssistant';
+import type { VoiceParseResult } from '@/store/useVoiceStore';
 import ForgeCorrectionCard from './ForgeCorrectionCard';
 
 const mockVoiceTexts = [
@@ -12,7 +13,7 @@ const mockVoiceTexts = [
 ];
 
 export default function VoiceCard() {
-  const { isRecording, setIsRecording, addVoiceTask, setActiveTab } = useWorkbenchStore();
+  const { addVoiceTask, setActiveTab } = useWorkbenchStore();
   const [showResult, setShowResult] = useState(false);
 
   const {
@@ -20,56 +21,41 @@ export default function VoiceCard() {
     interimTranscript,
     isListening,
     isParsing,
-    isBusy,
     isSupported,
     speechError,
     parseResult,
     parseError,
-    toggle,
-  } = useVoiceAssistant({
-    context: '销售工作台首页 - 语音指令创建日程/任务/备忘',
-    autoParse: true,
-    onParsed: (result: VoiceParseResult) => {
-      setShowResult(true);
-      // 3秒后自动将解析结果创建为任务
-      setTimeout(() => {
-        addVoiceTask(result.rawText);
-        setActiveTab('calendar');
-        setIsRecording(false);
-        setShowResult(false);
-      }, 3000);
-    },
-  });
-
-  // 如果全局有另一个实例在占用，显示提示而不是自己的状态
-  const isPreempted = isListening && !isBusy;
-
-  // 同步录音状态
-  useEffect(() => {
-    if (isBusy !== isRecording) {
-      setIsRecording(isBusy);
-    }
-  }, [isBusy, isRecording, setIsRecording]);
+    toggleListening,
+  } = useVoiceStore();
 
   const displayText = transcript + interimTranscript;
   const hasText = displayText.trim().length > 0;
 
   const handleClick = () => {
     if (isListening) {
-      toggle();
+      toggleListening();
+      // 解析完成后自动创建任务
+      setTimeout(() => {
+        const state = useVoiceStore.getState();
+        if (state.parseResult) {
+          addVoiceTask(state.parseResult.rawText);
+          setShowResult(true);
+          setTimeout(() => {
+            setActiveTab('calendar');
+            useVoiceStore.getState().setShowParseResult(false);
+            setShowResult(false);
+          }, 3000);
+        }
+      }, 100);
     } else if (!isParsing) {
       setShowResult(false);
-      toggle();
+      toggleListening();
     }
   };
 
-  // 浏览器不支持语音识别
   if (!isSupported) {
     return (
-      <div
-        className="relative overflow-hidden rounded-3xl p-8 bg-coffee-100 text-coffee-700 shadow-card animate-slide-up"
-        style={{ animationDelay: '0.3s' }}
-      >
+      <div className="relative overflow-hidden rounded-3xl p-8 bg-coffee-100 text-coffee-700 shadow-card animate-slide-up" style={{ animationDelay: '0.3s' }}>
         <div className="flex items-center gap-6">
           <div className="w-20 h-20 rounded-2xl bg-coffee-200/50 flex items-center justify-center">
             <AlertCircle className="w-9 h-9 text-coffee-600" />
@@ -83,7 +69,7 @@ export default function VoiceCard() {
               当前浏览器不支持语音识别，请使用 Chrome 或 Edge 浏览器打开。仍可使用模拟语音体验 AI 解析功能。
             </p>
             <button
-              onClick={async () => {
+              onClick={() => {
                 const mockText = mockVoiceTexts[Math.floor(Math.random() * mockVoiceTexts.length)];
                 addVoiceTask(mockText);
                 setActiveTab('calendar');
@@ -97,6 +83,8 @@ export default function VoiceCard() {
       </div>
     );
   }
+
+  const activeResult = showResult ? parseResult : null;
 
   return (
     <div
@@ -113,12 +101,7 @@ export default function VoiceCard() {
     >
       <div className="flex items-center gap-6">
         <div className="relative">
-          <div
-            className={cn(
-              'w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center transition-transform duration-300 group-hover:scale-105',
-              (isListening || isParsing) && 'animate-pulse'
-            )}
-          >
+          <div className={cn('w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center transition-transform duration-300 group-hover:scale-105', (isListening || isParsing) && 'animate-pulse')}>
             {isParsing ? (
               <Loader2 className="w-9 h-9 text-white animate-spin" />
             ) : (
@@ -128,10 +111,7 @@ export default function VoiceCard() {
           {isListening && (
             <>
               <span className="absolute inset-0 rounded-2xl border-2 border-white/40 animate-pulse-ring" />
-              <span
-                className="absolute inset-0 rounded-2xl border-2 border-white/30 animate-pulse-ring"
-                style={{ animationDelay: '0.5s' }}
-              />
+              <span className="absolute inset-0 rounded-2xl border-2 border-white/30 animate-pulse-ring" style={{ animationDelay: '0.5s' }} />
             </>
           )}
         </div>
@@ -152,8 +132,8 @@ export default function VoiceCard() {
                     : '正在聆听，请说话…'
                 : isParsing
                   ? 'AI 正在解析您的指令…'
-                  : showResult && parseResult
-                    ? parseResult.reply
+                  : activeResult
+                    ? activeResult.reply
                     : '说一句话，剩下的交给 AI'}
             </h3>
           </div>
@@ -165,7 +145,6 @@ export default function VoiceCard() {
                 : '比如：「明天上午10点拜访中国航发，讨论钛合金方案」'}
           </p>
 
-          {/* AI 解析失败提示 */}
           {parseError && !isParsing && (
             <p className="mt-2 text-cream-200 text-xs flex items-center gap-1">
               <AlertCircle className="w-3 h-3" />
@@ -175,50 +154,33 @@ export default function VoiceCard() {
         </div>
       </div>
 
-      {/* AI 解析结果展示 */}
-      {showResult && parseResult && !isParsing && (
+      {activeResult && !isParsing && (
         <div className="mt-4 pt-4 border-t border-white/20 animate-slide-up">
           <div className="flex items-center gap-2 mb-3">
             <CheckCircle2 className="w-4 h-4 text-cream-100" />
             <span className="text-sm font-medium text-cream-100">AI 解析结果</span>
-            <span className="px-2 py-0.5 rounded-full bg-white/20 text-xs text-white">
-              {parseResult.intent}
-            </span>
+            <span className="px-2 py-0.5 rounded-full bg-white/20 text-xs text-white">{activeResult.intent}</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {parseResult.entities.customer && (
-              <span className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/15 text-xs">
-                <User className="w-3 h-3" />
-                {parseResult.entities.customer}
-              </span>
+            {activeResult.entities.customer && (
+              <span className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/15 text-xs"><User className="w-3 h-3" />{activeResult.entities.customer}</span>
             )}
-            {parseResult.entities.date && (
-              <span className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/15 text-xs">
-                <Calendar className="w-3 h-3" />
-                {parseResult.entities.date}
-                {parseResult.entities.time ? ` ${parseResult.entities.time}` : ''}
-              </span>
+            {activeResult.entities.date && (
+              <span className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/15 text-xs"><Calendar className="w-3 h-3" />{activeResult.entities.date}{activeResult.entities.time ? ` ${activeResult.entities.time}` : ''}</span>
             )}
-            {parseResult.entities.location && (
-              <span className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/15 text-xs">
-                <MapPin className="w-3 h-3" />
-                {parseResult.entities.location}
-              </span>
+            {activeResult.entities.location && (
+              <span className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/15 text-xs"><MapPin className="w-3 h-3" />{activeResult.entities.location}</span>
             )}
-            {parseResult.entities.type && (
-              <span className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/15 text-xs">
-                <Sparkles className="w-3 h-3" />
-                {parseResult.entities.type}
-              </span>
+            {activeResult.entities.type && (
+              <span className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/15 text-xs"><Sparkles className="w-3 h-3" />{activeResult.entities.type}</span>
             )}
           </div>
-          {parseResult.action && (
-            <p className="mt-2 text-xs text-cream-200">建议操作：{parseResult.action}</p>
+          {activeResult.action && (
+            <p className="mt-2 text-xs text-cream-200">建议操作：{activeResult.action}</p>
           )}
-          {/* 锻造专业文本矫正信息 */}
-          {parseResult.correction && parseResult.correction.hasCorrection && (
+          {activeResult.correction && activeResult.correction.hasCorrection && (
             <div className="mt-3">
-              <ForgeCorrectionCard correction={parseResult.correction} variant="dark" />
+              <ForgeCorrectionCard correction={activeResult.correction} variant="dark" />
             </div>
           )}
         </div>
