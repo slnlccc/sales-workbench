@@ -116,22 +116,22 @@ router.post('/voice-assistant', auth, async (req, res) => {
     const aiErrorMsg = err.message || 'AI 暂不可用'
     const text = correctedText.trim()
 
-    // ===== 1. 意图判断（先看整体意图，再提取实体）=====
+    // ===== 1. 意图判断（高优先级在前：报告/纪要 > 客户调研 > 日程/时间/提醒）=====
     const INTENT_RULES = [
-      // 提醒/任务：含"提醒/记得/别忘了/要...完成/需要做"
-      { pattern: /提醒|记得|别忘了|需要.*(完成|做|提交|准备|写|处理|发|联系|跟进)|得.*(完成|做|提交)/, intent: 'set_reminder', label: '设置提醒' },
-      // 日程/会议：含具体时间
-      { pattern: /(周[一二三四五六日天]|星期[一二三四五六日天]|今天|明天|后天|大后天).*(点|时|:：)|(上午|下午|晚上).*(点|时)/, intent: 'schedule', label: '日程安排' },
-      // 报告/纪要
-      { pattern: /周报|日报|月报|出差报告|拜访纪要|会议纪要|总结|报告/, intent: 'generate_report', label: '生成报告' },
-      // 查询/信息：价格/行情
-      { pattern: /价格|行情|走势|多少钱|报价|多少钱一吨|市场|资讯|新闻/, intent: 'query_info', label: '行情查询' },
-      // 展会/会议
-      { pattern: /展会|参展|博览会|论坛/, intent: 'query_info', label: '展会信息' },
-      // 客户/商机调研
+      // 1. 报告/纪要类（优先级最高，避免"完成周报"被误判为提醒/日程）
+      { pattern: /周报|日报|月报|出差报告|拜访纪要|会议纪要|总结|报告|汇报/, intent: 'generate_report', label: '生成报告' },
+      // 2. 客户/商机调研
       { pattern: /客户|画像|商机|跟进|抓取|供应商|厂商|原材料|客户管理/, intent: 'customer_research', label: '客户/商机调研' },
-      // 修改/更新
-      { pattern: /修改|更新|添加|删除|删除|改/, intent: 'update_data', label: '更新数据' },
+      // 3. 查询/信息类
+      { pattern: /价格|行情|走势|多少钱|报价|多少钱一吨|市场|资讯|新闻|展会|参展|博览会|论坛/, intent: 'query_info', label: '行情查询' },
+      // 4. 修改/更新
+      { pattern: /修改|更新|添加|删除|改/, intent: 'update_data', label: '更新数据' },
+      // 5. 日程/会议：明确含拜访/会议/洽谈/接待 + 具体时间，或仅会议/拜访/日程关键词
+      { pattern: /(拜访|会见|接待|洽谈|对接|开会|会议|见面).*(周[一二三四五六日天]|星期[一二三四五六日天]|今天|明天|后天|大后天|上午|下午|晚上|中午|早上|凌晨|\d{1,2}[点时:：])|(周[一二三四五六日天]|星期[一二三四五六日天]|今天|明天|后天|大后天).*(拜访|会见|接待|洽谈|对接|开会|会议|见面)/, intent: 'schedule', label: '日程安排' },
+      // 6. 提醒/待办：只有在没有匹配上面高优先级意图时才使用（含"提醒/记得/别忘了"等）
+      { pattern: /提醒|记得|别忘了|需要.*(完成|做|提交|准备|写|处理|发|联系|跟进)|得.*(完成|做|提交)/, intent: 'set_reminder', label: '设置提醒' },
+      // 7. 兜底：有具体时间（点/时）=> 日程安排
+      { pattern: /(周[一二三四五六日天]|星期[一二三四五六日天]|今天|明天|后天|大后天).*(点|时|:：)|(上午|下午|晚上).*(点|时)/, intent: 'schedule', label: '日程安排' },
     ]
 
     let intent = 'general'
@@ -199,9 +199,15 @@ router.post('/voice-assistant', auth, async (req, res) => {
     }
 
     // --- 任务提取 ---
-    const taskMatch = text.match(/(提醒我|要我|我要|记得)[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,30}?)(?=(?:$|，|。|,))/u)
-    if (taskMatch && taskMatch[2]) {
-      task = taskMatch[2].trim()
+    // 先检查是否是报告/周报类（优先匹配，避免被 cleaned 逻辑截断为"完成中午"等错误内容）
+    const reportMatch = text.match(/(完成|提交|写|准备|处理|做|发|生成|汇报|交)[\s:：]*(周报|日报|月报|出差报告|拜访纪要|会议纪要|总结|报告|汇报)/u)
+    if (reportMatch) {
+      task = reportMatch[0]  // 完整内容：如"完成周报"
+    } else {
+      const taskMatch = text.match(/(提醒我|要我|我要|记得)[\s:：]*([\u4e00-\u9fa5A-Za-z0-9·•\-]{2,30}?)(?=(?:$|，|。|,))/u)
+      if (taskMatch && taskMatch[2]) {
+        task = taskMatch[2].trim()
+      }
     }
     // 直接提取动作短语
     if (!task) {
@@ -209,15 +215,25 @@ router.post('/voice-assistant', auth, async (req, res) => {
       if (actionMatch) task = actionMatch[0]
     }
     if (!task) {
-      // 核心内容提取
-      const cleaned = text
+      // 核心内容提取（去掉时间/日期关键词，但保留「周报/日报/月报/报告」等完整词）
+      let cleaned = text
         .replace(/(提醒我|要我|我要|记得|别忘了|需要|得)/g, '')
-        .replace(/(周[一二三四五六日天]|星期[一二三四五六日天]|今天|明天|后天|大后天)/g, '')
+        .replace(/(周[一二三四五六日天](?!报|记)|星期[一二三四五六日天](?!报|记))/g, '') // 注意：不删除"周报/周记"等词
+        .replace(/(今天|明天|后天|大后天|下周|本周)/g, '')
         .replace(/(上午|下午|晚上|中午|早上|凌晨|\d{1,2}[点时:：]\d{0,2})/g, '')
-        .replace(/(之前|之前|前|的时候)/g, '')
+        .replace(/(下班前|上班前|之前|前|的时候)/g, '')
         .replace(/[，。,！？、:：的了和与及\(\)\[\]【】]+/g, ' ')
         .trim()
-      task = cleaned || text
+      // 特殊修复：如果 cleaned 包含"周报/日报/月报"但缺了"周/日/月"字，从原文恢复
+      const reportKeywords = [/完成.*周报|周报/, /完成.*日报|日报/, /完成.*月报|月报/, /出差报告/, /会议纪要/, /拜访纪要/, /总结|报告|汇报/]
+      for (const kw of reportKeywords) {
+        const origMatch = text.match(kw)
+        if (origMatch && !kw.test(cleaned)) {
+          cleaned = cleaned + ' ' + origMatch[0]
+          break
+        }
+      }
+      task = (cleaned.trim() || text)
     }
 
     // ===== 3. 构建回复和建议 =====

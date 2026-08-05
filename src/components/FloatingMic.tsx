@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Mic, Sparkles, AlertTriangle, CheckCircle, Loader2, User, Calendar, MapPin, Keyboard, Send, X } from 'lucide-react';
+import { Mic, Sparkles, AlertTriangle, CheckCircle, Loader2, User, Calendar, MapPin, Keyboard, Send, X, Pencil } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import { useVoiceStore } from '@/store/useVoiceStore';
 import { cn } from '@/lib/utils';
@@ -7,7 +7,7 @@ import AIChatPanel from './AIChatPanel';
 import ForgeCorrectionCard from './ForgeCorrectionCard';
 
 export default function FloatingMic() {
-  const { setIsRecording, addVoiceTask, setActiveTab } = useWorkbenchStore();
+  const { setIsRecording, setActiveTab, setInputText } = useWorkbenchStore();
   const [showAI, setShowAI] = useState(false);
   const [showTip, setShowTip] = useState(false);
   const [tipType, setTipType] = useState<'success' | 'error' | 'info'>('info');
@@ -40,6 +40,14 @@ export default function FloatingMic() {
     setTimeout(() => setShowTip(false), 3500);
   };
 
+  // 解析完成后的处理：不直接保存，而是把内容放入主输入框，让用户修改确认
+  const handleParseResultReady = (rawText: string) => {
+    if (!rawText) return;
+    setInputText(rawText);     // 把原文填入主输入框（AI分析提取按钮上方）
+    setActiveTab('voice');     // 切到语音工作台 tab
+    setShowParseResult(false); // 先关掉浮窗，让用户在主界面操作
+  };
+
   const handleMicClick = () => {
     if (isListening) {
       toggleListening();
@@ -48,10 +56,9 @@ export default function FloatingMic() {
         const state = useVoiceStore.getState();
         if (state.parseResult) {
           const result = state.parseResult;
-          addVoiceTask(result.rawText);
-          setShowParseResult(true);
           const shortText = result.rawText.length > 30 ? result.rawText.slice(0, 30) + '…' : result.rawText;
-          showNotification('success', `AI 解析完成：${shortText}`);
+          showNotification('success', `AI 解析完成：${shortText}，请在下方修改确认`);
+          handleParseResultReady(result.rawText);
         }
         if (state.parseError) {
           showNotification('error', `AI 解析失败：${state.parseError}`);
@@ -78,9 +85,8 @@ export default function FloatingMic() {
     const result = await parseText(text);
 
     if (result) {
-      addVoiceTask(result.rawText);
-      setShowParseResult(true);
-      showNotification('success', `解析完成：${result.intent}`);
+      showNotification('success', `解析完成：${result.intent}，请在下方修改确认`);
+      handleParseResultReady(result.rawText);
     }
   };
 

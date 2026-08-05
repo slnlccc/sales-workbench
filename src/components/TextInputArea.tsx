@@ -202,24 +202,37 @@ const detectTypes = (text: string): { types: string[]; labels: string[] } => {
   const types: string[] = [];
   const labels: string[] = [];
 
-  // 检测具体业务类型
+  // 1. 先检测具体业务类型（报告类优先，避免"完成周报"被 schedule 覆盖）
+  if (t.includes('报告') || t.includes('汇报') || t.includes('出差') || /周报|日报|月报|总结|纪要/.test(text)) {
+    types.push('report');
+    labels.push('报告汇报');
+  }
   if (t.includes('报价')) { types.push('quote'); labels.push('报价跟进'); }
   if (t.includes('订单') || t.includes('下单')) { types.push('order'); labels.push('订单'); }
   if (t.includes('拜访') || t.includes('访问') || t.includes('见面')) { types.push('visit'); labels.push('客户拜访'); }
   if (t.includes('电话') || t.includes('致电') || t.includes('联系') || t.includes('沟通')) { types.push('call'); labels.push('电话跟进'); }
   if (t.includes('会议') || t.includes('开会')) { types.push('meeting'); labels.push('会议'); }
   if (t.includes('合同')) { types.push('contract'); labels.push('合同跟进'); }
-  if (t.includes('备忘') || t.includes('记一下') || t.includes('记录') || t.includes('感受')) { types.push('memo'); labels.push('备忘录'); }
-  if (t.includes('报告') || t.includes('汇报') || t.includes('出差')) { types.push('report'); labels.push('报告汇报'); }
+  if (t.includes('备忘') || t.includes('记一下') || t.includes('记录') || t.includes('感受')) {
+    if (!types.includes('memo')) { types.push('memo'); labels.push('备忘录'); }
+  }
 
-  // 如果有时间关键词，自动加上日程提醒
+  // 2. 日程提醒：只有明确是会议/拜访等需要安排日程的事项时才添加（报告/报价/合同等纯待办不加 schedule）
   const hasTimeKeyword = /(明天|后天|大后天|今天|下周|本周|周[一二三四五六日天]|星期[一二三四五六日天]|\d{1,2}[日号]|\d{1,2}[点时:：])/.test(text);
-  if (hasTimeKeyword && !types.includes('schedule')) {
+  const shouldAddSchedule =
+    types.includes('meeting') ||
+    types.includes('visit') ||
+    // 没有任何类型，但有时间关键词 => 当成日程提醒
+    (types.length === 0 && hasTimeKeyword) ||
+    // 提醒类明确的待办（如"提醒我XXX"）
+    /提醒|记得|别忘了/.test(text);
+
+  if (shouldAddSchedule && !types.includes('schedule')) {
     types.unshift('schedule');
     labels.unshift('日程提醒');
   }
 
-  // 如果没有匹配到任何类型，默认为待办事项
+  // 3. 兜底：没有任何类型 => 待办事项
   if (types.length === 0) {
     types.push('task');
     labels.push('待办事项');
