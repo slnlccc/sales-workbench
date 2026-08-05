@@ -5,7 +5,7 @@ const { correctForgeText } = require('../services/forgeCorrectionService')
 const { protect: auth } = require('../middleware/auth')
 
 // 语音解析版本号 - 用于验证部署是否生效
-const VOICE_PARSER_VERSION = 'v2.0'
+const VOICE_PARSER_VERSION = 'v2.1'
 
 // ============ 锻造专业文本矫正 ============
 
