@@ -112,59 +112,58 @@ export default function FloatingMic() {
 
   return (
     <>
-      {/* AI 助手按钮 - 中间 */}
-      <button
-        onClick={() => setShowAI(true)}
-        className="fixed z-50 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110 bg-cream-700 hover:bg-cream-800 w-12 h-12 md:w-14 md:h-14 bottom-6 md:bottom-8"
-        style={{ right: '4.5rem' }}
-        aria-label="AI 助手"
-      >
-        <Sparkles className="w-6 h-6 text-white" />
-      </button>
+      {/* 按钮组容器 - 从右到左：麦克风 / AI助手 / 键盘 */}
+      <div className="fixed bottom-6 right-4 md:bottom-8 md:right-6 z-50 flex flex-row-reverse items-center gap-3">
+        {/* 麦克风 */}
+        <button
+          onClick={handleMicClick}
+          className={cn(
+            'relative rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110 w-12 h-12 md:w-14 md:h-14',
+            'hover:shadow-[0_16px_48px_rgba(107,74,48,0.35)]',
+            isListening ? 'bg-alert animate-pulse' : isParsing ? 'bg-cream-700' : 'gradient-coffee'
+          )}
+          aria-label={isListening ? '停止录音' : isParsing ? 'AI 解析中' : '开始录音'}
+        >
+          {isParsing ? (
+            <Loader2 className="w-6 h-6 text-white animate-spin" />
+          ) : (
+            <Mic className="w-6 h-6 text-white" />
+          )}
+          {!isListening && !isParsing && (
+            <span className="absolute inset-0 rounded-full border-2 border-coffee-300/40 animate-pulse-ring pointer-events-none" />
+          )}
+        </button>
 
-      {/* 键盘/文本输入切换按钮 - 最左 */}
-      <button
-        onClick={() => {
-          setTextMode(!textMode);
-          if (!textMode) {
-            setTimeout(() => textInputRef.current?.focus(), 100);
-          }
-        }}
-        className={cn(
-          'fixed z-50 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110 w-12 h-12 md:w-14 md:h-14 bottom-6 md:bottom-8',
-          textMode ? 'bg-cream-800' : 'bg-cream-700 hover:bg-cream-800'
-        )}
-        style={{ right: '8.5rem' }}
-        aria-label={textMode ? '关闭文本输入' : '打开文本输入'}
-      >
-        {textMode ? <X className="w-5 h-5 text-white" /> : <Keyboard className="w-5 h-5 text-white" />}
-      </button>
+        {/* AI 助手 */}
+        <button
+          onClick={() => setShowAI(true)}
+          className="rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110 bg-cream-700 hover:bg-cream-800 w-12 h-12 md:w-14 md:h-14"
+          aria-label="AI 助手"
+        >
+          <Sparkles className="w-6 h-6 text-white" />
+        </button>
 
-      {/* 语音录音按钮 - 最右 */}
-      <button
-        onClick={handleMicClick}
-        className={cn(
-          'fixed z-50 rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110',
-          'w-12 h-12 md:w-14 md:h-14',
-          'bottom-6 right-6 md:bottom-8 md:right-8',
-          'hover:shadow-[0_16px_48px_rgba(107,74,48,0.35)]',
-          isListening ? 'bg-alert animate-pulse' : isParsing ? 'bg-cream-700' : 'gradient-coffee'
-        )}
-        aria-label={isListening ? '停止录音' : isParsing ? 'AI 解析中' : '开始录音'}
-      >
-        {isParsing ? (
-          <Loader2 className="w-6 h-6 text-white animate-spin" />
-        ) : (
-          <Mic className="w-6 h-6 text-white" />
-        )}
-        {!isListening && !isParsing && (
-          <span className="absolute inset-0 rounded-full border-2 border-coffee-300/40 animate-pulse-ring" />
-        )}
-      </button>
+        {/* 键盘 */}
+        <button
+          onClick={() => {
+            setTextMode(!textMode);
+            if (!textMode) {
+              setTimeout(() => textInputRef.current?.focus(), 100);
+            }
+          }}
+          className={cn(
+            'rounded-full flex items-center justify-center shadow-float transition-all duration-300 hover:scale-110 w-12 h-12 md:w-14 md:h-14',
+            textMode ? 'bg-cream-800' : 'bg-cream-700 hover:bg-cream-800'
+          )}
+          aria-label={textMode ? '关闭文本输入' : '打开文本输入'}
+        >
+          {textMode ? <X className="w-5 h-5 text-white" /> : <Keyboard className="w-5 h-5 text-white" />}
+        </button>
+      </div>
 
       {/* 文本输入栏 */}
       {textMode && (
-        <div className="fixed bottom-20 right-6 md:bottom-24 md:right-8 z-50 max-w-[320px] w-[calc(100%-3rem)] md:w-[320px] bg-white rounded-2xl shadow-float border border-coffee-200 overflow-hidden animate-slide-up">
+        <div className="fixed bottom-20 right-4 md:bottom-24 md:right-6 z-50 max-w-[320px] w-[calc(100%-2rem)] md:w-[320px] bg-white rounded-2xl shadow-float border border-coffee-200 overflow-hidden animate-slide-up">
           <div className="px-3 py-2 bg-coffee-50 border-b border-coffee-100 flex items-center gap-2">
             <Keyboard className="w-4 h-4 text-coffee-600" />
             <span className="text-xs font-medium text-coffee-700">
@@ -200,7 +199,7 @@ export default function FloatingMic() {
 
       {/* 语音识别实时文本 */}
       {isListening && (
-        <div className="fixed bottom-20 right-6 md:bottom-24 md:right-8 z-50 max-w-[300px] bg-white/95 backdrop-blur rounded-2xl shadow-float border border-coffee-200 px-4 py-3 animate-slide-up">
+        <div className="fixed bottom-20 right-4 md:bottom-24 md:right-6 z-50 max-w-[300px] bg-white/95 backdrop-blur rounded-2xl shadow-float border border-coffee-200 px-4 py-3 animate-slide-up">
           <div className="flex items-center gap-2 mb-1">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
             <span className="text-xs text-coffee-500">正在录音…</span>
@@ -215,7 +214,7 @@ export default function FloatingMic() {
       {showTip && (
         <div
           className={cn(
-            'fixed bottom-24 right-6 md:bottom-28 md:right-8 z-50 max-w-[300px] px-4 py-3 rounded-2xl shadow-lg flex items-start gap-2 animate-slide-up',
+            'fixed bottom-24 right-4 md:bottom-28 md:right-6 z-50 max-w-[300px] px-4 py-3 rounded-2xl shadow-lg flex items-start gap-2 animate-slide-up',
             tipType === 'success' && 'bg-green-600 text-white',
             tipType === 'error' && 'bg-red-600 text-white',
             tipType === 'info' && 'bg-coffee-800 text-white'
@@ -230,7 +229,7 @@ export default function FloatingMic() {
 
       {/* AI 解析结果浮窗 */}
       {showParseResult && parseResult && !isParsing && (
-        <div className="fixed bottom-24 right-6 md:bottom-28 md:right-8 z-50 max-w-[340px] bg-white rounded-2xl shadow-float border border-coffee-100 overflow-hidden animate-slide-up">
+        <div className="fixed bottom-24 right-4 md:bottom-28 md:right-6 z-50 max-w-[340px] bg-white rounded-2xl shadow-float border border-coffee-100 overflow-hidden animate-slide-up">
           <div className="px-4 py-3 bg-gradient-to-r from-coffee-600 to-cream-700 text-white">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
