@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  ChevronLeft, ChevronRight, Plus, CalendarClock, Sparkles, Phone, FileText, Check, X, Clock, User
+  ChevronLeft, ChevronRight, Plus, CalendarClock, Sparkles, Phone, FileText, Check, X, Clock, User, Pencil, Save
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import type { WorkbenchRecord } from '@/types';
@@ -26,7 +26,7 @@ const recordDateStr = (record: WorkbenchRecord): string => {
 };
 
 export default function CalendarView() {
-  const { records, closeScheduleTask, addManualSchedule } = useWorkbenchStore();
+  const { records, closeScheduleTask, addManualSchedule, deleteRecord, updateRecord } = useWorkbenchStore();
   const today = new Date();
   const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const [viewDate, setViewDate] = useState(currentMonth);
@@ -38,6 +38,13 @@ export default function CalendarView() {
   const [newScheduleDate, setNewScheduleDate] = useState('');
   const [newScheduleTime, setNewScheduleTime] = useState('09:00');
   const [newScheduleCustomer, setNewScheduleCustomer] = useState('');
+
+  // 编辑日程弹窗状态
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('09:00');
+  const [editCustomer, setEditCustomer] = useState('');
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -112,6 +119,34 @@ export default function CalendarView() {
     const [y, m] = newScheduleDate.split('-').map(Number);
     if (y === year && m - 1 === month) {
       setSelectedDay(Number(newScheduleDate.split('-')[2]));
+    }
+  };
+
+  const openEditModal = (r: WorkbenchRecord) => {
+    const time = new Date(r.reminderAt || r.createdAt);
+    const dateStr = `${time.getFullYear()}-${String(time.getMonth() + 1).padStart(2, '0')}-${String(time.getDate()).padStart(2, '0')}`;
+    const timeStr = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`;
+    setEditingId(r.id);
+    setEditContent(r.content);
+    setEditDate(dateStr);
+    setEditTime(timeStr);
+    setEditCustomer(r.customer || '');
+  };
+
+  const handleEditSchedule = () => {
+    if (!editingId || !editContent.trim() || !editDate) return;
+    const [y, m, d] = editDate.split('-').map(Number);
+    const [h, min] = editTime.split(':').map(Number);
+    const reminderAt = new Date(y, m - 1, d, h || 9, min || 0);
+    updateRecord(editingId, {
+      content: editContent.trim(),
+      reminderAt: reminderAt.toISOString(),
+      customer: editCustomer.trim() || undefined,
+    });
+    setEditingId(null);
+    const [ny, nm] = editDate.split('-').map(Number);
+    if (ny === year && nm - 1 === month) {
+      setSelectedDay(Number(editDate.split('-')[2]));
     }
   };
 
@@ -266,6 +301,26 @@ export default function CalendarView() {
                   )}>
                     {r.done ? '点击取消' : '点击完成'}
                   </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditModal(r);
+                    }}
+                    className="w-6 h-6 rounded-lg text-coffee-300 hover:text-coffee-600 hover:bg-coffee-50 flex items-center justify-center transition-colors flex-shrink-0"
+                    title="编辑"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteRecord(r.id);
+                    }}
+                    className="w-6 h-6 rounded-lg text-coffee-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition-colors flex-shrink-0"
+                    title="删除"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               );
             })}
@@ -288,6 +343,16 @@ export default function CalendarView() {
                   </p>
                 </div>
                 <span className="text-xs" title={sourceLabel(r)}>{sourceMarker(r)}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteRecord(r.id);
+                  }}
+                  className="w-6 h-6 rounded-lg text-coffee-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition-colors"
+                  title="删除"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           );
@@ -397,6 +462,104 @@ export default function CalendarView() {
                 className="flex-1 py-2.5 bg-gradient-to-r from-coffee-600 to-caramel text-white rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-40"
               >
                 确认添加
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 编辑日程弹窗 */}
+      {editingId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-coffee-900/40 backdrop-blur-sm animate-fade-in"
+          onClick={() => setEditingId(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-md w-full shadow-card overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-coffee-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-coffee-100 flex items-center justify-center">
+                  <Pencil className="w-4 h-4 text-coffee-700" />
+                </div>
+                <h3 className="text-base font-semibold text-coffee-900">编辑日程</h3>
+              </div>
+              <button
+                onClick={() => setEditingId(null)}
+                className="p-1.5 hover:bg-coffee-50 rounded-lg text-coffee-400 hover:text-coffee-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-xs text-coffee-500 mb-1.5 block">日程内容</label>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-coffee-500 mb-1.5 block flex items-center gap-1">
+                    <CalendarClock className="w-3 h-3" />
+                    日期
+                  </label>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-coffee-500 mb-1.5 block flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    时间
+                  </label>
+                  <input
+                    type="time"
+                    value={editTime}
+                    onChange={(e) => setEditTime(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-coffee-500 mb-1.5 block flex items-center gap-1">
+                  <User className="w-3 h-3" />
+                  关联客户（可选）
+                </label>
+                <input
+                  type="text"
+                  value={editCustomer}
+                  onChange={(e) => setEditCustomer(e.target.value)}
+                  placeholder="例如：中国航发"
+                  className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300"
+                />
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-coffee-100 flex gap-2">
+              <button
+                onClick={() => setEditingId(null)}
+                className="flex-1 py-2.5 bg-white text-coffee-600 rounded-xl text-sm font-medium border border-coffee-200 hover:bg-coffee-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleEditSchedule}
+                disabled={!editContent.trim() || !editDate}
+                className="flex-1 py-2.5 bg-gradient-to-r from-coffee-600 to-caramel text-white rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-40 flex items-center justify-center gap-1"
+              >
+                <Save className="w-4 h-4" />
+                保存修改
               </button>
             </div>
           </div>

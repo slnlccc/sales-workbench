@@ -177,4 +177,15 @@ export const dataApi = {
 
   /** 手动刷新数据 */
   refresh: () => request('/data/refresh', { method: 'POST' }),
+
+  /** 市情雷达：服务端权威日期锚点（北京时间 todayStr+seed，无需登录）*/
+  marketRadarAnchor: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/data/market-radar-anchor`, { cache: 'no-store' })
+      const json = await res.json()
+      return json?.success ? (json.data as { todayStr: string; daySeed: number; serverTime?: string }) : null
+    } catch {
+      return null
+    }
+  },
 }

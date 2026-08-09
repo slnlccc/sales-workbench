@@ -85,6 +85,46 @@ router.post('/refresh', auth, async (req, res) => {
 })
 
 /**
+ * GET /api/data/market-radar-anchor
+ * 无需登录：返回服务端权威"北京时间今天日期"字符串 + 部署时间
+ * 用于手机端每日更新的基准（防止用户手机时钟不准/时区错导致"今天"判断出错）
+ */
+router.get('/market-radar-anchor', async (req, res) => {
+  try {
+    const now = new Date()
+    // 强制按 Asia/Shanghai 时区格式化"YYYY-MM-DD"，无论Railway服务器时区是UTC还是什么
+    const cnDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now)
+    // 今天是今年第几天（1..366），前端轮换种子
+    const shanghaiTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
+    const start = new Date(shanghaiTime.getFullYear(), 0, 0)
+    const diff = shanghaiTime - start
+    const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const dayOfMonth = shanghaiTime.getDate()
+    const month = shanghaiTime.getMonth() + 1
+
+    res.json({
+      success: true,
+      data: {
+        todayStr: cnDateStr,            // 前端直接用这个替代本地 todayStr()
+        dayOfYear,
+        daySeed: dayOfMonth + month * 31, // 与前端 todayDayNum 算法一致，但以北京时间为基准
+        serverTime: now.toISOString(),
+        version: process.env.RAILWAY_VOLUME_MOUNT_ID ? 'prod' : 'dev',
+        deployedAt: process.env.RAILWAY_DEPLOYED_AT || '',
+      },
+    })
+  } catch (err) {
+    // 失败时前端会降级为本地日期，所以这里不要500
+    res.json({ success: false, error: err.message })
+  }
+})
+
+/**
  * GET /api/data/market-overview
  * 获取市场概览（综合数据）
  */

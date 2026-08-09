@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DollarSign, Users, FileText, CheckCircle, Phone, Calendar, X, Check, Clock, Mic, StickyNote, Hand } from 'lucide-react';
+import { DollarSign, Users, FileText, CheckCircle, Phone, Calendar, X, Check, Clock, Mic, StickyNote, Hand, Pencil, Save } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import type { RecordType, RecordSource, WorkbenchRecord } from '@/types';
 import { cn } from '@/lib/utils';
@@ -34,9 +34,11 @@ const resolveSource = (r: WorkbenchRecord): RecordSource => {
 };
 
 export default function RecordsList() {
-  const { records, memos, toggleRecordDone } = useWorkbenchStore();
+  const { records, memos, toggleRecordDone, deleteRecord, deleteMemo, updateRecord, updateMemo } = useWorkbenchStore();
   const [activeFilter, setActiveFilter] = useState<RecordType | 'all'>('all');
   const [activeSource, setActiveSource] = useState<RecordSource | 'all'>('all');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
 
   // 合并 records 与 memos，备忘录自动汇入工作记录列表
   const allRecords: WorkbenchRecord[] = [
@@ -165,29 +167,88 @@ export default function RecordsList() {
                       {new Date(record.createdAt).toLocaleDateString('zh-CN')}
                     </span>
                   </div>
-                  <p className={cn('text-sm text-coffee-800', record.done && 'line-through text-coffee-400')}>
-                    {record.content}
-                  </p>
-                  {record.customer && (
-                    <p className="text-xs text-coffee-400 mt-1">{record.customer}</p>
+                  {editingId === record.id ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        rows={2}
+                        className="w-full px-3 py-2 rounded-xl bg-coffee-50 text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="px-3 py-1 text-xs text-coffee-500 hover:text-coffee-700 rounded-lg transition-colors"
+                        >
+                          取消
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (editContent.trim()) {
+                              if (record.type === 'memo') {
+                                updateMemo(record.id, { content: editContent.trim() });
+                              } else {
+                                updateRecord(record.id, { content: editContent.trim() });
+                              }
+                              setEditingId(null);
+                            }
+                          }}
+                          className="flex items-center gap-1 px-3 py-1 text-xs text-white bg-coffee-600 hover:bg-coffee-700 rounded-lg transition-colors"
+                        >
+                          <Save className="w-3 h-3" />
+                          保存
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className={cn('text-sm text-coffee-800', record.done && 'line-through text-coffee-400')}>
+                        {record.content}
+                      </p>
+                      {record.customer && (
+                        <p className="text-xs text-coffee-400 mt-1">{record.customer}</p>
+                      )}
+                    </>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => toggleRecordDone(record.id)}
-                    className={cn(
-                      'w-7 h-7 rounded-lg flex items-center justify-center transition-colors',
-                      record.done
-                        ? 'bg-coffee-100 text-coffee-600'
-                        : 'text-coffee-300 hover:text-coffee-600 hover:bg-coffee-50'
-                    )}
-                  >
-                    {record.done ? <Check className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                  </button>
-                  <button className="w-7 h-7 rounded-lg text-coffee-300 hover:text-alert hover:bg-red-50 flex items-center justify-center">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
+                {editingId !== record.id && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        setEditingId(record.id);
+                        setEditContent(record.content);
+                      }}
+                      className="w-7 h-7 rounded-lg text-coffee-300 hover:text-coffee-600 hover:bg-coffee-50 flex items-center justify-center transition-colors"
+                      title="编辑"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => toggleRecordDone(record.id)}
+                      className={cn(
+                        'w-7 h-7 rounded-lg flex items-center justify-center transition-colors',
+                        record.done
+                          ? 'bg-coffee-100 text-coffee-600'
+                          : 'text-coffee-300 hover:text-coffee-600 hover:bg-coffee-50'
+                      )}
+                    >
+                      {record.done ? <Check className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (record.type === 'memo') {
+                          deleteMemo(record.id);
+                        } else {
+                          deleteRecord(record.id);
+                        }
+                      }}
+                      className="w-7 h-7 rounded-lg text-coffee-300 hover:text-alert hover:bg-red-50 flex items-center justify-center transition-colors"
+                      title="删除"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );

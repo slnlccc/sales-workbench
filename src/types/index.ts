@@ -66,6 +66,7 @@ export interface NewsItem {
   insights?: string;          // 新增：见解点评
   businessValue?: string;     // 新增：商业价值思考
   relatedCustomers?: string[];// 新增：关联客户
+  sourceUrl?: string;         // 新增：原文链接
 }
 
 export interface MaterialItem {
@@ -98,6 +99,23 @@ export interface BiddingItem {
   sourceName?: string;     // 新增：来源网站名称
 }
 
+export interface CompetitorItem {
+  id: string;
+  title: string;
+  competitor: string;       // 竞争对手公司名（如中航重机、三角防务等）
+  competitorCode?: string;  // 股票代码（如有）
+  sourceType: '公众号' | '官网' | '招投标' | '财报' | '行业研报';
+  publishedAt: string;
+  summary: string;
+  content?: string;         // 详细正文内容
+  keywords: string[];
+  impactLevel: '高' | '中' | '低';  // 对派克新材的竞争影响程度
+  category: '产能扩张' | '技术突破' | '订单中标' | '资本运作' | '客户拓展' | '人事变动' | '其他';
+  parkerInsight?: string;   // AI生成的派克新材应对建议
+  sourceUrl?: string;       // 原文链接
+  relatedCustomers?: string[]; // 涉及的共同客户
+}
+
 export interface PolicyItem {
   id: string;
   title: string;
@@ -109,6 +127,7 @@ export interface PolicyItem {
   summary: string;
   aiAnalysis?: string;   // 新增：AI分析政策对销售影响
   salesImpact?: string;  // 新增：对销售的具体影响
+  sourceUrl?: string;    // 新增：原文链接
 }
 
 export interface ExhibitionItem {

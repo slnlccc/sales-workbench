@@ -6,6 +6,8 @@ import tsconfigPaths from "vite-tsconfig-paths";
 export default defineConfig({
   build: {
     sourcemap: 'hidden',
+    outDir: './dist',
+    emptyOutDir: true,
   },
   server: {
     host: '0.0.0.0',

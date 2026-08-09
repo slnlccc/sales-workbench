@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Calendar, CheckCircle2, RotateCcw, StickyNote, Mic, Square, BookOpen, Sparkles, Loader2, AlertCircle, User, MapPin } from 'lucide-react';
+import { Plus, Calendar, CheckCircle2, RotateCcw, StickyNote, Mic, Square, BookOpen, Sparkles, Loader2, AlertCircle, User, MapPin, X, Pencil, Save } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import { cn } from '@/lib/utils';
 import { useVoiceAssistant, VoiceParseResult } from '@/hooks/useVoiceAssistant';
@@ -12,9 +12,11 @@ const mockVoiceTexts = [
 ];
 
 export default function MemoView() {
-  const { memos, memoKnowledge, addMemo, addMemoWithVoice, toggleMemoClosed, promoteMemoToSchedule } = useWorkbenchStore();
+  const { memos, memoKnowledge, addMemo, addMemoWithVoice, toggleMemoClosed, promoteMemoToSchedule, deleteMemo, updateMemo } = useWorkbenchStore();
   const [inputValue, setInputValue] = useState('');
   const [showParseResult, setShowParseResult] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
 
   const {
     transcript,
@@ -272,7 +274,38 @@ export default function MemoView() {
               key={memo.id}
               className="bg-white rounded-2xl p-4 shadow-soft border-l-4 border-l-coffee-400 hover:shadow-card transition-all"
             >
-              <p className="text-sm text-coffee-800 leading-relaxed mb-3">{memo.content}</p>
+              {editingId === memo.id ? (
+                <div className="space-y-2 mb-3">
+                  <textarea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-xl bg-coffee-50 text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="px-3 py-1 text-xs text-coffee-500 hover:text-coffee-700 rounded-lg transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (editContent.trim()) {
+                          updateMemo(memo.id, { content: editContent.trim() });
+                          setEditingId(null);
+                        }
+                      }}
+                      className="flex items-center gap-1 px-3 py-1 text-xs text-white bg-coffee-600 hover:bg-coffee-700 rounded-lg transition-colors"
+                    >
+                      <Save className="w-3 h-3" />
+                      保存
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-coffee-800 leading-relaxed mb-3">{memo.content}</p>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-coffee-400 flex items-center gap-1.5">
                   {memo.source === 'voice' && <span>语音录入</span>}
@@ -280,6 +313,18 @@ export default function MemoView() {
                   <span>{new Date(memo.createdAt).toLocaleString('zh-CN')}</span>
                 </span>
                 <div className="flex items-center gap-1.5">
+                  {editingId !== memo.id && (
+                    <button
+                      onClick={() => {
+                        setEditingId(memo.id);
+                        setEditContent(memo.content);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs text-coffee-600 bg-coffee-50 hover:bg-coffee-100 rounded-lg transition-colors"
+                      title="编辑"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  )}
                   <button
                     onClick={() => promoteMemoToSchedule(memo.id)}
                     className="flex items-center gap-1 px-2.5 py-1 text-xs text-coffee-700 bg-coffee-50 hover:bg-coffee-100 rounded-lg transition-colors"
@@ -293,6 +338,13 @@ export default function MemoView() {
                   >
                     <CheckCircle2 className="w-3 h-3" />
                     <span>闭环</span>
+                  </button>
+                  <button
+                    onClick={() => deleteMemo(memo.id)}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                    title="删除备忘"
+                  >
+                    <X className="w-3 h-3" />
                   </button>
                 </div>
               </div>
@@ -315,12 +367,22 @@ export default function MemoView() {
               >
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                 <p className="flex-1 text-sm text-coffee-500 line-through">{memo.content}</p>
-                <button
-                  onClick={() => toggleMemoClosed(memo.id)}
-                  className="p-1 text-coffee-400 hover:text-coffee-700 rounded transition-colors"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => toggleMemoClosed(memo.id)}
+                    className="p-1 text-coffee-400 hover:text-coffee-700 rounded transition-colors"
+                    title="恢复"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => deleteMemo(memo.id)}
+                    className="p-1 text-coffee-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                    title="删除"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

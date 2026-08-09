@@ -55,6 +55,10 @@ interface WorkbenchState {
   addMemoKnowledge: (knowledge: MemoKnowledge) => void;
   setJoinDate: (dateStr: string) => void;
   closeScheduleTask: (id: string) => void;
+  deleteRecord: (id: string) => void;
+  deleteMemo: (id: string) => void;
+  updateRecord: (id: string, updates: Partial<WorkbenchRecord>) => void;
+  updateMemo: (id: string, updates: Partial<WorkbenchRecord>) => void;
   clearInput: () => void;
   // 云同步：导出/导入前端数据
   exportLocalData: () => { records: WorkbenchRecord[]; memos: WorkbenchRecord[]; memoKnowledge: MemoKnowledge[] };
@@ -355,6 +359,38 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
     persistSet((state) => ({
       records: state.records.map((record) =>
         record.id === id ? { ...record, done: !record.done } : record
+      ),
+    }));
+  },
+
+  // 删除记录（日程/工作记录）
+  deleteRecord: (id) => {
+    persistSet((state) => ({
+      records: state.records.filter((record) => record.id !== id),
+    }));
+  },
+
+  // 删除备忘录
+  deleteMemo: (id) => {
+    persistSet((state) => ({
+      memos: state.memos.filter((memo) => memo.id !== id),
+    }));
+  },
+
+  // 更新记录（日程/工作记录）
+  updateRecord: (id, updates) => {
+    persistSet((state) => ({
+      records: state.records.map((record) =>
+        record.id === id ? { ...record, ...updates } : record
+      ),
+    }));
+  },
+
+  // 更新备忘录
+  updateMemo: (id, updates) => {
+    persistSet((state) => ({
+      memos: state.memos.map((memo) =>
+        memo.id === id ? { ...memo, ...updates } : memo
       ),
     }));
   },

@@ -88,20 +88,27 @@ const extractCustomer = (text: string): string => {
 const extractCoreContent = (text: string): string => {
   let content = text;
 
+  // 先把「周报/日报/月报」等报告类关键词挑出来，如果存在就直接返回核心词 + 动词（避免被下面的正则误伤周/日/月字）
+  const reportMatch = content.match(/(完成|提交|写|准备|做|发|生成|汇报|交|搞定)[\s:：]*(周报|日报|月报|出差报告|拜访纪要|会议纪要|总结|报告|汇报)/);
+  if (reportMatch) return reportMatch[0];
+  const justReport = content.match(/周报|日报|月报|出差报告|拜访纪要|会议纪要|总结|报告|汇报/);
+  if (justReport && /(下班|前|之前|的时候|小时|点|时|上午|下午|晚上|中午|今天|明天|后天|周[一二三四五六日天])/.test(content)) {
+    return justReport[0];
+  }
+
   content = content.replace(/^(明天|后天|大后天|今天|下周|本周)(早上|上午|下午|晚上|傍晚|中午)?\s*\d{1,2}[点:：]\d{0,2}\s*(左右|前后|钟)?\s*/, '');
   content = content.replace(/^(明天|后天|大后天|今天|下周|本周)\s*/, '');
   content = content.replace(/^(早上|上午|下午|晚上|傍晚|中午)\s*\d{1,2}[点:：]\d{0,2}\s*(左右|前后|钟)?\s*/, '');
   content = content.replace(/\d{1,2}[月日号]\s*\d{1,2}[点:：]\d{0,2}\s*(左右|前后|钟)?\s*/, '');
-  content = content.replace(/^周[一二三四五六日天]\s*/, '');
-  content = content.replace(/^星期[一二三四五六日天]\s*/, '');
-
+  // 注意：只删周几/星期几（"周X"带数字），不要删"周报/周记"
+  content = content.replace(/^周([一二三四五六日天])(?!报|记)\s*/, '');
+  content = content.replace(/^星期([一二三四五六日天])\s*/, '');
+  // 去掉「这周五下班前一个小时」这类时间描述
+  content = content.replace(/(这|下)?(周[一二三四五六日天]|星期[一二三四五六日天]|今天|明天|后天|大后天)[\s\S]{0,10}(下班|上班|上课|下课|之前|前|时候|小时|分钟|钟头|点|时)\S*\s*/g, '');
   content = content.replace(/^(给|和|与|跟)[\u4e00-\u9fa5]{2,10}\s*/, '');
-
-  content = content.replace(/^(提醒我|记得|要|需要|得|应该|必须|准备|完成|提交|交|做|处理|弄|搞定)\s*/, '');
+  content = content.replace(/(提醒我|记得|要|需要|得|应该|必须|准备|完成|提交|交|做|处理|弄|搞定|帮我|请|麻烦|一定|务必)/g, '');
   content = content.replace(/一下/g, '');
-
   content = content.replace(/^[，。；、\s]+/, '').replace(/[，。；、\s]+$/, '');
-
   return content.trim() || text;
 };
 

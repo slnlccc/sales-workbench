@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Search, TrendingUp, TrendingDown, X, Newspaper, BarChart3, Briefcase, Scale, Calendar,
-  ArrowRight, ArrowLeft, FileText, ChevronRight, Users, RefreshCw, Sparkles,
+  ArrowRight, ArrowLeft, FileText, ChevronRight, Users, RefreshCw, Sparkles, Clock, ExternalLink,
+  Building2, AlertTriangle,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
-import { newsItems, biddingItems, policyItems, exhibitionItems } from '@/data/news';
-import type { NewsItem, BiddingItem, PolicyItem, ExhibitionItem } from '@/types';
+import { useMarketRadarStore } from '@/store/useMarketRadarStore';
+import type { MaterialItem as StoreMaterialItem } from '@/store/useMarketRadarStore';
+import type { NewsItem, BiddingItem, PolicyItem, ExhibitionItem, CompetitorItem } from '@/types';
 import { cn } from '@/lib/utils';
 
-type Category = 'industry' | 'materials' | 'bidding' | 'policy' | 'exhibition';
+type Category = 'industry' | 'materials' | 'bidding' | 'policy' | 'exhibition' | 'competitor';
 
 const categoryConfig: Record<Category, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   industry: { label: '行业动态', icon: Newspaper },
@@ -16,37 +18,17 @@ const categoryConfig: Record<Category, { label: string; icon: React.ComponentTyp
   bidding: { label: '招投标', icon: Briefcase },
   policy: { label: '政策法规', icon: Scale },
   exhibition: { label: '行业展会', icon: Calendar },
+  competitor: { label: '竞争对手动态', icon: Building2 },
 };
 
 const industries = ['全部', '航空航天', '能源电力', '新能源', '船舶', '石化', '机械'];
 const customers = ['全部客户', '中国航发', '中国航天', '航空工业', '中航集团', '西门子歌美飒', '东方电气', '中国船舶', 'GE Aerospace', 'Rolls-Royce', 'Vestas'];
 const impactLevels = ['全部级别', '高影响', '中影响', '低影响'];
 
-interface MaterialItem {
-  id: string;
-  name: string;
-  category: string;
-  price: number;
-  unit: string;
-  change: number;
-  changeAmount: number;
-  description: string;
-  frequency: number;
-  source: string;
-  lastUpdate: string;
-}
-
-const materialsData: MaterialItem[] = [
-  { id: 'm1', name: 'GH4169', category: '高温合金', price: 385, unit: '元/kg', change: 3.36, changeAmount: 12.5, description: '镍基高温合金，用于航空发动机涡轮盘、叶片等高温部件', frequency: 168, source: '中国金属网', lastUpdate: '2026-07-14' },
-  { id: 'm2', name: 'GH141', category: '高温合金', price: 365, unit: '元/kg', change: 2.38, changeAmount: 8.5, description: '铁镍基高温合金，用于涡轮发动机喷嘴、涡轮叶片', frequency: 131, source: '中国金属网', lastUpdate: '2026-07-14' },
-  { id: 'm3', name: '5A06', category: '铝合金', price: 28.5, unit: '元/kg', change: 1.78, changeAmount: 0.5, description: '铝镁系合金，用于航空航天结构件、船舶板材', frequency: 47, source: '中国金属网', lastUpdate: '2026-07-14' },
-  { id: 'm4', name: '2A14', category: '铝合金', price: 32.8, unit: '元/kg', change: -2.39, changeAmount: -0.8, description: '铝合金，用于航空航天、高强度结构件', frequency: 40, source: '中国金属网', lastUpdate: '2026-07-14' },
-  { id: 'm5', name: '17-4ph', category: '不锈钢', price: 42.5, unit: '元/kg', change: 2.91, changeAmount: 1.2, description: '沉淀硬化不锈钢，用于航空航天构件、核电部件', frequency: 39, source: '中国金属网', lastUpdate: '2026-07-14' },
-  { id: 'm6', name: 'GH188', category: '高温合金', price: 320, unit: '元/kg', change: -1.69, changeAmount: -5.5, description: '钴基高温合金，用于涡轮发动机燃烧室、导向叶片', frequency: 34, source: '中国金属网', lastUpdate: '2026-07-14' },
-  { id: 'm7', name: 'GH3039', category: '高温合金', price: 295, unit: '元/kg', change: 0.85, changeAmount: 2.5, description: '镍基高温合金板材，用于燃烧室部件', frequency: 28, source: '中国金属网', lastUpdate: '2026-07-14' },
-  { id: 'm8', name: 'GH4099', category: '高温合金', price: 410, unit: '元/kg', change: 1.74, changeAmount: 7.0, description: '镍基时效硬化高温合金', frequency: 22, source: '中国金属网', lastUpdate: '2026-07-14' },
-  { id: 'm9', name: '7050', category: '铝合金', price: 31.2, unit: '元/kg', change: 0.65, changeAmount: 0.2, description: '航空高强铝合金，用于飞机机身框架', frequency: 56, source: '中国金属网', lastUpdate: '2026-07-14' },
-];
+// 竞争对手筛选选项
+const competitorCompanies = ['全部对手', '中航重机', '三角防务', '钢研高纳', '图南股份', '西部超导', '宝钛股份', '万泽股份', '铂力特', '行业研报'];
+const sourceTypes = ['全部来源', '公众号', '官网', '招投标', '财报', '行业研报'];
+const compCategories = ['全部类别', '产能扩张', '技术突破', '订单中标', '资本运作', '客户拓展', '人事变动', '其他'];
 
 const impactLevelMap: Record<string, string> = {
   '高影响': 'bg-red-500',
@@ -54,29 +36,78 @@ const impactLevelMap: Record<string, string> = {
   '低影响': 'bg-blue-500',
 };
 
+const sourceTypeColor: Record<string, string> = {
+  '公众号': 'bg-green-100 text-green-700 border-green-200',
+  '官网': 'bg-blue-100 text-blue-700 border-blue-200',
+  '招投标': 'bg-purple-100 text-purple-700 border-purple-200',
+  '财报': 'bg-amber-100 text-amber-700 border-amber-200',
+  '行业研报': 'bg-sky-100 text-sky-700 border-sky-200',
+};
+
+const compCategoryColor: Record<string, string> = {
+  '产能扩张': 'bg-orange-100 text-orange-700',
+  '技术突破': 'bg-emerald-100 text-emerald-700',
+  '订单中标': 'bg-cyan-100 text-cyan-700',
+  '资本运作': 'bg-rose-100 text-rose-700',
+  '客户拓展': 'bg-indigo-100 text-indigo-700',
+  '人事变动': 'bg-slate-100 text-slate-700',
+  '其他': 'bg-cream-100 text-cream-700',
+};
+
 export default function MarketRadar() {
+  const { news: storeNews, materials, bids: storeBids, policies: storePolicies, exhibitions, competitors, lastUpdateDate, updating, checkDailyUpdate, loadServerAnchorAndCheck, refresh } = useMarketRadarStore();
   const [category, setCategory] = useState<Category>('industry');
   const [searchQuery, setSearchQuery] = useState('');
   const [industry, setIndustry] = useState('全部');
   const [customer, setCustomer] = useState('全部客户');
   const [impact, setImpact] = useState('全部级别');
+  const [competitorComp, setCompetitorComp] = useState('全部对手');
+  const [sourceType, setSourceType] = useState('全部来源');
+  const [compCategory, setCompCategory] = useState('全部类别');
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
-  const [selectedMaterial, setSelectedMaterial] = useState<MaterialItem | null>(null);
+  const [selectedMaterial, setSelectedMaterial] = useState<StoreMaterialItem | null>(null);
   const [selectedBid, setSelectedBid] = useState<BiddingItem | null>(null);
   const [selectedPolicy, setSelectedPolicy] = useState<PolicyItem | null>(null);
   const [selectedExhibition, setSelectedExhibition] = useState<ExhibitionItem | null>(null);
+  const [selectedCompetitor, setSelectedCompetitor] = useState<CompetitorItem | null>(null);
   const [readNewsIds, setReadNewsIds] = useState<Set<string>>(new Set());
-  const [materials, setMaterials] = useState<MaterialItem[]>(materialsData);
-  const [materialsUpdating, setMaterialsUpdating] = useState(false);
 
+  // 页面加载时检查是否需要每日更新
   useEffect(() => {
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    if (dayOfWeek === 1) {
-      setMaterialsUpdating(true);
-      setTimeout(() => setMaterialsUpdating(false), 2000);
-    }
-  }, []);
+    // 1) 立即同步走一次本地判断（首屏立刻渲染已更新的）
+    checkDailyUpdate();
+    // 2) 异步拉取服务端北京时间锚点，权威日期纠正+重新校验
+    // （部署到Railway时最关键：防止用户手机系统时间错、时区调成美国/日本等导致"今天"永远不等于lastUpdateDate）
+    loadServerAnchorAndCheck();
+  }, [checkDailyUpdate, loadServerAnchorAndCheck]);
+
+  // === 移动端每日更新的双重保障 ===
+  // 1) 切回标签页/APP从后台恢复时立即校验
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkDailyUpdate();
+        loadServerAnchorAndCheck(); // 前台化时再问一次服务端日期，防止凌晨跨天
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+    window.addEventListener('resume', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+      window.removeEventListener('resume', handleVisibility);
+    };
+  }, [checkDailyUpdate, loadServerAnchorAndCheck]);
+
+  // 2) 即使页面一直开着，每15分钟也校验一次是否跨天（覆盖凌晨跨天的手机）
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      checkDailyUpdate();
+      loadServerAnchorAndCheck();
+    }, 15 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [checkDailyUpdate, loadServerAnchorAndCheck]);
 
   const handleNewsClick = (news: NewsItem) => {
     setSelectedNews(news);
@@ -90,34 +121,62 @@ export default function MarketRadar() {
     return diffDays <= 2 && !readNewsIds.has(news.id);
   };
 
-  const refreshMaterials = () => {
-    setMaterialsUpdating(true);
-    setTimeout(() => {
-      setMaterialsUpdating(false);
-    }, 1500);
+  const handleRefresh = () => {
+    refresh();
   };
 
-  const filteredNews = newsItems
+  const filteredNews = storeNews
     .filter((n) => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         if (!n.title.toLowerCase().includes(q) && !n.summary.toLowerCase().includes(q) && !n.keywords.some((k) => k.toLowerCase().includes(q))) return false;
       }
       if (customer !== '全部客户' && !n.keywords.includes(customer) && !n.title.includes(customer)) return false;
+      // 行业分类筛选：能源电力兼容核电/火电等能源类
+      if (industry !== '全部') {
+        if (industry === '能源电力') {
+          if (!['核电', '火电', '能源电力'].includes(n.industry)) return false;
+        } else if (n.industry !== industry) return false;
+      }
+      // 影响级别筛选
+      if (impact !== '全部级别') {
+        const levelMap: Record<string, string> = { '高影响': '高', '中影响': '中', '低影响': '低' };
+        if (n.impactLevel !== levelMap[impact]) return false;
+      }
       return true;
     })
     .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
-  const filteredBids = biddingItems.filter((b) => {
+  const filteredBids = storeBids.filter((b) => {
     if (searchQuery && !b.title.toLowerCase().includes(searchQuery.toLowerCase()) && !b.org.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (industry !== '全部' && b.industry !== industry) return false;
     return true;
   });
 
-  const filteredPolicies = policyItems.filter((p) => {
+  const filteredPolicies = storePolicies.filter((p) => {
     if (searchQuery && !p.title.toLowerCase().includes(searchQuery.toLowerCase()) && !p.department.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
+
+  const filteredCompetitors = competitors
+    .filter((c) => {
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        if (!c.title.toLowerCase().includes(q) && !c.summary.toLowerCase().includes(q) && !c.competitor.toLowerCase().includes(q) && !c.keywords.some((k) => k.toLowerCase().includes(q))) return false;
+      }
+      if (competitorComp !== '全部对手' && c.competitor !== competitorComp) return false;
+      if (sourceType !== '全部来源' && c.sourceType !== sourceType) return false;
+      if (compCategory !== '全部类别' && c.category !== compCategory) return false;
+      return true;
+    })
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+
+  const isCompNew = (c: CompetitorItem) => {
+    const cDate = new Date(c.publishedAt);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - cDate.getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays <= 1;
+  };
 
   return (
     <Layout>
@@ -156,6 +215,30 @@ export default function MarketRadar() {
             })}
           </div>
 
+          {/* 每日更新状态栏 */}
+          <div className="flex items-center justify-between mb-4 px-4 py-2.5 bg-white rounded-xl shadow-soft">
+            <div className="flex items-center gap-2 text-xs text-cream-600">
+              <Clock className="w-3.5 h-3.5" />
+              <span>每日自动更新</span>
+              <span>·</span>
+              <span>最后更新：{lastUpdateDate}</span>
+              {updating && (
+                <span className="flex items-center gap-1 text-cream-700">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>更新中...</span>
+                </span>
+              )}
+            </div>
+            <button
+              onClick={handleRefresh}
+              disabled={updating}
+              className="flex items-center gap-1 px-3 py-1.5 bg-cream-200 text-cream-700 rounded-lg text-xs font-medium hover:bg-cream-300 disabled:opacity-50 transition-colors"
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5', updating && 'animate-spin')} />
+              <span>手动刷新</span>
+            </button>
+          </div>
+
           {category === 'industry' && (
             <div className="space-y-4 animate-fade-in">
               <FilterBar industries={industries} customers={customers} impactLevels={impactLevels}
@@ -165,8 +248,7 @@ export default function MarketRadar() {
               <div className="space-y-3">
                 {filteredNews.length === 0 && <EmptyState>没有找到匹配的资讯</EmptyState>}
                 {filteredNews.map((news) => {
-                  const isHigh = news.keywords.includes('中国航发') || news.keywords.includes('航天科工');
-                  const impactLabel = isHigh ? '高影响' : '中影响';
+                  const impactLabel = news.impactLevel === '高' ? '高影响' : news.impactLevel === '低' ? '低影响' : '中影响';
                   const isNew = isNewsNew(news);
                   return (
                     <div key={news.id} onClick={() => handleNewsClick(news)}
@@ -201,23 +283,13 @@ export default function MarketRadar() {
 
           {category === 'materials' && (
             <div className="space-y-4 animate-fade-in">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs text-cream-600">
-                  <BarChart3 className="w-4 h-4" />
-                  <span>数据来源：中国金属网</span>
-                  <span>·</span>
-                  <span>每周一更新</span>
-                  <span>·</span>
-                  <span>上次更新：2026-07-14</span>
-                </div>
-                <button
-                  onClick={refreshMaterials}
-                  disabled={materialsUpdating}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-cream-200 text-cream-700 rounded-lg text-xs font-medium hover:bg-cream-300 disabled:opacity-50"
-                >
-                  <RefreshCw className={cn('w-3.5 h-3.5', materialsUpdating && 'animate-spin')} />
-                  <span>{materialsUpdating ? '更新中...' : '刷新数据'}</span>
-                </button>
+              <div className="flex items-center gap-2 text-xs text-cream-600 px-1">
+                <BarChart3 className="w-4 h-4" />
+                <span>数据来源：中国金属网</span>
+                <span>·</span>
+                <span>每日更新</span>
+                <span>·</span>
+                <span>价格更新：{materials[0]?.lastUpdate || lastUpdateDate}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {materials.map((mat) => (
@@ -316,7 +388,7 @@ export default function MarketRadar() {
           {category === 'exhibition' && (
             <div className="space-y-4 animate-fade-in">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {exhibitionItems.map((ex) => (
+                {exhibitions.map((ex) => (
                   <div key={ex.id} onClick={() => setSelectedExhibition(ex)}
                   className="bg-white rounded-2xl p-5 shadow-soft hover:shadow-card transition-all cursor-pointer">
                   <div className="flex items-start justify-between mb-3">
@@ -347,11 +419,76 @@ export default function MarketRadar() {
               </div>
             </div>
           )}
+
+          {category === 'competitor' && (
+            <div className="space-y-4 animate-fade-in">
+              <FilterBar
+                industries={competitorCompanies}
+                industriesLabel="竞争对手"
+                customers={sourceTypes}
+                customerLabel="信息来源"
+                impactLevels={compCategories}
+                impactLabel="动态类别"
+                industry={competitorComp}
+                customer={sourceType}
+                impact={compCategory}
+                onIndustryChange={setCompetitorComp}
+                onCustomerChange={setSourceType}
+                onImpactChange={setCompCategory}
+              />
+              <div className="space-y-3">
+                {filteredCompetitors.length === 0 && <EmptyState>没有找到匹配的竞争对手动态</EmptyState>}
+                {filteredCompetitors.map((c) => {
+                  const impactLabel = c.impactLevel === '高' ? '高影响' : c.impactLevel === '低' ? '低影响' : '中影响';
+                  const isNew = isCompNew(c);
+                  return (
+                    <div key={c.id} onClick={() => setSelectedCompetitor(c)}
+                      className="bg-white rounded-2xl p-5 shadow-soft hover:shadow-card transition-all cursor-pointer relative">
+                      {isNew && (
+                        <span className="absolute top-4 right-4 px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full animate-pulse z-10">新</span>
+                      )}
+                      <div className="flex items-start gap-2 mb-2 flex-wrap">
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-rose-100 text-rose-700 font-semibold">
+                          {c.competitor}
+                          {c.competitorCode && <span className="ml-1 text-rose-500 font-normal">{c.competitorCode}</span>}
+                        </span>
+                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium border', sourceTypeColor[c.sourceType])}>
+                          {c.sourceType}
+                        </span>
+                        <span className={cn('px-2 py-0.5 rounded text-xs font-medium', compCategoryColor[c.category])}>
+                          {c.category}
+                        </span>
+                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium text-white', impactLevelMap[impactLabel])}>{impactLabel}</span>
+                        <span className="ml-auto text-xs text-cream-500">{c.publishedAt}</span>
+                      </div>
+                      <h3 className="text-base font-semibold text-cream-900 mb-2 pr-12">{c.title}</h3>
+                      <p className="text-sm text-cream-700 leading-relaxed mb-3 line-clamp-2">{c.summary}</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {c.keywords.slice(0, 4).map((kw) => (
+                            <span key={kw} className="px-2 py-0.5 rounded-full text-xs bg-cream-100 text-cream-700 border border-cream-300">{kw}</span>
+                          ))}
+                          {c.keywords.length > 4 && (
+                            <span className="text-xs text-cream-500">+{c.keywords.length - 4}</span>
+                          )}
+                        </div>
+                        <button className="flex items-center gap-1 text-sm text-rose-700 hover:text-rose-800 flex-shrink-0">
+                          <span>竞争分析</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
       {selectedNews && <NewsDetailModal news={selectedNews} onClose={() => setSelectedNews(null)} />}
       {selectedMaterial && <MaterialDetailModal material={selectedMaterial} onClose={() => setSelectedMaterial(null)} />}
       {selectedBid && <BidDetailModal bid={selectedBid} onClose={() => setSelectedBid(null)} />}
       {selectedPolicy && <PolicyDetailModal policy={selectedPolicy} onClose={() => setSelectedPolicy(null)} />}
       {selectedExhibition && <ExhibitionDetailModal exhibition={selectedExhibition} onClose={() => setSelectedExhibition(null)} />}
+      {selectedCompetitor && <CompetitorDetailModal competitor={selectedCompetitor} onClose={() => setSelectedCompetitor(null)} />}
     </Layout>
   );
 }
@@ -364,15 +501,16 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   );
 }
 
-function FilterBar({ industries, customers, impactLevels, industry, customer, impact, onIndustryChange, onCustomerChange, onImpactChange }: {
+function FilterBar({ industries, customers, impactLevels, industry, customer, impact, onIndustryChange, onCustomerChange, onImpactChange, industriesLabel = '行业分类', customerLabel = '重点客户', impactLabel = '影响级别' }: {
   industries: string[]; customers: string[]; impactLevels: string[];
   industry: string; customer: string; impact: string;
   onIndustryChange: (v: string) => void; onCustomerChange: (v: string) => void; onImpactChange: (v: string) => void;
+  industriesLabel?: string; customerLabel?: string; impactLabel?: string;
 }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-cream-600 w-20">行业分类:</span>
+        <span className="text-xs text-cream-600 w-20">{industriesLabel}:</span>
         {industries.map((ind) => (
           <button key={ind} onClick={() => onIndustryChange(ind)}
             className={cn('px-3 py-1 rounded-full text-xs font-medium transition-colors', industry === ind ? 'bg-cream-700 text-white' : 'bg-white text-cream-700 border border-cream-300 hover:bg-cream-100')}>
@@ -381,7 +519,7 @@ function FilterBar({ industries, customers, impactLevels, industry, customer, im
         ))}
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-cream-600 w-20">重点客户:</span>
+        <span className="text-xs text-cream-600 w-20">{customerLabel}:</span>
         {customers.map((c) => (
           <button key={c} onClick={() => onCustomerChange(c)}
             className={cn('px-3 py-1 rounded-full text-xs font-medium transition-colors', customer === c ? 'bg-cream-700 text-white' : 'bg-white text-cream-700 border border-cream-300 hover:bg-cream-100')}>
@@ -390,7 +528,7 @@ function FilterBar({ industries, customers, impactLevels, industry, customer, im
         ))}
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-cream-600 w-20">影响级别:</span>
+        <span className="text-xs text-cream-600 w-20">{impactLabel}:</span>
         {impactLevels.map((lv) => (
           <button key={lv} onClick={() => onImpactChange(lv)}
             className={cn('px-3 py-1 rounded-full text-xs font-medium transition-colors', impact === lv ? 'bg-cream-700 text-white' : 'bg-white text-cream-700 border border-cream-300 hover:bg-cream-100')}>
@@ -468,7 +606,7 @@ function NewsDetailModal({ news, onClose }: { news: NewsItem; onClose: () => voi
         <div className="p-6">
           <div className="flex items-start gap-2 mb-3">
             <span className="px-2 py-0.5 rounded text-xs font-medium bg-cream-200 text-cream-700">{news.category}</span>
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium text-white bg-red-500">高影响</span>
+            <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium text-white', impactLevelMap[news.impactLevel === '高' ? '高影响' : news.impactLevel === '低' ? '低影响' : '中影响'])}>{news.impactLevel === '高' ? '高影响' : news.impactLevel === '低' ? '低影响' : '中影响'}</span>
             <span className="ml-auto text-xs text-cream-500">{news.publishedAt}</span>
           </div>
           <h2 className="text-xl font-bold text-cream-900 mb-2 font-display">{news.title}</h2>
@@ -477,6 +615,18 @@ function NewsDetailModal({ news, onClose }: { news: NewsItem; onClose: () => voi
             <span>· {news.publishedAt}</span>
           </div>
           <p className="text-sm text-cream-700 leading-relaxed mb-5">{news.summary}</p>
+          {news.sourceUrl && (
+            <a
+              href={news.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 mb-5 w-fit"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>查看原文：{news.source}</span>
+            </a>
+          )}
           <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-3">
             <div className="flex items-center gap-2 mb-2">
               <Sparkles className="w-4 h-4 text-indigo-600" />
@@ -501,9 +651,114 @@ function NewsDetailModal({ news, onClose }: { news: NewsItem; onClose: () => voi
   );
 }
 
-function MaterialDetailModal({ material, onClose }: { material: MaterialItem; onClose: () => void }) {
+function MaterialDetailModal({ material, onClose }: { material: StoreMaterialItem; onClose: () => void }) {
   const isUp = material.change > 0;
-  const pathData = 'M 0 80 Q 50 60, 100 70 T 200 65 T 300 75 T 400 60 T 500 70';
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  // 根据材料价格和涨跌幅生成近30天价格走势数据
+  const generatePriceHistory = (): number[] => {
+    const current = material.price;
+    const totalChange = material.changeAmount;
+    // 30天前价格 = 当前价格 - 变化量
+    const startPrice = current - totalChange;
+    const points: number[] = [];
+    for (let i = 0; i < 30; i++) {
+      const progress = i / 29;
+      // 线性插值基准价格
+      const base = startPrice + (current - startPrice) * progress;
+      // 加入随机波动（幅度与材料价格成正比）
+      const volatility = current * 0.02;
+      const noise = (Math.sin(i * 1.7 + material.name.charCodeAt(0)) + Math.cos(i * 2.3)) * volatility * 0.5;
+      points.push(Math.round((base + noise) * 100) / 100);
+    }
+    // 最后一个点设为当前价格
+    points[29] = current;
+    return points;
+  };
+
+  // 生成对应的日期（最近30天）
+  const generateDates = (): string[] => {
+    const dates: string[] = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      dates.push(`${d.getMonth() + 1}/${d.getDate()}`);
+    }
+    return dates;
+  };
+
+  // 生成完整的日期时间字符串（最近30天，每天一个时间点）
+  const generateFullDateTimes = (): string[] => {
+    const dates: string[] = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      // 为每天生成一个收盘时间点（如 15:00）
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      dates.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} 15:00`);
+    }
+    return dates;
+  };
+
+  const priceHistory = generatePriceHistory();
+  const dateLabels = generateDates();
+  const fullDateTimes = generateFullDateTimes();
+  const maxPrice = Math.max(...priceHistory);
+  const minPrice = Math.min(...priceHistory);
+  const priceRange = maxPrice - minPrice || 1;
+
+  // 将价格数据转为 SVG 路径
+  const buildPath = (): string => {
+    const width = 500;
+    const height = 100;
+    const padding = 10;
+    const stepX = width / (priceHistory.length - 1);
+    const points = priceHistory.map((p, i) => {
+      const x = i * stepX;
+      const y = height - padding - ((p - minPrice) / priceRange) * (height - padding * 2);
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    });
+    return points.join(' ');
+  };
+
+  const pathData = buildPath();
+  const fillColor = isUp ? '#E15D5D' : '#10B981';
+
+  // 计算某个点在图表中的百分比位置
+  const getPointPercent = (i: number) => {
+    const xPercent = (i / (priceHistory.length - 1)) * 100;
+    const yPercent = 100 - (10 + ((priceHistory[i] - minPrice) / priceRange) * 80);
+    return { xPercent, yPercent };
+  };
+
+  // 鼠标移动时计算最近的点
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = chartRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = e.clientX - rect.left;
+    const ratio = x / rect.width;
+    const idx = Math.round(ratio * (priceHistory.length - 1));
+    setHoveredIndex(Math.max(0, Math.min(priceHistory.length - 1, idx)));
+  };
+
+  // 点击曲线时固定显示选中的价格点
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = chartRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = e.clientX - rect.left;
+    const ratio = x / rect.width;
+    const idx = Math.max(0, Math.min(priceHistory.length - 1, Math.round(ratio * (priceHistory.length - 1))));
+    // 再次点击同一位置则取消固定
+    setSelectedIndex((prev) => (prev === idx ? null : idx));
+  };
+
+  // 当前显示的索引：优先使用悬停索引，其次使用选中索引
+  const activeIndex = hoveredIndex !== null ? hoveredIndex : selectedIndex;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-coffee-900/40 backdrop-blur-sm animate-fade-in" onClick={onClose}>
       <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-card" onClick={(e) => e.stopPropagation()}>
@@ -524,23 +779,105 @@ function MaterialDetailModal({ material, onClose }: { material: MaterialItem; on
             <p className="text-sm text-coffee-700 leading-relaxed">{material.description}</p>
             <p className="text-xs text-coffee-400 mt-2">使用频率: {material.frequency}次</p>
           </div>
-          <div className="bg-gradient-to-br from-red-50 to-amber-50 rounded-2xl p-4">
-            <h3 className="text-sm font-semibold text-coffee-700 mb-3">近30天价格走势</h3>
-            <div className="relative h-32">
+          <div className={cn('bg-gradient-to-br rounded-2xl p-4', isUp ? 'from-red-50 to-amber-50' : 'from-emerald-50 to-teal-50')}>
+            <h3 className="text-sm font-semibold text-coffee-700 mb-3">近30天价格走势 <span className="text-xs font-normal text-coffee-400 ml-1">（点击曲线查看价格与时间，再次点击取消）</span></h3>
+            <div
+              ref={chartRef}
+              className="relative h-40 cursor-crosshair"
+              onMouseMove={handleMouseMove}
+              onMouseLeave={() => setHoveredIndex(null)}
+              onClick={handleClick}
+            >
               <svg viewBox="0 0 500 100" className="w-full h-full" preserveAspectRatio="none">
                 <defs>
-                  <linearGradient id="lineGradient" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#E15D5D" stopOpacity="0.4" />
-                    <stop offset="100%" stopColor="#E15D5D" stopOpacity="0" />
+                  <linearGradient id={`lineGradient-${material.id}`} x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor={fillColor} stopOpacity="0.4" />
+                    <stop offset="100%" stopColor={fillColor} stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                <path d={`${pathData} L 500 100 L 0 100 Z`} fill="url(#lineGradient)" />
-                <path d={pathData} stroke="#E15D5D" strokeWidth="2" fill="none" />
+                <path d={`${pathData} L 500 100 L 0 100 Z`} fill={`url(#lineGradient-${material.id})`} />
+                <path d={pathData} stroke={fillColor} strokeWidth="2" fill="none" />
               </svg>
+              {/* 竖线和圆点指示器：悬停或选中时显示 */}
+              {activeIndex !== null && (() => {
+                const { xPercent, yPercent } = getPointPercent(activeIndex);
+                const isSelected = selectedIndex === activeIndex;
+                return (
+                  <>
+                    <div
+                      className="absolute top-0 bottom-0 w-px pointer-events-none"
+                      style={{ left: `${xPercent}%`, backgroundColor: isSelected ? fillColor : '#D6C3B5' }}
+                    />
+                    <div
+                      className={cn('absolute rounded-full border-2 border-white shadow-md pointer-events-none', isSelected ? 'w-4 h-4' : 'w-3 h-3')}
+                      style={{
+                        left: `calc(${xPercent}% - ${isSelected ? 8 : 6}px)`,
+                        top: `calc(${yPercent}% - ${isSelected ? 8 : 6}px)`,
+                        backgroundColor: fillColor,
+                      }}
+                    />
+                  </>
+                );
+              })()}
+              {/* Y轴标签 */}
               <div className="absolute inset-y-0 right-0 flex flex-col justify-between text-[10px] text-coffee-400 py-1">
-                {[100, 80, 60, 40, 20].map((v) => <span key={v}>{Math.round(v * material.price / 100)}元/kg</span>)}
+                <span>{Math.round(maxPrice)}{material.unit}</span>
+                <span>{Math.round((maxPrice + minPrice) / 2)}{material.unit}</span>
+                <span>{Math.round(minPrice)}{material.unit}</span>
               </div>
+              {/* 价格提示框：悬停或选中时显示 */}
+              {activeIndex !== null && (() => {
+                const { xPercent } = getPointPercent(activeIndex);
+                const price = priceHistory[activeIndex];
+                const date = dateLabels[activeIndex];
+                const fullDateTime = fullDateTimes[activeIndex];
+                const isSelected = selectedIndex === activeIndex;
+                const tooltipWidth = isSelected ? 150 : 110;
+                const tooltipLeft = xPercent > 70 ? `calc(${xPercent}% - ${tooltipWidth + 8}px)` : `calc(${xPercent}% + 8px)`;
+                return (
+                  <div
+                    className={cn(
+                      'absolute bg-white rounded-lg shadow-lg px-3 py-1.5 text-xs pointer-events-none border z-10',
+                      isSelected ? 'border-coffee-400' : 'border-coffee-100'
+                    )}
+                    style={{ left: tooltipLeft, top: 4, minWidth: tooltipWidth }}
+                  >
+                    <div className="font-semibold text-coffee-900">{price}{material.unit}</div>
+                    {isSelected ? (
+                      <div className="text-coffee-500 mt-0.5">{fullDateTime}</div>
+                    ) : (
+                      <div className="text-coffee-500">{date}</div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
+            <div className="flex items-center justify-between mt-2 text-xs text-coffee-500">
+              <span>30天前：{(material.price - material.changeAmount).toFixed(2)}{material.unit}</span>
+              <span>当前：{material.price}{material.unit}</span>
+            </div>
+            {/* 选中点的详细信息卡片 */}
+            {selectedIndex !== null && (() => {
+              const price = priceHistory[selectedIndex];
+              const fullDateTime = fullDateTimes[selectedIndex];
+              const prevPrice = selectedIndex > 0 ? priceHistory[selectedIndex - 1] : price;
+              const diff = price - prevPrice;
+              const diffPercent = prevPrice !== 0 ? (diff / prevPrice) * 100 : 0;
+              return (
+                <div className="mt-3 bg-white/80 backdrop-blur rounded-xl p-3 border border-coffee-200 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-coffee-500 mb-0.5">已选时间点</div>
+                    <div className="text-sm font-medium text-coffee-700">{fullDateTime}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-coffee-900">{price}{material.unit}</div>
+                    <div className={cn('text-xs font-medium', diff >= 0 ? 'text-red-500' : 'text-emerald-500')}>
+                      {diff >= 0 ? '+' : ''}{diff.toFixed(2)} ({diff >= 0 ? '+' : ''}{diffPercent.toFixed(2)}%)
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           <div className="flex items-center justify-end mt-5">
             <button onClick={onClose} className="px-5 py-2 bg-cream-700 text-white rounded-xl text-sm font-medium hover:bg-cream-800">关闭</button>
@@ -681,6 +1018,19 @@ function PolicyDetailModal({ policy, onClose }: { policy: PolicyItem; onClose: (
               ))}
             </div>
           </div>
+
+          {policy.sourceUrl && (
+            <a
+              href={policy.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 mb-4 w-fit"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>查看原文：{policy.department}</span>
+            </a>
+          )}
 
           <div className="flex items-center justify-end">
             <button onClick={onClose} className="px-5 py-2 bg-cream-700 text-white rounded-xl text-sm font-medium hover:bg-cream-800">关闭</button>
@@ -852,6 +1202,100 @@ function ExhibitionDetailModal({ exhibition, onClose }: { exhibition: Exhibition
           <div className="flex items-center justify-end">
             <button onClick={onClose} className="px-5 py-2 bg-cream-700 text-white rounded-xl text-sm font-medium hover:bg-cream-800">关闭</button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompetitorDetailModal({ competitor, onClose }: { competitor: CompetitorItem; onClose: () => void }) {
+  const impactLabel = competitor.impactLevel === '高' ? '高影响' : competitor.impactLevel === '低' ? '低影响' : '中影响';
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-coffee-900/40 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+      <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-cream-50 rounded-2xl shadow-card animate-slide-up" onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-cream-100 hover:bg-cream-200 flex items-center justify-center transition-colors">
+          <X className="w-4 h-4 text-cream-700" />
+        </button>
+
+        <div className="bg-gradient-to-br from-rose-50 via-cream-50 to-white px-6 pt-6 pb-4 rounded-t-2xl">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <span className="px-2.5 py-1 rounded text-xs font-semibold bg-rose-100 text-rose-700">
+              {competitor.competitor}
+              {competitor.competitorCode && <span className="ml-1 text-rose-500 font-normal">{competitor.competitorCode}</span>}
+            </span>
+            <span className={cn('px-2.5 py-1 rounded-full text-xs font-medium border', sourceTypeColor[competitor.sourceType])}>
+              {competitor.sourceType}
+            </span>
+            <span className={cn('px-2.5 py-1 rounded text-xs font-medium', compCategoryColor[competitor.category])}>
+              {competitor.category}
+            </span>
+            <span className={cn('px-2.5 py-1 rounded-full text-xs font-medium text-white', impactLevelMap[impactLabel])}>{impactLabel}</span>
+            <span className="ml-auto text-xs text-cream-500">{competitor.publishedAt}</span>
+          </div>
+          <h2 className="text-xl font-bold text-cream-900 leading-tight pr-8">{competitor.title}</h2>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-cream-100">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="w-4 h-4 text-cream-600" />
+              <h3 className="text-sm font-semibold text-cream-800">信息摘要</h3>
+            </div>
+            <p className="text-sm text-cream-800 leading-relaxed whitespace-pre-wrap">{competitor.summary}</p>
+          </div>
+
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-cream-100">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="w-4 h-4 text-cream-600" />
+              <h3 className="text-sm font-semibold text-cream-800">关键词标签</h3>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {competitor.keywords.map((k) => (
+                <span key={k} className="px-2 py-0.5 rounded-full text-xs bg-cream-100 text-cream-700 border border-cream-300">{k}</span>
+              ))}
+            </div>
+          </div>
+
+          {competitor.relatedCustomers && competitor.relatedCustomers.length > 0 && (
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-cream-100">
+              <div className="flex items-center gap-2 mb-2">
+                <Users className="w-4 h-4 text-cream-600" />
+                <h3 className="text-sm font-semibold text-cream-800">涉及的共同客户</h3>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {competitor.relatedCustomers.map((c) => (
+                  <span key={c} className="px-2.5 py-1 rounded text-xs bg-blue-50 text-blue-700 border border-blue-100">{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {competitor.parkerInsight && (
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <AlertTriangle className="w-4 h-4 text-amber-700" />
+                </div>
+                <h3 className="text-sm font-bold text-amber-900">派克新材应对建议</h3>
+              </div>
+              <p className="text-sm text-amber-900 leading-relaxed whitespace-pre-wrap">{competitor.parkerInsight}</p>
+            </div>
+          )}
+
+          {competitor.sourceUrl && (
+            <div className="pt-2 border-t border-cream-200">
+              <a
+                href={competitor.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-rose-700 hover:text-rose-800 font-medium"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>查看原文：{competitor.sourceType}</span>
+              </a>
+            </div>
+          )}
         </div>
       </div>
     </div>
