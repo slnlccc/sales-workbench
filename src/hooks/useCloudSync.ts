@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { syncApi } from '@/services/api'
+import { useAuth } from '@/context/AuthContext'
 
 interface SyncStatus {
   configured: boolean
@@ -19,16 +20,26 @@ interface SyncResult {
 
 const SYNC_INTERVAL = 5 * 60 * 1000 // 5分钟自动同步
 
+const getAutoSyncKey = (userId: string | null | undefined) => {
+  const ns = userId ? `u_${userId}` : 'guest'
+  return `sw_${ns}_auto_sync`
+}
+
 export function useCloudSync() {
+  const { user } = useAuth()
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [autoSync, setAutoSync] = useState(() => {
-    return localStorage.getItem('sw_auto_sync') === 'true'
+    return localStorage.getItem(getAutoSyncKey(user?._id)) === 'true'
   })
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // 获取同步状态
+  // 当切换用户时重新读取该用户的自动同步开关偏好
+  useEffect(() => {
+    setAutoSync(localStorage.getItem(getAutoSyncKey(user?._id)) === 'true')
+  }, [user?._id])
+
   const refreshStatus = useCallback(async () => {
     try {
       const res = await syncApi.status()
@@ -39,7 +50,6 @@ export function useCloudSync() {
     }
   }, [])
 
-  // 上传数据到云端
   const upload = useCallback(async (): Promise<SyncResult> => {
     setSyncing(true)
     setError(null)
@@ -56,7 +66,6 @@ export function useCloudSync() {
     }
   }, [refreshStatus])
 
-  // 从云端拉取数据
   const pull = useCallback(async (): Promise<SyncResult> => {
     setSyncing(true)
     setError(null)
@@ -77,14 +86,13 @@ export function useCloudSync() {
     }
   }, [refreshStatus])
 
-  // 切换自动同步
   const toggleAutoSync = useCallback(() => {
+    const key = getAutoSyncKey(user?._id)
     const newValue = !autoSync
     setAutoSync(newValue)
-    localStorage.setItem('sw_auto_sync', String(newValue))
-  }, [autoSync])
+    localStorage.setItem(key, String(newValue))
+  }, [autoSync, user?._id])
 
-  // 自动同步定时器
   useEffect(() => {
     if (autoSync && status?.configured) {
       timerRef.current = setInterval(() => {
@@ -100,7 +108,6 @@ export function useCloudSync() {
     }
   }, [autoSync, status?.configured, upload])
 
-  // 初始化获取状态
   useEffect(() => {
     refreshStatus()
   }, [refreshStatus])

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { useWorkbenchStore } from '@/store/useWorkbenchStore'
 
 interface User {
   _id: string
@@ -34,7 +35,6 @@ const getLocalUsers = (): LocalUser[] => {
   try {
     const raw = localStorage.getItem(LOCAL_USERS_KEY)
     if (!raw) {
-      // 初始化默认 admin 账号
       const defaultUsers: LocalUser[] = [
         {
           _id: 'local-admin',
@@ -63,7 +63,6 @@ const generateLocalToken = (userId: string): string => {
   return btoa(`local.${userId}.${Date.now()}`)
 }
 
-// 本地登录验证
 const localLogin = (username: string, password: string): User => {
   const users = getLocalUsers()
   const found = users.find(u => u.username === username && u.password === password)
@@ -78,7 +77,6 @@ const localLogin = (username: string, password: string): User => {
   }
 }
 
-// 本地注册
 const localRegister = (username: string, email: string, password: string, name?: string): User => {
   const users = getLocalUsers()
   if (users.find(u => u.username === username)) {
@@ -103,7 +101,6 @@ const localRegister = (username: string, email: string, password: string, name?:
   }
 }
 
-// 尝试后端登录，失败则使用本地登录
 const tryBackendLogin = async (username: string, password: string): Promise<{ user: User; token: string } | null> => {
   try {
     const response = await fetch('/api/users/login', {
@@ -152,15 +149,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const storedToken = localStorage.getItem(LOCAL_TOKEN_KEY)
       const storedUser = localStorage.getItem('sw_current_user')
       if (storedToken && storedUser) {
-        // 优先使用本地存储的用户信息，无需请求后端
         try {
-          setUser(JSON.parse(storedUser))
+          const parsed = JSON.parse(storedUser)
+          setUser(parsed)
           setToken(storedToken)
+          // 模块初始化时 bootUserId 已读取过，这里主动再调一次确保命名空间完全切换
+          useWorkbenchStore.getState().setActiveUser(parsed._id)
         } catch {
           localStorage.removeItem(LOCAL_TOKEN_KEY)
           localStorage.removeItem('sw_current_user')
           setToken(null)
+          useWorkbenchStore.getState().setActiveUser(null)
         }
+      } else {
+        useWorkbenchStore.getState().setActiveUser(null)
       }
       setLoading(false)
     }
@@ -170,17 +172,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (username: string, password: string) => {
     setLoading(true)
     try {
-      // 优先尝试后端登录（获取真实 JWT）
       const backendResult = await tryBackendLogin(username, password)
       let loggedInUser: User
       let newToken: string
 
       if (backendResult) {
-        // 后端登录成功，使用真实 JWT
         loggedInUser = backendResult.user
         newToken = backendResult.token
       } else {
-        // 后端不可用，降级到本地登录
         loggedInUser = localLogin(username, password)
         newToken = generateLocalToken(loggedInUser._id)
       }
@@ -189,6 +188,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.setItem('sw_current_user', JSON.stringify(loggedInUser))
       setUser(loggedInUser)
       setToken(newToken)
+      useWorkbenchStore.getState().setActiveUser(loggedInUser._id)
     } finally {
       setLoading(false)
     }
@@ -197,7 +197,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const register = async (username: string, email: string, password: string, name?: string) => {
     setLoading(true)
     try {
-      // 优先尝试后端注册（获取真实 JWT）
       const backendResult = await tryBackendRegister(username, email, password, name)
       let registeredUser: User
       let newToken: string
@@ -214,6 +213,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.setItem('sw_current_user', JSON.stringify(registeredUser))
       setUser(registeredUser)
       setToken(newToken)
+      useWorkbenchStore.getState().setActiveUser(registeredUser._id)
     } finally {
       setLoading(false)
     }
@@ -224,6 +224,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.removeItem('sw_current_user')
     setUser(null)
     setToken(null)
+    useWorkbenchStore.getState().setActiveUser(null)
   }
 
   return (

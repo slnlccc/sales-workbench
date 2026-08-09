@@ -2,27 +2,29 @@ import { create } from 'zustand';
 import type { WorkbenchRecord, RecordType, TabKey, MemoKnowledge } from '@/types';
 import { mockRecords, mockUser } from '@/data/mock';
 
-// localStorage 持久化辅助
-const STORAGE_KEY = 'sw_workbench_data';
+const getStorageKey = (userId: string | null | undefined) => {
+  const ns = userId ? `u_${userId}` : 'guest';
+  return `sw_${ns}_workbench_data_v2`;
+};
 
-const loadFromStorage = (): Partial<WorkbenchState> => {
+const loadFromStorage = (userId: string | null | undefined): Partial<WorkbenchState> => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(getStorageKey(userId));
     if (!raw) return {};
     const data = JSON.parse(raw);
     return {
-      records: data.records || mockRecords,
-      memos: data.memos || [],
-      memoKnowledge: data.memoKnowledge || [],
+      records: data.records,
+      memos: data.memos,
+      memoKnowledge: data.memoKnowledge,
     };
   } catch {
     return {};
   }
 };
 
-const saveToStorage = (state: WorkbenchState) => {
+const saveToStorage = (userId: string | null | undefined, state: WorkbenchState) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    localStorage.setItem(getStorageKey(userId), JSON.stringify({
       records: state.records,
       memos: state.memos,
       memoKnowledge: state.memoKnowledge,
@@ -32,7 +34,42 @@ const saveToStorage = (state: WorkbenchState) => {
   }
 };
 
+const defaultMemos = (): WorkbenchRecord[] => [
+  {
+    id: 'memo-001',
+    type: 'memo',
+    content: '今天拜访中国航发时，张总特别提到要关注航空发动机小型化趋势，这可能是接下来的市场机会。',
+    createdAt: '2026-07-08T10:00:00Z',
+    closed: false,
+  },
+  {
+    id: 'memo-002',
+    type: 'memo',
+    content: '客户反馈 GH4169 锻件的热处理工艺还有优化空间，可以和研究院讨论一下工艺改进方案。',
+    createdAt: '2026-07-07T15:30:00Z',
+    closed: true,
+  },
+];
+
+const defaultMemoKnowledge = (): MemoKnowledge[] => [
+  {
+    id: 'kb-init-001',
+    title: '航空发动机小型化趋势',
+    summary: '中国航发张总提到航空发动机小型化是接下来的市场机会，需要重点关注相关产品研发与客户需求匹配。',
+    source: '备忘录',
+    createdAt: '2026-07-08T10:05:00Z',
+  },
+  {
+    id: 'kb-init-002',
+    title: 'GH4169 锻件热处理工艺优化',
+    summary: '客户反馈 GH4169 锻件热处理工艺有优化空间，建议与研究院共同讨论工艺改进方案以提升产品竞争力。',
+    source: '备忘录',
+    createdAt: '2026-07-07T15:35:00Z',
+  },
+];
+
 interface WorkbenchState {
+  activeUserId: string | null;
   records: WorkbenchRecord[];
   memos: WorkbenchRecord[];
   memoKnowledge: MemoKnowledge[];
@@ -43,6 +80,8 @@ interface WorkbenchState {
   setActiveTab: (tab: TabKey) => void;
   setInputText: (text: string) => void;
   setIsRecording: (recording: boolean) => void;
+  // 切换当前用户（登录/登出时调用），立即按新用户命名空间重新加载数据
+  setActiveUser: (userId: string | null) => void;
   addRecord: (content: string, type?: RecordType, customer?: string) => void;
   addMemo: (content: string) => void;
   toggleMemoClosed: (id: string) => void;
@@ -60,7 +99,7 @@ interface WorkbenchState {
   updateRecord: (id: string, updates: Partial<WorkbenchRecord>) => void;
   updateMemo: (id: string, updates: Partial<WorkbenchRecord>) => void;
   clearInput: () => void;
-  // 云同步：导出/导入前端数据
+  // 云同步：导出/导入前端数据（按当前激活的用户命名空间）
   exportLocalData: () => { records: WorkbenchRecord[]; memos: WorkbenchRecord[]; memoKnowledge: MemoKnowledge[] };
   importLocalData: (data: { records: WorkbenchRecord[]; memos: WorkbenchRecord[]; memoKnowledge: MemoKnowledge[] }) => void;
 }
@@ -84,30 +123,16 @@ const parseTimeKeyword = (text: string): Date => {
   let hasDate = false;
   let hasTime = false;
 
-  // 日期解析
-  if (text.includes('后天')) {
-    result.setDate(result.getDate() + 2);
-    hasDate = true;
-  } else if (text.includes('大后天')) {
-    result.setDate(result.getDate() + 3);
-    hasDate = true;
-  } else if (text.includes('下周')) {
-    result.setDate(result.getDate() + 7);
-    hasDate = true;
-  } else if (text.includes('明天')) {
-    result.setDate(result.getDate() + 1);
-    hasDate = true;
-  } else if (text.includes('今天')) {
-    hasDate = true;
-  }
+  if (text.includes('后天')) { result.setDate(result.getDate() + 2); hasDate = true; }
+  else if (text.includes('大后天')) { result.setDate(result.getDate() + 3); hasDate = true; }
+  else if (text.includes('下周')) { result.setDate(result.getDate() + 7); hasDate = true; }
+  else if (text.includes('明天')) { result.setDate(result.getDate() + 1); hasDate = true; }
+  else if (text.includes('今天')) { hasDate = true; }
 
-  // 周几：周三、星期五
   const weekDayMatch = text.match(/周([一二三四五六日天])|星期([一二三四五六日天])/);
   if (weekDayMatch) {
     const dayChar = weekDayMatch[1] || weekDayMatch[2];
-    const dayMap: Record<string, number> = {
-      '日': 0, '天': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6,
-    };
+    const dayMap: Record<string, number> = { '日': 0, '天': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6 };
     const targetDay = dayMap[dayChar];
     if (targetDay !== undefined) {
       const currentDay = result.getDay();
@@ -118,17 +143,12 @@ const parseTimeKeyword = (text: string): Date => {
     }
   }
 
-  // 几号 / 几日
   const dayMatch = text.match(/(\d{1,2})[日号]/);
   if (dayMatch) {
     const day = parseInt(dayMatch[1], 10);
-    if (day >= 1 && day <= 31) {
-      result.setDate(day);
-      hasDate = true;
-    }
+    if (day >= 1 && day <= 31) { result.setDate(day); hasDate = true; }
   }
 
-  // 时间解析
   const timeMatch = text.match(/(\d{1,2})[点时:：](\d{1,2})?/);
   if (timeMatch) {
     let hour = parseInt(timeMatch[1], 10);
@@ -156,12 +176,9 @@ const parseTimeKeyword = (text: string): Date => {
   return result;
 };
 
-// 从备忘录内容生成知识库条目
 const generateKnowledgeFromMemo = (content: string): MemoKnowledge => {
   const title = content.length > 18 ? content.slice(0, 18) + '…' : content;
-  const summary = content.length > 60
-    ? content.slice(0, 60) + '…'
-    : content;
+  const summary = content.length > 60 ? content.slice(0, 60) + '…' : content;
   return {
     id: `kb-${Date.now()}`,
     title,
@@ -172,248 +189,234 @@ const generateKnowledgeFromMemo = (content: string): MemoKnowledge => {
 };
 
 export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
-  const persisted = loadFromStorage();
+  // 模块初始化时：先尝试从 'sw_current_user' 取 userId（AuthContext 尚未挂载时也能用已有命名空间）
+  const bootUserId = (() => {
+    try {
+      const raw = localStorage.getItem('sw_current_user');
+      if (raw) return JSON.parse(raw)._id as string;
+    } catch { /* ignore */ }
+    return null;
+  })();
+  const initialPersist = loadFromStorage(bootUserId);
 
   const persistSet = (updater: (state: WorkbenchState) => Partial<WorkbenchState>) => {
     set(updater);
-    saveToStorage(get());
+    const state = get();
+    saveToStorage(state.activeUserId, state);
   };
 
   return {
-  records: persisted.records || mockRecords,
-  memos: persisted.memos || [
-    {
-      id: 'memo-001',
-      type: 'memo',
-      content: '今天拜访中国航发时，张总特别提到要关注航空发动机小型化趋势，这可能是接下来的市场机会。',
-      createdAt: '2026-07-08T10:00:00Z',
-      closed: false,
+    activeUserId: bootUserId,
+    records: initialPersist.records ?? mockRecords,
+    memos: initialPersist.memos ?? defaultMemos(),
+    memoKnowledge: initialPersist.memoKnowledge ?? defaultMemoKnowledge(),
+    user: mockUser,
+    activeTab: 'voice',
+    inputText: '',
+    isRecording: false,
+
+    setActiveTab: (tab) => set({ activeTab: tab }),
+    setInputText: (text) => set({ inputText: text }),
+    setIsRecording: (recording) => set({ isRecording: recording }),
+
+    setActiveUser: (userId) => {
+      const state0 = get();
+      // 切用户前先把当前用户的 state 再 flush 一次，防止漏保存
+      saveToStorage(state0.activeUserId, state0);
+      const persisted = loadFromStorage(userId);
+      set({
+        activeUserId: userId,
+        records: persisted.records ?? mockRecords,
+        memos: persisted.memos ?? defaultMemos(),
+        memoKnowledge: persisted.memoKnowledge ?? defaultMemoKnowledge(),
+      });
+      // 写入对应命名空间，防止反复切换又初始化演示数据
+      saveToStorage(userId, get());
     },
-    {
-      id: 'memo-002',
-      type: 'memo',
-      content: '客户反馈 GH4169 锻件的热处理工艺还有优化空间，可以和研究院讨论一下工艺改进方案。',
-      createdAt: '2026-07-07T15:30:00Z',
-      closed: true,
+
+    addRecord: (content, type, customer) => {
+      const recordType = type || detectType(content);
+      const newRecord: WorkbenchRecord = {
+        id: `rec-${Date.now()}`,
+        type: recordType,
+        content,
+        customer,
+        createdAt: new Date().toISOString(),
+        source: 'manual',
+      };
+      if (recordType === 'schedule') {
+        newRecord.reminderAt = parseTimeKeyword(content).toISOString();
+      }
+      persistSet((state) => ({ records: [newRecord, ...state.records] }));
     },
-  ],
-  memoKnowledge: persisted.memoKnowledge || [
-    {
-      id: 'kb-init-001',
-      title: '航空发动机小型化趋势',
-      summary: '中国航发张总提到航空发动机小型化是接下来的市场机会，需要重点关注相关产品研发与客户需求匹配。',
-      source: '备忘录',
-      createdAt: '2026-07-08T10:05:00Z',
+
+    addMemo: (content) => {
+      const newMemo: WorkbenchRecord = {
+        id: `memo-${Date.now()}`,
+        type: 'memo',
+        content,
+        createdAt: new Date().toISOString(),
+        closed: false,
+        source: 'manual',
+      };
+      persistSet((state) => ({ memos: [newMemo, ...state.memos] }));
     },
-    {
-      id: 'kb-init-002',
-      title: 'GH4169 锻件热处理工艺优化',
-      summary: '客户反馈 GH4169 锻件热处理工艺有优化空间，建议与研究院共同讨论工艺改进方案以提升产品竞争力。',
-      source: '备忘录',
-      createdAt: '2026-07-07T15:35:00Z',
+
+    toggleMemoClosed: (id) => {
+      persistSet((state) => ({
+        memos: state.memos.map((memo) =>
+          memo.id === id ? { ...memo, closed: !memo.closed } : memo
+        ),
+      }));
     },
-  ],
-  user: mockUser,
-  activeTab: 'voice',
-  inputText: '',
-  isRecording: false,
 
-  setActiveTab: (tab) => set({ activeTab: tab }),
-  setInputText: (text) => set({ inputText: text }),
-  setIsRecording: (recording) => set({ isRecording: recording }),
+    promoteMemoToSchedule: (id) => {
+      persistSet((state) => {
+        const memo = state.memos.find((m) => m.id === id);
+        if (!memo) return state;
+        const newRecord: WorkbenchRecord = {
+          id: `rec-${Date.now()}`,
+          type: 'schedule',
+          content: memo.content,
+          createdAt: new Date().toISOString(),
+          reminderAt: new Date(Date.now() + 86400000).toISOString(),
+          closed: false,
+          source: 'memo',
+        };
+        return {
+          records: [newRecord, ...state.records],
+          memos: state.memos.filter((m) => m.id !== id),
+        };
+      });
+    },
 
-  addRecord: (content, type, customer) => {
-    const recordType = type || detectType(content);
-    const newRecord: WorkbenchRecord = {
-      id: `rec-${Date.now()}`,
-      type: recordType,
-      content,
-      customer,
-      createdAt: new Date().toISOString(),
-      source: 'manual',
-    };
-    if (recordType === 'schedule') {
-      newRecord.reminderAt = parseTimeKeyword(content).toISOString();
-    }
-    persistSet((state) => ({ records: [newRecord, ...state.records] }));
-  },
+    toggleRecordDone: (id) => {
+      persistSet((state) => ({
+        records: state.records.map((record) =>
+          record.id === id ? { ...record, done: !record.done } : record
+        ),
+      }));
+    },
 
-  addMemo: (content) => {
-    const newMemo: WorkbenchRecord = {
-      id: `memo-${Date.now()}`,
-      type: 'memo',
-      content,
-      createdAt: new Date().toISOString(),
-      closed: false,
-      source: 'manual',
-    };
-    persistSet((state) => ({ memos: [newMemo, ...state.memos] }));
-  },
-
-  toggleMemoClosed: (id) => {
-    persistSet((state) => ({
-      memos: state.memos.map((memo) =>
-        memo.id === id ? { ...memo, closed: !memo.closed } : memo
-      ),
-    }));
-  },
-
-  promoteMemoToSchedule: (id) => {
-    persistSet((state) => {
-      const memo = state.memos.find((m) => m.id === id);
-      if (!memo) return state;
+    addScheduleFromTodo: (content, _date, customer) => {
       const newRecord: WorkbenchRecord = {
         id: `rec-${Date.now()}`,
         type: 'schedule',
-        content: memo.content,
+        content,
+        customer,
         createdAt: new Date().toISOString(),
         reminderAt: new Date(Date.now() + 86400000).toISOString(),
+        source: 'manual',
+      };
+      persistSet((state) => ({ records: [newRecord, ...state.records] }));
+    },
+
+    addManualSchedule: (content: string, dateStr: string, timeStr: string, customer?: string) => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const [hour, minute] = timeStr.split(':').map(Number);
+      const reminderAt = new Date(year, month - 1, day, hour || 9, minute || 0);
+      const newRecord: WorkbenchRecord = {
+        id: `rec-${Date.now()}`,
+        type: 'schedule',
+        content,
+        customer,
+        createdAt: new Date().toISOString(),
+        reminderAt: reminderAt.toISOString(),
+        source: 'manual',
+      };
+      persistSet((state) => ({ records: [newRecord, ...state.records] }));
+    },
+
+    addVoiceTask: (content) => {
+      const reminderAt = parseTimeKeyword(content);
+      const newRecord: WorkbenchRecord = {
+        id: `rec-${Date.now()}`,
+        type: 'schedule',
+        content,
+        createdAt: new Date().toISOString(),
+        reminderAt: reminderAt.toISOString(),
+        source: 'voice',
+      };
+      persistSet((state) => ({ records: [newRecord, ...state.records] }));
+    },
+
+    addMemoWithVoice: (content) => {
+      const newMemo: WorkbenchRecord = {
+        id: `memo-${Date.now()}`,
+        type: 'memo',
+        content,
+        createdAt: new Date().toISOString(),
         closed: false,
-        source: 'memo',
+        source: 'voice',
       };
+      const knowledge = generateKnowledgeFromMemo(content);
+      persistSet((state) => ({
+        memos: [newMemo, ...state.memos],
+        memoKnowledge: [knowledge, ...state.memoKnowledge],
+      }));
+    },
+
+    addMemoKnowledge: (knowledge) => {
+      persistSet((state) => ({ memoKnowledge: [knowledge, ...state.memoKnowledge] }));
+    },
+
+    setJoinDate: (dateStr: string) => {
+      set((state) => ({ user: { ...state.user, joinDate: dateStr } }));
+    },
+
+    closeScheduleTask: (id) => {
+      persistSet((state) => ({
+        records: state.records.map((record) =>
+          record.id === id ? { ...record, done: !record.done } : record
+        ),
+      }));
+    },
+
+    deleteRecord: (id) => {
+      persistSet((state) => ({
+        records: state.records.filter((record) => record.id !== id),
+      }));
+    },
+
+    deleteMemo: (id) => {
+      persistSet((state) => ({
+        memos: state.memos.filter((memo) => memo.id !== id),
+      }));
+    },
+
+    updateRecord: (id, updates) => {
+      persistSet((state) => ({
+        records: state.records.map((record) =>
+          record.id === id ? { ...record, ...updates } : record
+        ),
+      }));
+    },
+
+    updateMemo: (id, updates) => {
+      persistSet((state) => ({
+        memos: state.memos.map((memo) =>
+          memo.id === id ? { ...memo, ...updates } : memo
+        ),
+      }));
+    },
+
+    clearInput: () => set({ inputText: '' }),
+
+    exportLocalData: () => {
+      const state = get();
       return {
-        records: [newRecord, ...state.records],
-        memos: state.memos.filter((m) => m.id !== id),
+        records: state.records,
+        memos: state.memos,
+        memoKnowledge: state.memoKnowledge,
       };
-    });
-  },
+    },
 
-  toggleRecordDone: (id) => {
-    persistSet((state) => ({
-      records: state.records.map((record) =>
-        record.id === id ? { ...record, done: !record.done } : record
-      ),
-    }));
-  },
-
-  addScheduleFromTodo: (content, _date, customer) => {
-    const newRecord: WorkbenchRecord = {
-      id: `rec-${Date.now()}`,
-      type: 'schedule',
-      content,
-      customer,
-      createdAt: new Date().toISOString(),
-      reminderAt: new Date(Date.now() + 86400000).toISOString(),
-      source: 'manual',
-    };
-    persistSet((state) => ({ records: [newRecord, ...state.records] }));
-  },
-
-  addManualSchedule: (content: string, dateStr: string, timeStr: string, customer?: string) => {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const [hour, minute] = timeStr.split(':').map(Number);
-    const reminderAt = new Date(year, month - 1, day, hour || 9, minute || 0);
-    const newRecord: WorkbenchRecord = {
-      id: `rec-${Date.now()}`,
-      type: 'schedule',
-      content,
-      customer,
-      createdAt: new Date().toISOString(),
-      reminderAt: reminderAt.toISOString(),
-      source: 'manual',
-    };
-    persistSet((state) => ({ records: [newRecord, ...state.records] }));
-  },
-
-  // 语音任务：解析时间关键词，生成 schedule 类型记录并附带 reminderAt
-  addVoiceTask: (content) => {
-    const reminderAt = parseTimeKeyword(content);
-    const newRecord: WorkbenchRecord = {
-      id: `rec-${Date.now()}`,
-      type: 'schedule',
-      content,
-      createdAt: new Date().toISOString(),
-      reminderAt: reminderAt.toISOString(),
-      source: 'voice',
-    };
-    persistSet((state) => ({ records: [newRecord, ...state.records] }));
-  },
-
-  // 备忘录语音输入：写入备忘，同时沉淀知识库条目
-  addMemoWithVoice: (content) => {
-    const newMemo: WorkbenchRecord = {
-      id: `memo-${Date.now()}`,
-      type: 'memo',
-      content,
-      createdAt: new Date().toISOString(),
-      closed: false,
-      source: 'voice',
-    };
-    const knowledge = generateKnowledgeFromMemo(content);
-    persistSet((state) => ({
-      memos: [newMemo, ...state.memos],
-      memoKnowledge: [knowledge, ...state.memoKnowledge],
-    }));
-  },
-
-  addMemoKnowledge: (knowledge) => {
-    persistSet((state) => ({ memoKnowledge: [knowledge, ...state.memoKnowledge] }));
-  },
-
-  setJoinDate: (dateStr: string) => {
-    set((state) => ({ user: { ...state.user, joinDate: dateStr } }));
-  },
-
-  // 日历事项闭环：toggle 切换完成状态
-  closeScheduleTask: (id) => {
-    persistSet((state) => ({
-      records: state.records.map((record) =>
-        record.id === id ? { ...record, done: !record.done } : record
-      ),
-    }));
-  },
-
-  // 删除记录（日程/工作记录）
-  deleteRecord: (id) => {
-    persistSet((state) => ({
-      records: state.records.filter((record) => record.id !== id),
-    }));
-  },
-
-  // 删除备忘录
-  deleteMemo: (id) => {
-    persistSet((state) => ({
-      memos: state.memos.filter((memo) => memo.id !== id),
-    }));
-  },
-
-  // 更新记录（日程/工作记录）
-  updateRecord: (id, updates) => {
-    persistSet((state) => ({
-      records: state.records.map((record) =>
-        record.id === id ? { ...record, ...updates } : record
-      ),
-    }));
-  },
-
-  // 更新备忘录
-  updateMemo: (id, updates) => {
-    persistSet((state) => ({
-      memos: state.memos.map((memo) =>
-        memo.id === id ? { ...memo, ...updates } : memo
-      ),
-    }));
-  },
-
-  clearInput: () => set({ inputText: '' }),
-
-  // 云同步：导出前端数据
-  exportLocalData: () => {
-    const state = get();
-    return {
-      records: state.records,
-      memos: state.memos,
-      memoKnowledge: state.memoKnowledge,
-    };
-  },
-
-  // 云同步：导入数据到前端
-  importLocalData: (data) => {
-    persistSet(() => ({
-      records: data.records || [],
-      memos: data.memos || [],
-      memoKnowledge: data.memoKnowledge || [],
-    }));
-  },
+    importLocalData: (data) => {
+      persistSet(() => ({
+        records: data.records || [],
+        memos: data.memos || [],
+        memoKnowledge: data.memoKnowledge || [],
+      }));
+    },
   };
 });

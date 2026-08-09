@@ -4,7 +4,7 @@ const Contract = require('../models/Contract')
 exports.getProjects = async (req, res) => {
   try {
     let query = Project.find({ userId: req.user._id })
-    
+
     if (req.query.search) {
       const search = req.query.search
       query = query.find({
@@ -38,7 +38,7 @@ exports.getProjects = async (req, res) => {
 
 exports.getProject = async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id)
+    const project = await Project.findOne({ _id: req.params.id, userId: req.user._id })
     if (!project) return res.status(404).json({ message: '项目不存在' })
     res.json(project)
   } catch (err) {
@@ -52,7 +52,7 @@ exports.createProject = async (req, res) => {
     const saved = await project.save()
 
     if (project.hasContract && project.clientContractNo !== '—') {
-      const contract = await Contract.findOne({ clientContractNo: project.clientContractNo })
+      const contract = await Contract.findOne({ clientContractNo: project.clientContractNo, userId: req.user._id })
       if (contract) {
         contract.linkedProjects += 1
         contract.totalAmount += project.totalPrice
@@ -68,7 +68,7 @@ exports.createProject = async (req, res) => {
 
 exports.updateProject = async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id)
+    const project = await Project.findOne({ _id: req.params.id, userId: req.user._id })
     if (!project) return res.status(404).json({ message: '项目不存在' })
 
     const oldContractNo = project.clientContractNo
@@ -79,7 +79,7 @@ exports.updateProject = async (req, res) => {
     const updated = await project.save()
 
     if (oldContractNo !== '—') {
-      const oldContract = await Contract.findOne({ clientContractNo: oldContractNo })
+      const oldContract = await Contract.findOne({ clientContractNo: oldContractNo, userId: req.user._id })
       if (oldContract) {
         oldContract.linkedProjects = Math.max(0, oldContract.linkedProjects - 1)
         oldContract.totalAmount = Math.max(0, oldContract.totalAmount - oldPrice)
@@ -88,7 +88,7 @@ exports.updateProject = async (req, res) => {
     }
 
     if (project.hasContract && project.clientContractNo !== '—') {
-      let contract = await Contract.findOne({ clientContractNo: project.clientContractNo })
+      let contract = await Contract.findOne({ clientContractNo: project.clientContractNo, userId: req.user._id })
       if (!contract) {
         contract = new Contract({
           clientContractNo: project.clientContractNo,
@@ -111,11 +111,11 @@ exports.updateProject = async (req, res) => {
 
 exports.deleteProject = async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id)
+    const project = await Project.findOne({ _id: req.params.id, userId: req.user._id })
     if (!project) return res.status(404).json({ message: '项目不存在' })
 
     if (project.hasContract && project.clientContractNo !== '—') {
-      const contract = await Contract.findOne({ clientContractNo: project.clientContractNo })
+      const contract = await Contract.findOne({ clientContractNo: project.clientContractNo, userId: req.user._id })
       if (contract) {
         contract.linkedProjects = Math.max(0, contract.linkedProjects - 1)
         contract.totalAmount = Math.max(0, contract.totalAmount - project.totalPrice)
@@ -123,7 +123,7 @@ exports.deleteProject = async (req, res) => {
       }
     }
 
-    await project.remove()
+    await project.deleteOne()
     res.json({ message: '项目已删除' })
   } catch (err) {
     res.status(500).json({ message: err.message })

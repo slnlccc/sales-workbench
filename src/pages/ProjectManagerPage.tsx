@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Kanban,
   Search,
@@ -18,6 +18,8 @@ import {
 import { cn } from '@/lib/utils';
 import { mockProjects as initialProjects, mockContracts as initialContracts, ProjectItem, ContractItem } from '@/data/projects';
 import Layout from '@/components/Layout';
+import { projectApi, contractApi } from '@/services/api';
+import { useAuth } from '@/context/AuthContext';
 
 type Tab = 'project' | 'contract';
 
@@ -39,22 +41,25 @@ function RiskBadge({ risk }: { risk: string }) {
   );
 }
 
-const STORAGE_KEY_PROJECTS = 'workbench.projects.v1';
-const STORAGE_KEY_CONTRACTS = 'workbench.contracts.v1';
-
-function loadProjects(): ProjectItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_PROJECTS);
-    if (raw) return JSON.parse(raw) as ProjectItem[];
-  } catch {}
-  return initialProjects;
+// ===== 前后端 ID 字段转换 helper =====
+// Mongo 返回 _id，前端 UI 用 id；提交到后端时再把 id 去掉
+function projectFromApi(raw: any): ProjectItem {
+  if (!raw) return raw
+  const { _id, userId, ...rest } = raw
+  return { ...rest, id: _id } as ProjectItem
 }
-function loadContracts(): ContractItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_CONTRACTS);
-    if (raw) return JSON.parse(raw) as ContractItem[];
-  } catch {}
-  return initialContracts;
+function projectToApi(item: ProjectItem): any {
+  const { id, ...rest } = item
+  return rest
+}
+function contractFromApi(raw: any): ContractItem {
+  if (!raw) return raw
+  const { _id, userId, linkedProjectsList, ...rest } = raw
+  return { ...rest, id: _id } as ContractItem
+}
+function contractToApi(item: ContractItem): any {
+  const { id, ...rest } = item
+  return rest
 }
 
 const emptyProject: Omit<ProjectItem, 'id'> = {
@@ -94,17 +99,68 @@ const emptyContract: Omit<ContractItem, 'id'> = {
 };
 
 export default function ProjectManagerPage() {
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('project');
 
-  const [projects, setProjects] = useState<ProjectItem[]>(() => loadProjects());
-  const [contracts, setContracts] = useState<ContractItem[]>(() => loadContracts());
+  const [projects, setProjects] = useState<ProjectItem[]>(initialProjects);
+  const [contracts, setContracts] = useState<ContractItem[]>(initialContracts);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
+  const reloadProjects = useCallback(async () => {
+    try {
+      const res = await projectApi.list()
+      const list: any[] = Array.isArray(res) ? res : res.data
+      if (list && list.length > 0) {
+        setProjects(list.map(projectFromApi))
+      } else {
+        setProjects(initialProjects)
+      }
+    } catch (_err: any) {
+      // 后端失败或未登录：保留演示数据（兜底）
+      setApiError(_err?.message || '加载失败')
+    }
+  }, [])
+
+  const reloadContracts = useCallback(async () => {
+    try {
+      const res = await contractApi.list()
+      const list: any[] = Array.isArray(res) ? res : res.data
+      if (list && list.length > 0) {
+        setContracts(list.map(contractFromApi))
+      } else {
+        setContracts(initialContracts)
+      }
+    } catch (_err: any) {
+      setApiError(_err?.message || '加载失败')
+    }
+  }, [])
+
+  // 进入页面或切换登录用户时：从服务端按 userId 拉自己的项目/合同
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-  }, [projects]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_CONTRACTS, JSON.stringify(contracts));
-  }, [contracts]);
+    let alive = true
+    ;(async () => {
+      setApiLoading(true)
+      setApiError(null)
+      try {
+        const [p, c] = await Promise.all([projectApi.list(), contractApi.list()])
+        if (!alive) return
+        const plist: any[] = Array.isArray(p) ? p : p.data
+        const clist: any[] = Array.isArray(c) ? c : c.data
+        setProjects((plist && plist.length > 0) ? plist.map(projectFromApi) : initialProjects)
+        setContracts((clist && clist.length > 0) ? clist.map(contractFromApi) : initialContracts)
+      } catch (_err: any) {
+        if (!alive) return
+        setApiError(_err?.message || '加载失败')
+        // 离线/兜底：保持初始演示数据，不至于空页
+        setProjects(initialProjects)
+        setContracts(initialContracts)
+      } finally {
+        if (alive) setApiLoading(false)
+      }
+    })()
+    return () => { alive = false }
+  }, [user?._id])
 
   // Project tab state
   const [projectSearch, setProjectSearch] = useState('');
@@ -213,48 +269,52 @@ export default function ProjectManagerPage() {
   function handleAddProject() {
     const newItem: ProjectItem = {
       ...emptyProject,
-      id: `SC-${new Date().getFullYear()}-${String(projects.length + 1).padStart(3, '0')}`,
+      id: `tmp-${Date.now()}`,
       productionNo: `SC-${new Date().getFullYear()}-${String(projects.length + 1).padStart(3, '0')}`,
     };
     setEditingProject(newItem);
   }
 
-  function handleSaveProject(item: ProjectItem) {
+  async function handleSaveProject(item: ProjectItem) {
     const itemWithContract: ProjectItem = {
       ...item,
-      hasContract: item.clientContractNo && item.clientContractNo !== '—',
+      hasContract: !!(item.clientContractNo && item.clientContractNo !== '—'),
     };
-    const exists = projects.find((p) => p.id === itemWithContract.id);
-    if (exists) {
-      setProjects((prev) => prev.map((p) => (p.id === itemWithContract.id ? itemWithContract : p)));
-    } else {
-      setProjects((prev) => [itemWithContract, ...prev]);
-      // auto-increment linked projects count on the contract
-      if (itemWithContract.clientContractNo && itemWithContract.clientContractNo !== '—') {
-        setContracts((prev) =>
-          prev.map((c) =>
-            c.clientContractNo === itemWithContract.clientContractNo
-              ? { ...c, linkedProjects: c.linkedProjects + 1 }
-              : c
-          )
-        );
+    const isTempId = item.id.startsWith('tmp-') || !item.id
+    try {
+      if (isTempId) {
+        const created = await projectApi.create(projectToApi(itemWithContract))
+        setProjects((prev) => [projectFromApi(created), ...prev])
+      } else {
+        const updated = await projectApi.update(item.id, projectToApi(itemWithContract))
+        setProjects((prev) => prev.map((p) => (p.id === itemWithContract.id ? projectFromApi(updated) : p)))
+        // 同步刷新合同关联统计
+        await reloadContracts()
       }
+    } catch (err: any) {
+      // 兜底（后端暂时不可用时仍然保存到前端内存，不阻塞用户）
+      const exists = projects.find((p) => p.id === itemWithContract.id)
+      if (exists) {
+        setProjects((prev) => prev.map((p) => (p.id === itemWithContract.id ? itemWithContract : p)))
+      } else {
+        setProjects((prev) => [itemWithContract, ...prev])
+      }
+      setApiError(err?.message || '保存失败（已临时保存在本地）')
     }
     setEditingProject(null);
   }
 
-  function handleDeleteProject(id: string) {
-    const target = projects.find((p) => p.id === id);
-    if (target?.clientContractNo && target.clientContractNo !== '—') {
-      setContracts((prev) =>
-        prev.map((c) =>
-          c.clientContractNo === target.clientContractNo
-            ? { ...c, linkedProjects: Math.max(0, c.linkedProjects - 1) }
-            : c
-        )
-      );
+  async function handleDeleteProject(id: string) {
+    try {
+      if (!id.startsWith('tmp-')) {
+        await projectApi.delete(id)
+      }
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      await reloadContracts()
+    } catch (err: any) {
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      setApiError(err?.message || '删除失败（已本地移除）')
     }
-    setProjects((prev) => prev.filter((p) => p.id !== id));
     setConfirmDelete(null);
   }
 
@@ -270,7 +330,6 @@ export default function ProjectManagerPage() {
   function handleAddContractFromProject(c: ContractItem) {
     setContracts((prev) => {
       if (prev.some((x) => x.clientContractNo === c.clientContractNo)) {
-        // contract already exists, just bump linked count
         return prev.map((x) =>
           x.clientContractNo === c.clientContractNo
             ? { ...x, linkedProjects: x.linkedProjects + 1 }
@@ -281,18 +340,38 @@ export default function ProjectManagerPage() {
     });
   }
 
-  function handleSaveContract(item: ContractItem) {
+  async function handleSaveContract(item: ContractItem) {
     const exists = contracts.find((c) => c.id === item.id);
-    if (exists) {
-      setContracts((prev) => prev.map((c) => (c.id === item.id ? item : c)));
-    } else {
-      setContracts((prev) => [item, ...prev]);
+    const isTempId = item.id.startsWith('c-') && !exists
+    try {
+      if (isTempId || !exists) {
+        const created = await contractApi.create(contractToApi(item))
+        setContracts((prev) => [contractFromApi(created), ...prev])
+      } else {
+        const updated = await contractApi.update(item.id, contractToApi(item))
+        setContracts((prev) => prev.map((c) => (c.id === item.id ? contractFromApi(updated) : c)))
+      }
+    } catch (err: any) {
+      if (exists) {
+        setContracts((prev) => prev.map((c) => (c.id === item.id ? item : c)))
+      } else {
+        setContracts((prev) => [item, ...prev])
+      }
+      setApiError(err?.message || '保存失败（已临时保存在本地）')
     }
     setEditingContract(null);
   }
 
-  function handleDeleteContract(id: string) {
-    setContracts((prev) => prev.filter((c) => c.id !== id));
+  async function handleDeleteContract(id: string) {
+    try {
+      if (!id.startsWith('c-')) {
+        await contractApi.delete(id)
+      }
+      setContracts((prev) => prev.filter((c) => c.id !== id));
+    } catch (err: any) {
+      setContracts((prev) => prev.filter((c) => c.id !== id));
+      setApiError(err?.message || '删除失败（已本地移除）')
+    }
     setConfirmDelete(null);
   }
 
