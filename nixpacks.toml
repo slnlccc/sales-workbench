@@ -4,7 +4,7 @@ nixPkgs = ["nodejs_20"]
 [phases.install]
 cmds = [
   "echo '[Install 1/2] server ...' && cd server && npm install --no-audit --no-fund --production=false",
-  "echo '[Install 2/2] lite   ...' && cd ../lite && npm install --no-audit --no-fund --production=false"
+  "echo '[Install 2/2] lite   ...' && cd lite   && npm install --no-audit --no-fund --production=false"
 ]
 
 [phases.build]
