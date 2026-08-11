@@ -1,16 +1,15 @@
-# 销售工作台 - Railway 部署配置
-
 [phases.setup]
 nixPkgs = ["nodejs_20"]
 
 [phases.install]
 cmds = [
-  "cd server && npm install && cd .. && npm install"
+  "echo '[Install 1/2] server ...' && cd server && npm install --no-audit --no-fund --production=false",
+  "echo '[Install 2/2] lite   ...' && cd ../lite && npm install --no-audit --no-fund --production=false"
 ]
 
 [phases.build]
 cmds = [
-  "npm run build && cp -r dist server/dist"
+  "echo '[Build 1/1] vite ...' && cd lite && npm run build && mkdir -p ../server/dist && cp -r dist/* ../server/dist/ && echo 'Copy OK, index size:' && ls -la ../server/dist/index.html"
 ]
 
 [start]
