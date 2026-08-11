@@ -1,13 +1,14 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "NIXPACKS",
+    "buildCommand": "echo '=== 开始构建 ===' && cd lite && echo '--- 前端安装 ---' && (npm install --no-audit --no-fund 2>&1 | tail -15) && echo '--- 前端构建 ---' && (npm run build 2>&1 | tail -25) && echo '--- 复制到 server/dist ---' && mkdir -p ../server/dist && cp -r dist/* ../server/dist/ && ls ../server/dist && echo '=== 构建完成 ==='"
   },
   "deploy": {
     "startCommand": "cd server && node src/server.js",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
-    "healthcheckPath": "/health",
-    "healthcheckTimeout": 300
+    "healthcheckPath": "/healthz",
+    "healthcheckTimeout": 600
   }
 }
