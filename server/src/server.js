@@ -53,8 +53,10 @@ app.use(express.static(path.join(__dirname, '../../dist')))
 app.get('/api/health', (req, res) => {
   const cloudSync = require('./services/cloudSyncService')
   const baidu = require('./services/baiduService')
+  const cosKeys = require('./config/cosKeys')
+  const cosCfg = (k) => process.env[k] || cosKeys[k] || ''
   const v = (k) => {
-    const val = process.env[k]
+    const val = cosCfg(k)
     if (!val) return 'NOT_SET'
     if (val.startsWith('your-') || val === 'placeholder') return `PLACEHOLDER(${val})`
     if (k.includes('SECRET') || k.includes('KEY')) {
@@ -66,19 +68,9 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     cloudSyncConfigured: cloudSync.isConfigured(),
-    cosRegion: process.env.TENCENT_COS_REGION || '',
-    cosBucket: process.env.TENCENT_COS_BUCKET ? 'set' : 'unset',
+    cosRegion: cosCfg('TENCENT_COS_REGION'),
+    cosBucket: cosCfg('TENCENT_COS_BUCKET') ? 'set' : 'unset',
     aiConfigured: baidu.isConfigured(),
-    // 诊断：逐一打印变量状态（敏感字段打码）
-    env: {
-      TENCENT_SECRET_ID: v('TENCENT_SECRET_ID'),
-      TENCENT_SECRET_KEY: v('TENCENT_SECRET_KEY'),
-      TENCENT_COS_BUCKET: v('TENCENT_COS_BUCKET'),
-      TENCENT_COS_REGION: v('TENCENT_COS_REGION'),
-      BAIDU_API_KEY: v('BAIDU_API_KEY'),
-      BAIDU_MODEL: process.env.BAIDU_MODEL || '',
-      MONGODB_URI: process.env.MONGODB_URI || process.env.MONGOURL ? 'set' : 'NOT_SET',
-    },
   })
 })
 

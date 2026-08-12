@@ -5,15 +5,18 @@ const Contract = require('../models/Contract')
 const Schedule = require('../models/Schedule')
 const Customer = require('../models/Customer')
 
+// 加载密钥配置（优先环境变量，回退到配置文件）
+const cosKeys = require('../config/cosKeys')
+
+const getConfig = (key) => process.env[key] || cosKeys[key]
+
 // 检查腾讯云COS是否已配置
 const isConfigured = () => {
-  return !!(
-    process.env.TENCENT_SECRET_ID &&
-    process.env.TENCENT_SECRET_KEY &&
-    process.env.TENCENT_COS_BUCKET &&
-    process.env.TENCENT_COS_REGION &&
-    process.env.TENCENT_SECRET_ID !== 'your-secret-id'
-  )
+  const id = getConfig('TENCENT_SECRET_ID')
+  return !!(id && id !== 'your-secret-id' &&
+    getConfig('TENCENT_SECRET_KEY') &&
+    getConfig('TENCENT_COS_BUCKET') &&
+    getConfig('TENCENT_COS_REGION'))
 }
 
 // 创建COS客户端实例（懒加载）
@@ -21,8 +24,8 @@ let cosInstance = null
 const getCos = () => {
   if (!cosInstance && isConfigured()) {
     cosInstance = new COS({
-      SecretId: process.env.TENCENT_SECRET_ID,
-      SecretKey: process.env.TENCENT_SECRET_KEY,
+      SecretId: getConfig('TENCENT_SECRET_ID'),
+      SecretKey: getConfig('TENCENT_SECRET_KEY'),
     })
   }
   return cosInstance
@@ -72,8 +75,8 @@ const uploadToCloud = async (userId) => {
 
   await new Promise((resolve, reject) => {
     cos.putObject({
-      Bucket: process.env.TENCENT_COS_BUCKET,
-      Region: process.env.TENCENT_COS_REGION,
+      Bucket: getConfig('TENCENT_COS_BUCKET'),
+      Region: getConfig('TENCENT_COS_REGION'),
       Key: key,
       Body: body,
       ContentType: 'application/json',
@@ -98,8 +101,8 @@ const uploadToCloud = async (userId) => {
   const metaKey = getUserSyncMetaKey(userId)
   await new Promise((resolve, reject) => {
     cos.putObject({
-      Bucket: process.env.TENCENT_COS_BUCKET,
-      Region: process.env.TENCENT_COS_REGION,
+      Bucket: getConfig('TENCENT_COS_BUCKET'),
+      Region: getConfig('TENCENT_COS_REGION'),
       Key: metaKey,
       Body: JSON.stringify(syncMeta, null, 2),
       ContentType: 'application/json',
@@ -127,8 +130,8 @@ const downloadFromCloud = async (userId) => {
 
   const result = await new Promise((resolve, reject) => {
     cos.getObject({
-      Bucket: process.env.TENCENT_COS_BUCKET,
-      Region: process.env.TENCENT_COS_REGION,
+      Bucket: getConfig('TENCENT_COS_BUCKET'),
+      Region: getConfig('TENCENT_COS_REGION'),
       Key: key,
     }, (err, data) => {
       if (err) {
@@ -223,8 +226,8 @@ const getSyncStatus = async (userId) => {
   try {
     const result = await new Promise((resolve, reject) => {
       cos.getObject({
-        Bucket: process.env.TENCENT_COS_BUCKET,
-        Region: process.env.TENCENT_COS_REGION,
+        Bucket: getConfig('TENCENT_COS_BUCKET'),
+        Region: getConfig('TENCENT_COS_REGION'),
         Key: metaKey,
       }, (err, data) => {
         if (err) {

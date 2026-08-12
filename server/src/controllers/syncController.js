@@ -1,4 +1,5 @@
 const cloudSync = require('../services/cloudSyncService')
+const cosKeys = require('../config/cosKeys')
 
 // 上传数据到云端
 const syncUpload = async (req, res) => {
@@ -42,8 +43,8 @@ const syncStatus = async (req, res) => {
 const syncConfig = async (req, res) => {
   res.json({
     configured: cloudSync.isConfigured(),
-    region: process.env.TENCENT_COS_REGION || '',
-    bucket: process.env.TENCENT_COS_BUCKET || '',
+    region: process.env.TENCENT_COS_REGION || cosKeys.TENCENT_COS_REGION || '',
+    bucket: process.env.TENCENT_COS_BUCKET || cosKeys.TENCENT_COS_BUCKET || '',
   })
 }
 
