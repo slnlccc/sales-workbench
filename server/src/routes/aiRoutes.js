@@ -38,7 +38,30 @@ router.post('/voice-assistant', protect, async (req, res) => {
 2. 只有同时包含明确的时间（如"明天""下周三""15号"等）和动作词（如"提醒""提交""开会""拜访"等）时，才标为 "schedule"（日程提醒）
 3. 根据内容识别业务类型：quote(报价)、order(订单)、visit(拜访)、call(电话跟进)、meeting(会议)、contract(合同)、report(报告汇报)、memo(备忘录)、task(待办事项)
 4. 如果一句话中包含多个事项，请拆分
-5. 日期时间解析：今天=当前日期，明天=+1天，后天=+2天，以此类推。周几转为本周对应日期。
+
+==============================
+【非常重要】日期时间解析规则（严格遵循，不得随意发挥）：
+
+【日期解析】
+- 今天=当前日期，明天=+1天，后天=+2天，大后天=+3天
+- 周X/星期X：本周对应日期（周一=1，周日=7）。"下X"=下周对应日期
+- X号/X日：本月对应日期，若已过则下个月
+- 本月/下个月第X周：对应周的周一日期
+
+【时间解析（重中之重）】
+- "早上X点"、"上午X点"、"X点前"且 X≤8 → 使用 24小时制 X:00
+- "中午X点" → 12:00
+- "下午X点"、"晚上X点"、"傍晚X点" → X + 12
+- **如果只有"X点"没有说明上午下午：**
+  - X=12 → 12:00
+  - 1≤X≤5 → 默认下午 → (X+12):00（如"3点"=15:00，"4点"=16:00）
+  - 6≤X≤8 → 默认上午 → X:00（如"8点"=08:00）
+  - 9≤X≤11 → 上午 → X:00
+- "X点半" → 分钟=30
+- "X点Y分" → HH:Y
+- "半点"=:30，"一刻钟"=:15，"三刻"=:45
+- 如果完全没有时间点 → 10:00（默认上午工作时间）
+==============================
 
 返回 JSON 格式：
 {
@@ -54,13 +77,145 @@ router.post('/voice-assistant', protect, async (req, res) => {
   ]
 }`
 
-    const result = await chatJSON(
+    // ---- 确定性时间后处理（优先信任规则，纠正AI错误）----
+    const today = new Date()
+    const CN_NUM = {零:0,一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9}
+    // 中文数字片段转阿拉伯数字（支持"十""十二""二十""二十五"等）
+    const cnToNum = (cn) => {
+      if (!cn) return NaN
+      const s = String(cn).trim()
+      if (/^\d+$/.test(s)) return parseInt(s, 10)
+      if (s === '十') return 10
+      // 11-19: 十X → 10+X
+      const teen = s.match(/^十([一二三四五六七八九])$/)
+      if (teen) return 10 + (CN_NUM[teen[1]] ?? 0)
+      // 20,30,...90: X十 → X*10
+      const tens = s.match(/^([一二三四五六七八九])十$/)
+      if (tens) return (CN_NUM[tens[1]] ?? 0) * 10
+      // 21-29,31-39...: X十Y → X*10+Y
+      const full = s.match(/^([一二三四五六七八九])十([一二三四五六七八九])$/)
+      if (full) return (CN_NUM[full[1]] ?? 0) * 10 + (CN_NUM[full[2]] ?? 0)
+      // 单个中文字 一~九
+      if (s.length === 1 && CN_NUM[s] != null) return CN_NUM[s]
+      // 最后兜底：逐字符替换（仅限不含"十"的短串，避免"五四"拼接问题）
+      if (!s.includes('十') && s.length <= 2) {
+        let n = ''
+        for (const ch of s) { if (CN_NUM[ch] != null) n += CN_NUM[ch] }
+        if (n) return parseInt(n, 10)
+      }
+      return NaN
+    }
+
+    const parseHour = (raw) => {
+      if (!raw) return null
+      const s = String(raw).trim()
+      // 遍历所有 "X点/Y时/HH:"，排除紧邻"周/星期"后的那个（那是周几的数字，不是时间）
+      // 注意：{1,4}? 非贪婪，以便优先匹配单个数字（避免把"五四"当一个整体吞掉后面的"四"）
+      const timeRegex = /([\d零一二两三四五六七八九十]{1,4}?)\s*([点时:：])/g
+      let h = NaN
+      let m
+      while ((m = timeRegex.exec(s)) !== null) {
+        const idx = m.index
+        const before = s.slice(Math.max(0, idx - 3), idx)
+        const isWeekdayNum = /[周星期]$/.test(before)
+        if (isWeekdayNum) {
+          // 这个匹配是"周X"的X被当成了时间数字，跳过。
+          // 但注意：贪婪可能把"五四"吞成整体（即使非贪婪也可能{1,4}尝试了2位长度匹配）。
+          // 回退 lastIndex，下一轮从 idx+1 开始，避免漏过后面紧跟的"四点/六点"等时间
+          timeRegex.lastIndex = idx + 1
+          continue
+        }
+        h = cnToNum(m[1])
+        if (!isNaN(h)) break
+      }
+      if (isNaN(h)) return null
+      let min = 0
+      // 分钟匹配：基于第一个合法时间点之后的部分
+      const afterHour = s.slice((m.index + m[0].length))
+      const mPattern = afterHour.match(/^\s*([\d零一二两三四五六七八九十]{1,3})\s*分?/)
+      if (mPattern) {
+        const mv = cnToNum(mPattern[1])
+        if (!isNaN(mv)) min = mv
+      }
+      if (s.includes('半')) min = 30
+      if (s.includes('一刻') && min < 15) min = 15
+      if (s.includes('三刻') && min < 45) min = 45
+      // 上下午判断（使用原始s判断关键词，不受数字转换影响）
+      const isPM = /下午|晚上|傍晚|夜里/.test(s)
+      const isAM = /早上|早晨|上午|中午/.test(s)
+      let hour = h
+      if (isPM && hour < 12) hour += 12
+      if (!isAM && !isPM) {
+        if (hour >= 1 && hour <= 5) hour += 12 // 1-5点默认下午(例:4点=16:00)
+      }
+      if (hour < 0) hour = 0
+      if (hour > 23) hour = 23
+      if (min < 0) min = 0
+      if (min > 59) min = 59
+      return `${String(hour).padStart(2,'0')}:${String(min).padStart(2,'0')}`
+    }
+
+    const addDays = (base, n) => {
+      const d = new Date(base)
+      d.setDate(d.getDate() + n)
+      return d
+    }
+    const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    const parseDate = (raw, ref) => {
+      if (!raw) return null
+      const s = String(raw)
+      // 相对日
+      if (/今天|今日/.test(s)) return fmtDate(ref)
+      if (/明天|明日/.test(s)) return fmtDate(addDays(ref, 1))
+      if (/大后天/.test(s)) return fmtDate(addDays(ref, 3))
+      if (/后天/.test(s)) return fmtDate(addDays(ref, 2))
+      // 周几 —— 提取"周X/星期X"中单独那个中文数字字(一二三四五六日天)，避免和前后字拼接
+      const wm = s.match(/(下*[个]*)[周星期]([一二三四五六日天])/)
+      if (wm) {
+        const cn = wm[2]
+        const targetW = cn==='日'||cn==='天' ? 0 : (CN_NUM[cn] ?? 0)
+        let cur = ref.getDay()
+        let diff = targetW - cur
+        if (wm[1].includes('下')) { diff += 7 } else if (diff < 0) { diff += 7 }
+        return fmtDate(addDays(ref, diff))
+      }
+      // XX号/XX日 —— 单独捕获数字片段，避免和前后中文字一起被转换
+      const dm = s.match(/([\d零一二两三四五六七八九十]{1,4})\s*[号日]/)
+      if (dm) {
+        const dv = cnToNum(dm[1])
+        if (!isNaN(dv)) {
+          const d = new Date(ref.getFullYear(), ref.getMonth(), dv)
+          if (d < new Date(ref.getFullYear(), ref.getMonth(), ref.getDate())) {
+            d.setMonth(d.getMonth() + 1)
+          }
+          return fmtDate(d)
+        }
+      }
+      // YYYY-MM-DD 格式直接过
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s.trim())) return s.trim()
+      return null
+    }
+
+    let result = await chatJSON(
       [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `当前日期：${new Date().toISOString().split('T')[0]}\n用户输入：${text}` },
+        { role: 'user', content: `当前日期：${fmtDate(today)}\n用户输入：${text}` },
       ],
       { temperature: 0.3, maxTokens: 2048 }
     )
+
+    // 应用确定性后处理覆盖 AI 的时间日期（优先从用户原始文本解析）
+    if (result && Array.isArray(result.tasks)) {
+      result.tasks = result.tasks.map(t => {
+        const fromTextTime = parseHour(text)
+        const fromAITime = parseHour(t.time)
+        const finalTime = fromTextTime ?? fromAITime ?? t.time ?? '10:00'
+        const fromTextDate = parseDate(text, today)
+        const fromAIDate = parseDate(t.date, today)
+        const finalDate = fromTextDate ?? fromAIDate ?? t.date ?? fmtDate(today)
+        return { ...t, date: finalDate, time: finalTime }
+      })
+    }
 
     res.json(result)
   } catch (err) {
