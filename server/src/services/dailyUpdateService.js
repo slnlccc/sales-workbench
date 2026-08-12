@@ -479,28 +479,30 @@ const runDailyUpdate = async () => {
 
   console.log('[每日更新] 开始 AI 生成最新市场数据...')
 
-  // 市情雷达各模块并行更新，AI 失败则保留原有内存数据
-  const [
-    radarNews,
-    radarMaterials,
-    radarBidding,
-    radarPolicies,
-    radarExhibitions,
-    competitors,
-    prices,
-    news,
-    exhibitions,
-  ] = await Promise.all([
-    generateRadarNews().catch((e) => { console.error('[每日更新] 行业动态生成失败:', e.message); return [] }),
-    generateRadarMaterials().catch((e) => { console.error('[每日更新] 原材料价格生成失败:', e.message); return [] }),
-    generateRadarBidding().catch((e) => { console.error('[每日更新] 招投标生成失败:', e.message); return [] }),
-    generateRadarPolicies().catch((e) => { console.error('[每日更新] 政策法规生成失败:', e.message); return [] }),
-    generateRadarExhibitions().catch((e) => { console.error('[每日更新] 行业展会生成失败:', e.message); return [] }),
-    generateCompetitors().catch((e) => { console.error('[每日更新] 竞争对手动态生成失败:', e.message); return [] }),
-    generateMetalPrices().catch((e) => { console.error('[每日更新] 金属价格(旧)生成失败:', e.message); return [] }),
-    generateIndustryNews().catch((e) => { console.error('[每日更新] 行业资讯(旧)生成失败:', e.message); return [] }),
-    generateExhibitions().catch((e) => { console.error('[每日更新] 展会(旧)生成失败:', e.message); return [] }),
-  ])
+  // 串行执行 + 每次调用间隔 1.2s，避免百度千帆免费模型 QPS 限制（错误码18: QPS超限）
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+  const runTask = async (label, fn) => {
+    try {
+      const result = await fn()
+      console.log(`[每日更新] ${label} ✅ 生成成功，共 ${Array.isArray(result) ? result.length : 'obj'} 条`)
+      return result
+    } catch (e) {
+      console.error(`[每日更新] ${label} ❌ 失败:`, e.message)
+      return []
+    } finally {
+      await sleep(1200)
+    }
+  }
+
+  const radarNews = await runTask('行业动态', generateRadarNews)
+  const radarMaterials = await runTask('原材料价格', generateRadarMaterials)
+  const radarBidding = await runTask('招投标', generateRadarBidding)
+  const radarPolicies = await runTask('政策法规', generateRadarPolicies)
+  const radarExhibitions = await runTask('行业展会', generateRadarExhibitions)
+  const competitors = await runTask('竞争对手动态', generateCompetitors)
+  const prices = await runTask('金属价格(旧)', generateMetalPrices)
+  const news = await runTask('行业资讯(旧)', generateIndustryNews)
+  const exhibitions = await runTask('展会(旧)', generateExhibitions)
 
   // 仅在 AI 成功返回时更新内存数据，失败则保留 fallback/旧数据
   if (radarNews.length > 0) memoryData.radarNews = radarNews

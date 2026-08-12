@@ -52,12 +52,33 @@ app.use(express.static(path.join(__dirname, '../../dist')))
 // 公开健康检查端点（Railway 健康检查用，不需要认证）
 app.get('/api/health', (req, res) => {
   const cloudSync = require('./services/cloudSyncService')
+  const baidu = require('./services/baiduService')
+  const v = (k) => {
+    const val = process.env[k]
+    if (!val) return 'NOT_SET'
+    if (val.startsWith('your-') || val === 'placeholder') return `PLACEHOLDER(${val})`
+    if (k.includes('SECRET') || k.includes('KEY')) {
+      return val.length >= 8 ? `${val.slice(0, 4)}...${val.slice(-3)}` : 'HIDDEN'
+    }
+    return val
+  }
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     cloudSyncConfigured: cloudSync.isConfigured(),
     cosRegion: process.env.TENCENT_COS_REGION || '',
     cosBucket: process.env.TENCENT_COS_BUCKET ? 'set' : 'unset',
+    aiConfigured: baidu.isConfigured(),
+    // 诊断：逐一打印变量状态（敏感字段打码）
+    env: {
+      TENCENT_SECRET_ID: v('TENCENT_SECRET_ID'),
+      TENCENT_SECRET_KEY: v('TENCENT_SECRET_KEY'),
+      TENCENT_COS_BUCKET: v('TENCENT_COS_BUCKET'),
+      TENCENT_COS_REGION: v('TENCENT_COS_REGION'),
+      BAIDU_API_KEY: v('BAIDU_API_KEY'),
+      BAIDU_MODEL: process.env.BAIDU_MODEL || '',
+      MONGODB_URI: process.env.MONGODB_URI || process.env.MONGOURL ? 'set' : 'NOT_SET',
+    },
   })
 })
 
