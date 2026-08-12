@@ -1,0 +1,26 @@
+<view class="container">
+  <view class="header mb-3">
+    <text class="text-xl font-bold text-coffee-900">销售工作台</text>
+    <text class="text-sm text-coffee-500 mt-1" style="display:block;">数字化销售全流程管理</text>
+  </view>
+
+  <view class="grid">
+    <view 
+      class="module-card" 
+      wx:for="{{modules}}" 
+      wx:key="index"
+      data-page="{{item.page}}"
+      bindtap="goPage"
+    >
+      <view class="module-icon" style="background: {{item.color}}20; color: {{item.color}};">
+        <text style="font-size: 48rpx;">{{item.icon}}</text>
+      </view>
+      <text class="module-title">{{item.title}}</text>
+      <text class="module-desc">{{item.desc}}</text>
+    </view>
+  </view>
+
+  <view class="footer text-center mt-2">
+    <text class="text-xs text-coffee-400">小程序版 v1.0 · 微信云开发</text>
+  </view>
+</view>

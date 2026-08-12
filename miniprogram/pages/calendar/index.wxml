@@ -1,0 +1,134 @@
+<view class="container">
+  <view class="card mb-3">
+    <view class="flex justify-between items-center">
+      <button class="btn-secondary btn-sm" bindtap="prevMonth">←</button>
+      <view>
+        <text class="text-lg font-bold">{{currentYear}}年{{currentMonth}}月</text>
+        <text class="text-xs text-coffee-400" style="display:block;">{{selectedDate}}</text>
+      </view>
+      <button class="btn-secondary btn-sm" bindtap="nextMonth">→</button>
+    </view>
+    <button class="btn-primary btn-sm" style="width:100%;margin-top:16rpx;" bindtap="openAddModal">+ 添加日程</button>
+  </view>
+
+  <view class="card mb-3">
+    <view class="calendar-header">
+      <text class="calendar-day">日</text>
+      <text class="calendar-day">一</text>
+      <text class="calendar-day">二</text>
+      <text class="calendar-day">三</text>
+      <text class="calendar-day">四</text>
+      <text class="calendar-day">五</text>
+      <text class="calendar-day">六</text>
+    </view>
+    <view class="calendar-grid">
+      <view 
+        wx:for="{{calendarDays}}" 
+        wx:key="index" 
+        class="calendar-cell"
+        bindtap="selectDate"
+        data-date="{{item.date}}"
+        data-day="{{item.day}}"
+        style="{{!item.isCurrentMonth ? 'color:#B8A99A;' : ''}}{{item.isToday ? 'background:#6F4E37;color:#fff;' : ''}}{{item.date === selectedDate && !item.isToday ? 'background:#EDE6DE;' : ''}}"
+      >
+        <text>{{item.day}}</text>
+        <view wx:if="{{item.hasSchedule}}" class="schedule-dot"></view>
+      </view>
+    </view>
+    <button class="btn-secondary btn-sm" style="width:100%;margin-top:16rpx;" bindtap="goToday">回到今天</button>
+  </view>
+
+  <view class="card mb-3">
+    <view class="flex justify-between items-center mb-2">
+      <text class="text-sm font-medium text-coffee-800">今日日程</text>
+      <text class="text-xs text-coffee-400">{{daySchedules.length}} 项</text>
+    </view>
+    <view wx:if="{{daySchedules.length === 0}}" class="empty-state">暂无日程</view>
+    <view wx:for="{{daySchedules}}" wx:key="_id" class="schedule-item">
+      <view class="flex items-center gap-2">
+        <text class="tag tag-green">{{item.type}}</text>
+        <text class="text-xs text-coffee-500">{{item.time}}</text>
+      </view>
+      <text class="text-sm {{item.closed ? 'text-coffee-400 line-through' : ''}}" style="margin-top:4rpx;">{{item.title}}</text>
+      <view class="flex gap-2" style="margin-top:8rpx;">
+        <text class="action-link" bindtap="toggleClosed" data-id="{{item._id}}" style="{{item.closed ? 'color:#16A34A;' : 'color:#D97706;'}}">
+          {{item.closed ? '取消闭环' : '闭环'}}
+        </text>
+        <text class="action-link text-amber" bindtap="openEditModal" data-id="{{item._id}}">编辑</text>
+        <text class="action-link text-red" bindtap="deleteSchedule" data-id="{{item._id}}">删除</text>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- Add Modal -->
+<view wx:if="{{showAddModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" catchtap="stopPropagation">
+    <view class="modal-header">
+      <text class="text-lg font-semibold">添加日程</text>
+      <text class="text-coffee-400" style="font-size:32rpx;" bindtap="closeModal">✕</text>
+    </view>
+    <view class="modal-body">
+      <view class="form-item">
+        <text class="form-label">日期</text>
+        <picker mode="date" value="{{newSchedule.date}}" bindchange="onFieldChange" data-field="date">
+          <view class="picker">{{newSchedule.date}}</view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="form-label">时间</text>
+        <input class="input" placeholder="如 14:30" value="{{newSchedule.time}}" bindinput="onFieldChange" data-field="time" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">类型</text>
+        <picker mode="selector" range="{{typeOptions}}" value="{{typeIndex}}" bindchange="onTypeChange">
+          <view class="picker">{{typeOptions[typeIndex]}}</view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="form-label">标题</text>
+        <textarea class="input" style="height:120rpx;" placeholder="请输入日程内容..." value="{{newSchedule.title}}" bindinput="onFieldChange" data-field="title" />
+      </view>
+    </view>
+    <view class="modal-footer">
+      <button class="btn-secondary btn-sm" bindtap="closeModal">取消</button>
+      <button class="btn-primary btn-sm" bindtap="saveSchedule">保存</button>
+    </view>
+  </view>
+</view>
+
+<!-- Edit Modal -->
+<view wx:if="{{showEditModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" catchtap="stopPropagation">
+    <view class="modal-header">
+      <text class="text-lg font-semibold">编辑日程</text>
+      <text class="text-coffee-400" style="font-size:32rpx;" bindtap="closeModal">✕</text>
+    </view>
+    <view class="modal-body">
+      <view class="form-item">
+        <text class="form-label">日期</text>
+        <picker mode="date" value="{{editingSchedule.date}}" bindchange="onEditFieldChange" data-field="date">
+          <view class="picker">{{editingSchedule.date}}</view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="form-label">时间</text>
+        <input class="input" placeholder="如 14:30" value="{{editingSchedule.time}}" bindinput="onEditFieldChange" data-field="time" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">类型</text>
+        <picker mode="selector" range="{{typeOptions}}" value="{{typeIndex}}" bindchange="onEditTypeChange">
+          <view class="picker">{{typeOptions[typeIndex]}}</view>
+        </picker>
+      </view>
+      <view class="form-item">
+        <text class="form-label">标题</text>
+        <textarea class="input" style="height:120rpx;" placeholder="请输入日程内容..." value="{{editingSchedule.title}}" bindinput="onEditFieldChange" data-field="title" />
+      </view>
+    </view>
+    <view class="modal-footer">
+      <button class="btn-secondary btn-sm" bindtap="closeModal">取消</button>
+      <button class="btn-primary btn-sm" bindtap="updateSchedule">保存</button>
+    </view>
+  </view>
+</view>

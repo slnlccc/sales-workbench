@@ -1,0 +1,39 @@
+.chat-container {
+  padding: 16rpx;
+  max-height: 400rpx;
+  overflow-y: auto;
+}
+
+.chat-bubble {
+  max-width: 80%;
+  padding: 16rpx 20rpx;
+  border-radius: 16rpx;
+  font-size: 26rpx;
+  margin-bottom: 12rpx;
+}
+
+.chat-time {
+  font-size: 20rpx;
+  opacity: 0.6;
+  display: block;
+  text-align: right;
+  margin-top: 4rpx;
+}
+
+.checkbox {
+  width: 40rpx;
+  height: 40rpx;
+  border: 2rpx solid #D4C4B5;
+  border-radius: 8rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: #fff;
+  background: #fff;
+}
+
+.checkbox[wx-if] {
+  background: #6F4E37;
+  border-color: #6F4E37;
+}

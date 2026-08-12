@@ -1,0 +1,278 @@
+<view class="container">
+  <!-- Actions -->
+  <view class="flex gap-2 mb-3">
+    <button class="btn-primary btn-sm" bindtap="openAddModal">+ 新增项目</button>
+    <button class="btn-secondary btn-sm" bindtap="goContractManager">📄 合同管理</button>
+  </view>
+
+  <!-- Search & Filters -->
+  <view class="card mb-3">
+    <input class="input mb-2" placeholder="搜索客户/产品/图号/生产编号..." value="{{search}}" bindinput="onSearchInput" bindconfirm="onSearchConfirm" />
+    <view class="flex gap-2 mb-2" style="flex-wrap:wrap;">
+      <picker mode="selector" range="{{contractStatusOptions}}" value="{{contractStatusIndex}}" bindchange="onContractStatusChange">
+        <view class="picker">{{contractStatusOptions[contractStatusIndex]}}</view>
+      </picker>
+      <picker mode="selector" range="{{deliveryStatusOptions}}" value="{{deliveryStatusIndex}}" bindchange="onDeliveryStatusChange">
+        <view class="picker">{{deliveryStatusOptions[deliveryStatusIndex]}}</view>
+      </picker>
+    </view>
+    <view class="flex gap-2" style="flex-wrap:wrap;">
+      <picker mode="date" value="{{dateFrom}}" bindchange="onDateFromChange">
+        <view class="picker">{{dateFrom || '开始日期'}}</view>
+      </picker>
+      <picker mode="date" value="{{dateTo}}" bindchange="onDateToChange">
+        <view class="picker">{{dateTo || '结束日期'}}</view>
+      </picker>
+      <button class="btn-secondary btn-sm" bindtap="clearFilters">清除</button>
+    </view>
+  </view>
+
+  <!-- Stats -->
+  <view class="card mb-3 stats-bar">
+    <text>共 <text class="font-bold">{{stats.total}}</text> 个</text>
+    <text class="text-coffee-400">|</text>
+    <text>金额 <text class="font-bold">{{fmtCurrency(stats.totalAmount)}}</text></text>
+    <text class="text-coffee-400">|</text>
+    <text>有合同 <text class="font-bold">{{stats.withContract}}</text></text>
+    <text class="text-coffee-400">|</text>
+    <text>已发货 <text class="font-bold">{{stats.shipped}}</text></text>
+  </view>
+
+  <!-- Table -->
+  <view class="card mb-3" style="padding:0;overflow:hidden;">
+    <scroll-view scroll-x class="table-scroll">
+      <!-- Header -->
+      <view class="table-header-row table-row">
+        <view class="table-cell" style="min-width:70rpx;">序号</view>
+        <view class="table-cell" style="min-width:160rpx;">客户单位</view>
+        <view class="table-cell" style="min-width:170rpx;">生产编号</view>
+        <view class="table-cell" style="min-width:130rpx;">图号</view>
+        <view class="table-cell" style="min-width:150rpx;">产品名称</view>
+        <view class="table-cell" style="min-width:110rpx;">材质</view>
+        <view class="table-cell" style="min-width:140rpx;">规格型号</view>
+        <view class="table-cell" style="min-width:90rpx;">数量</view>
+        <view class="table-cell" style="min-width:110rpx;">下料重</view>
+        <view class="table-cell" style="min-width:130rpx;">单价</view>
+        <view class="table-cell" style="min-width:120rpx;">单件价</view>
+        <view class="table-cell" style="min-width:130rpx;">总价</view>
+        <view class="table-cell" style="min-width:110rpx;">合同</view>
+        <view class="table-cell" style="min-width:180rpx;">客户端合同号</view>
+        <view class="table-cell" style="min-width:150rpx;">预计发货</view>
+        <view class="table-cell" style="min-width:150rpx;">实际发货</view>
+        <view class="table-cell" style="min-width:150rpx;">预计合格</view>
+        <view class="table-cell" style="min-width:100rpx;">合格证</view>
+        <view class="table-cell" style="min-width:100rpx;">风险</view>
+        <view class="table-cell" style="min-width:170rpx;">操作</view>
+      </view>
+      <!-- Rows -->
+      <block wx:for="{{pagedProjects}}" wx:key="_id">
+        <view class="table-row">
+          <view class="table-cell" style="min-width:70rpx;">{{(page-1)*pageSize + index + 1}}</view>
+          <view class="table-cell" style="min-width:160rpx;">{{item.customer}}</view>
+          <view class="table-cell font-medium" style="min-width:170rpx;">{{item.productionNo}}</view>
+          <view class="table-cell" style="min-width:130rpx;">{{item.drawingNo}}</view>
+          <view class="table-cell" style="min-width:150rpx;">{{item.productName}}</view>
+          <view class="table-cell" style="min-width:110rpx;">{{item.material}}</view>
+          <view class="table-cell" style="min-width:140rpx;">{{item.spec}}</view>
+          <view class="table-cell" style="min-width:90rpx;">{{item.quantity}}</view>
+          <view class="table-cell" style="min-width:110rpx;">{{item.blankWeight}}</view>
+          <view class="table-cell" style="min-width:130rpx;">{{item.unitPrice}}</view>
+          <view class="table-cell" style="min-width:120rpx;">{{item.piecePrice}}</view>
+          <view class="table-cell" style="min-width:130rpx;">{{item.totalPrice}}</view>
+          <view class="table-cell" style="min-width:110rpx;">
+            <text wx:if="{{item.hasContract}}" class="tag tag-green">有</text>
+            <text wx:else class="tag tag-gray">无</text>
+          </view>
+          <view class="table-cell" style="min-width:180rpx;">
+            <text wx:if="{{item.clientContractNo !== '—'}}" class="tag tag-blue">{{item.clientContractNo}}</text>
+            <text wx:else class="text-coffee-400">—</text>
+          </view>
+          <view class="table-cell {{isOverdue(item) ? 'text-red' : ''}}" style="min-width:150rpx;">
+            {{isOverdue(item) ? '⚠ ' : ''}}{{item.plannedDelivery}}
+          </view>
+          <view class="table-cell {{isOverdue(item) ? 'text-red font-medium' : ''}}" style="min-width:150rpx;">
+            <block wx:if="{{item.actualDelivery !== '—'}}">{{item.actualDelivery}}</block>
+            <block wx:elif="{{isOverdue(item)}}">逾期{{item.overdueDays}}天</block>
+            <block wx:else>—</block>
+          </view>
+          <view class="table-cell" style="min-width:150rpx;">{{item.plannedQualified}}</view>
+          <view class="table-cell" style="min-width:100rpx;">{{item.qualified ? '有' : '无'}}</view>
+          <view class="table-cell" style="min-width:100rpx;">
+            <risk-badge risk="{{item.risk}}" />
+          </view>
+          <view class="table-cell" style="min-width:170rpx;">
+            <view class="flex gap-1">
+              <text class="action-link text-blue" bindtap="openViewModal" data-id="{{item._id}}">查看</text>
+              <text class="action-link text-amber" bindtap="openEditModal" data-id="{{item._id}}">编辑</text>
+              <text class="action-link text-red" bindtap="openDeleteModal" data-id="{{item._id}}">删除</text>
+            </view>
+          </view>
+        </view>
+      </block>
+    </scroll-view>
+    <view wx:if="{{pagedProjects.length === 0}}" class="empty-state">暂无数据</view>
+  </view>
+
+  <!-- Pagination -->
+  <view class="flex justify-between items-center mb-3">
+    <text class="text-xs text-coffee-500">共 {{total}} 条，第 {{page}} / {{totalPages}} 页</text>
+    <view class="flex gap-1">
+      <button class="btn-secondary btn-sm" bindtap="prevPage" disabled="{{page === 1}}">上一页</button>
+      <button class="btn-secondary btn-sm" bindtap="nextPage" disabled="{{page >= totalPages}}">下一页</button>
+    </view>
+  </view>
+</view>
+
+<!-- ========== Edit Modal ========== -->
+<view wx:if="{{showEditModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" catchtap="stopPropagation">
+    <view class="modal-header">
+      <text class="text-lg font-semibold">{{editingItem._id ? '编辑项目' : '新增项目'}}</text>
+      <text class="text-coffee-400" style="font-size:32rpx;" bindtap="closeModal">✕</text>
+    </view>
+    <scroll-view scroll-y class="modal-body">
+      <view class="grid-2">
+        <view class="form-item">
+          <text class="form-label">生产编号</text>
+          <input class="input" value="{{editingItem.productionNo}}" data-field="productionNo" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">客户单位</text>
+          <input class="input" value="{{editingItem.customer}}" data-field="customer" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">图号</text>
+          <input class="input" value="{{editingItem.drawingNo}}" data-field="drawingNo" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">产品名称</text>
+          <input class="input" value="{{editingItem.productName}}" data-field="productName" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">材质</text>
+          <input class="input" value="{{editingItem.material}}" data-field="material" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">规格型号</text>
+          <input class="input" value="{{editingItem.spec}}" data-field="spec" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">数量(件)</text>
+          <input class="input" type="digit" value="{{editingItem.quantity}}" data-field="quantity" bindinput="onNumberChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">下料重</text>
+          <input class="input" value="{{editingItem.blankWeight}}" data-field="blankWeight" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">单价(元/KG)</text>
+          <input class="input" type="digit" value="{{editingItem.unitPrice}}" data-field="unitPrice" bindinput="onNumberChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">单件价</text>
+          <input class="input" type="digit" value="{{editingItem.piecePrice}}" data-field="piecePrice" bindinput="onNumberChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">总价</text>
+          <input class="input" type="digit" value="{{editingItem.totalPrice}}" data-field="totalPrice" bindinput="onNumberChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">客户端合同号（绑定合同）</text>
+          <picker mode="selector" range="{{contractOptions}}" value="{{contractPickerIndex}}" bindchange="onContractChange">
+            <view class="picker">{{contractOptions[contractPickerIndex]}}</view>
+          </picker>
+          <view class="flex gap-2 mt-1">
+            <input class="input" style="flex:1;font-size:24rpx;padding:12rpx 16rpx;" placeholder="或输入新合同号" value="{{newContractNo}}" bindinput="onNewContractInput" />
+            <button class="btn-primary btn-sm" style="padding:12rpx 20rpx;" bindtap="saveProject">新增并绑定</button>
+          </view>
+        </view>
+        <view class="form-item">
+          <text class="form-label">预计发货</text>
+          <picker mode="date" value="{{editingItem.plannedDelivery}}" bindchange="onFieldChange" data-field="plannedDelivery">
+            <view class="picker">{{editingItem.plannedDelivery || '请选择日期'}}</view>
+          </picker>
+        </view>
+        <view class="form-item">
+          <text class="form-label">实际发货</text>
+          <input class="input" value="{{editingItem.actualDelivery}}" data-field="actualDelivery" bindinput="onFieldChange" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">预计合格</text>
+          <picker mode="date" value="{{editingItem.plannedQualified}}" bindchange="onFieldChange" data-field="plannedQualified">
+            <view class="picker">{{editingItem.plannedQualified || '请选择日期'}}</view>
+          </picker>
+        </view>
+        <view class="form-item">
+          <text class="form-label">合格证</text>
+          <picker mode="selector" range="{{qualifiedOptions}}" value="{{qualifiedIndex}}" bindchange="onQualifiedChange">
+            <view class="picker">{{qualifiedOptions[qualifiedIndex]}}</view>
+          </picker>
+        </view>
+        <view class="form-item">
+          <text class="form-label">风险</text>
+          <picker mode="selector" range="{{riskOptions}}" value="{{riskIndex}}" bindchange="onRiskChange">
+            <view class="picker">{{riskOptions[riskIndex]}}</view>
+          </picker>
+        </view>
+      </view>
+    </scroll-view>
+    <view class="modal-footer">
+      <button class="btn-secondary btn-sm" bindtap="closeModal">取消</button>
+      <button class="btn-primary btn-sm" bindtap="saveProject">保存</button>
+    </view>
+  </view>
+</view>
+
+<!-- ========== View Modal ========== -->
+<view wx:if="{{showViewModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" catchtap="stopPropagation" style="max-height:80vh;">
+    <view class="modal-header">
+      <view>
+        <text class="text-lg font-semibold">项目详情</text>
+        <text class="text-xs text-coffee-500" style="display:block;">{{viewingItem.productionNo}}</text>
+      </view>
+      <text class="text-coffee-400" style="font-size:32rpx;" bindtap="closeModal">✕</text>
+    </view>
+    <scroll-view scroll-y class="modal-body">
+      <view class="grid-2">
+        <view class="form-item"><text class="form-label">客户单位</text><text class="form-value">{{viewingItem.customer}}</text></view>
+        <view class="form-item"><text class="form-label">生产编号</text><text class="form-value">{{viewingItem.productionNo}}</text></view>
+        <view class="form-item"><text class="form-label">图号</text><text class="form-value">{{viewingItem.drawingNo}}</text></view>
+        <view class="form-item"><text class="form-label">产品名称</text><text class="form-value">{{viewingItem.productName}}</text></view>
+        <view class="form-item"><text class="form-label">材质</text><text class="form-value">{{viewingItem.material}}</text></view>
+        <view class="form-item"><text class="form-label">规格型号</text><text class="form-value">{{viewingItem.spec}}</text></view>
+        <view class="form-item"><text class="form-label">数量</text><text class="form-value">{{viewingItem.quantity}} 件</text></view>
+        <view class="form-item"><text class="form-label">下料重</text><text class="form-value">{{viewingItem.blankWeight}}</text></view>
+        <view class="form-item"><text class="form-label">单价</text><text class="form-value">{{viewingItem.unitPrice}}</text></view>
+        <view class="form-item"><text class="form-label">单件价</text><text class="form-value">{{viewingItem.piecePrice}}</text></view>
+        <view class="form-item"><text class="form-label">总价</text><text class="form-value">{{viewingItem.totalPrice}}</text></view>
+        <view class="form-item"><text class="form-label">有无合同</text><text class="form-value">{{viewingItem.hasContract ? '有' : '无'}}</text></view>
+        <view class="form-item"><text class="form-label">客户端合同号</text><text class="form-value">{{viewingItem.clientContractNo}}</text></view>
+        <view class="form-item"><text class="form-label">预计发货</text><text class="form-value {{isOverdue(viewingItem) ? 'text-red' : ''}}">{{viewingItem.plannedDelivery}}</text></view>
+        <view class="form-item"><text class="form-label">实际发货</text><text class="form-value">{{isOverdue(viewingItem) ? '逾期' + viewingItem.overdueDays + '天' : viewingItem.actualDelivery}}</text></view>
+        <view class="form-item"><text class="form-label">预计合格</text><text class="form-value">{{viewingItem.plannedQualified}}</text></view>
+        <view class="form-item"><text class="form-label">合格证</text><text class="form-value">{{viewingItem.qualified ? '有' : '无'}}</text></view>
+        <view class="form-item"><text class="form-label">风险</text><risk-badge risk="{{viewingItem.risk}}" /></view>
+      </view>
+    </scroll-view>
+    <view class="modal-footer">
+      <button class="btn-primary btn-sm" bindtap="closeModal">关闭</button>
+    </view>
+  </view>
+</view>
+
+<!-- ========== Delete Modal ========== -->
+<view wx:if="{{showDeleteModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" style="max-width:560rpx;" catchtap="stopPropagation">
+    <view class="modal-header" style="justify-content:center;">
+      <text class="text-lg font-semibold">确认删除？</text>
+    </view>
+    <view class="modal-body text-center">
+      <text class="text-sm text-coffee-500">删除后不可恢复，请确认。</text>
+    </view>
+    <view class="modal-footer" style="justify-content:center;">
+      <button class="btn-secondary btn-sm" bindtap="closeModal">取消</button>
+      <button class="btn-danger btn-sm" bindtap="confirmDelete">确认删除</button>
+    </view>
+  </view>
+</view>

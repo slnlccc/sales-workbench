@@ -1,0 +1,9 @@
+{
+  "name": "schedules",
+  "version": "1.0.0",
+  "description": "日程管理 CRUD",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

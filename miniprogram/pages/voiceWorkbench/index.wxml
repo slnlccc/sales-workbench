@@ -1,0 +1,82 @@
+<view class="container">
+  <view class="card mb-3" style="background:#6F4E37;color:#fff;">
+    <view class="flex justify-between items-center">
+      <view>
+        <text class="text-lg font-bold">语音工作台</text>
+        <text class="text-xs opacity-70" style="display:block;">AI智能分析 · 自动提取事项</text>
+      </view>
+      <button class="btn-secondary btn-sm" bindtap="goCalendar" style="color:#6F4E37;">📅 查看日程</button>
+    </view>
+  </view>
+
+  <view class="card mb-3 chat-container">
+    <block wx:for="{{messages}}" wx:key="index">
+      <view class="flex" style="{{item.type === 'user' ? 'justify-end' : ''}}">
+        <view class="chat-bubble" style="{{item.type === 'user' ? 'background:#6F4E37;color:#fff;' : 'background:#F5F3F0;color:#4A3728;'}}">
+          <text>{{item.text}}</text>
+          <text class="chat-time">{{item.time}}</text>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <view class="card mb-3">
+    <text class="text-sm font-medium text-coffee-800" style="display:block;margin-bottom:16rpx;">输入内容（或语音录入）</text>
+    <textarea 
+      class="input" 
+      style="height:150rpx;"
+      placeholder="请输入工作内容，AI会帮你分析提取事项..."
+      value="{{recordedText}}"
+      bindinput="onInputText"
+    />
+    <view class="flex gap-2 mt-2">
+      <button 
+        class="btn-primary" 
+        style="flex:1;"
+        bindtap="startRecording"
+        disabled="{{isRecording}}"
+      >
+        <text wx:if="{{!isRecording}}">🎙️ 语音录入</text>
+        <text wx:else>⏹️ 录音中 {{recordingSeconds}}s</text>
+      </button>
+      <button class="btn-secondary" bindtap="manualAnalyze">分析提取</button>
+    </view>
+  </view>
+
+  <view wx:if="{{analysisResult}}" class="card mb-3">
+    <view class="flex justify-between items-center mb-2">
+      <text class="text-sm font-medium text-coffee-800">提取结果</text>
+      <button class="btn-primary btn-sm" bindtap="addToSchedule">添加到日程</button>
+    </view>
+    <view wx:for="{{analysisResult.items}}" wx:key="id" class="flex items-center gap-2 mb-2">
+      <view class="checkbox" bindtap="toggleItem" data-idx="{{index}}">
+        <text wx:if="{{item.checked}}">✓</text>
+      </view>
+      <view class="flex-1">
+        <text class="text-sm font-medium">{{item.title}}</text>
+        <text class="text-xs text-coffee-400" style="display:block;">{{item.date}} {{item.time}} · {{item.type}}</text>
+      </view>
+    </view>
+  </view>
+</view>
+
+<!-- Add Schedule Modal -->
+<view wx:if="{{showAddScheduleModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" catchtap="stopPropagation" style="max-width:600rpx;">
+    <view class="modal-header">
+      <text class="text-lg font-semibold">确认添加日程</text>
+      <text class="text-coffee-400" style="font-size:32rpx;" bindtap="closeModal">✕</text>
+    </view>
+    <view class="modal-body">
+      <view wx:for="{{selectedItems}}" wx:key="id" class="flex items-center gap-2 mb-2">
+        <text class="tag tag-green">{{item.type}}</text>
+        <text class="text-sm">{{item.title}}</text>
+        <text class="text-xs text-coffee-400">{{item.date}} {{item.time}}</text>
+      </view>
+    </view>
+    <view class="modal-footer">
+      <button class="btn-secondary btn-sm" bindtap="closeModal">取消</button>
+      <button class="btn-primary btn-sm" bindtap="confirmAdd">确认添加</button>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,24 @@
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+}
+
+.metric-item {
+  background: #F9F5F0;
+  padding: 16rpx;
+  border-radius: 12rpx;
+}
+
+.project-row {
+  padding: 12rpx 0;
+  border-bottom: 2rpx solid #F0EBE5;
+}
+
+.project-row:last-child {
+  border-bottom: none;
+}
+
+button[disabled] {
+  opacity: 0.5;
+}

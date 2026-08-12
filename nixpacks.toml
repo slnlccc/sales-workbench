@@ -1,0 +1,16 @@
+# Railway 构建配置 - 销售工作台原版
+# 构建阶段：安装根目录前端依赖 + server目录后端依赖 + 构建前端
+[phases.install]
+cmds = [
+  "npm install",
+  "cd server && npm install"
+]
+
+[phases.build]
+cmds = [
+  "npm run build"
+]
+
+# 启动阶段：从 server 目录启动后端，后端会 serve ../dist 静态文件
+[start]
+cmd = "cd server && npm start"

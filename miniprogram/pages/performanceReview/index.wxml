@@ -1,0 +1,70 @@
+<view class="container">
+  <view class="card mb-3" style="background:#6F4E37;color:#fff;">
+    <view class="flex justify-between items-center">
+      <view>
+        <text class="text-lg font-bold">业绩复盘</text>
+        <text class="text-xs opacity-70" style="display:block;">数据统计 · 项目分析 · 智能报告</text>
+      </view>
+      <button class="btn-secondary btn-sm" bindtap="generateReport" disabled="{{isGenerating}}" style="color:#6F4E37;">
+        <text wx:if="{{!isGenerating}}">📊 一键生成</text>
+        <text wx:else>⏳ 生成中...</text>
+      </button>
+    </view>
+  </view>
+
+  <view class="card mb-3">
+    <text class="text-sm font-medium text-coffee-800" style="display:block;margin-bottom:16rpx;">核心指标</text>
+    <view class="grid-2">
+      <view wx:for="{{metrics}}" wx:key="label" class="metric-item">
+        <text class="text-xs text-coffee-400">{{item.label}}</text>
+        <text class="text-lg font-bold">{{item.value.toLocaleString()}}{{item.unit}}</text>
+        <text class="text-xs" style="color:#16A34A;">{{item.change}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="card mb-3">
+    <text class="text-sm font-medium text-coffee-800" style="display:block;margin-bottom:16rpx;">项目进展</text>
+    <view wx:for="{{projects}}" wx:key="name" class="project-row">
+      <view class="flex justify-between items-center">
+        <text class="text-sm font-medium">{{item.name}}</text>
+        <text class="tag tag-blue">{{item.status}}</text>
+      </view>
+      <view class="flex justify-between items-center" style="margin-top:4rpx;">
+        <text class="text-xs text-coffee-500">金额：¥{{item.amount.toLocaleString()}}</text>
+        <text class="text-xs text-coffee-500">利润率：{{item.profit}}%</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="card mb-3">
+    <text class="text-sm font-medium text-coffee-800" style="display:block;margin-bottom:16rpx;">客户贡献</text>
+    <view wx:for="{{customers}}" wx:key="name" class="project-row">
+      <view class="flex justify-between items-center">
+        <view class="flex items-center gap-2">
+          <text class="text-sm font-medium">{{item.name}}</text>
+          <text class="tag" style="background:#DC262620;color:#DC2626;">{{item.level}}级</text>
+        </view>
+        <text class="text-sm font-bold">¥{{item.total.toLocaleString()}}</text>
+      </view>
+      <text class="text-xs text-coffee-400" style="margin-top:4rpx;">合作项目数：{{item.count}} 个</text>
+    </view>
+  </view>
+</view>
+
+<!-- Report Modal -->
+<view wx:if="{{showReportModal}}" class="modal-mask" bindtap="closeModal">
+  <view class="modal-content" catchtap="stopPropagation" style="max-height:85vh;">
+    <view class="modal-header">
+      <text class="text-lg font-semibold">复盘报告</text>
+      <text class="text-coffee-400" style="font-size:32rpx;" bindtap="closeModal">✕</text>
+    </view>
+    <scroll-view scroll-y class="modal-body" style="white-space:pre-wrap;">
+      <text class="text-sm text-coffee-800">{{generatedReport}}</text>
+    </scroll-view>
+    <view class="modal-footer">
+      <button class="btn-secondary btn-sm" bindtap="closeModal">关闭</button>
+      <button class="btn-primary btn-sm" bindtap="copyReport">复制内容</button>
+    </view>
+  </view>
+</view>
