@@ -72,13 +72,13 @@ Page({
     competitors: [],
     competitorsLoading: false,
     competitorsLastUpdate: '',
-    // 竞争对手分类筛选
-    competitorFilterName: '全部',
-    competitorFilterChannel: '全部',
-    competitorFilterType: '全部',
-    competitorNames: ['全部'],
-    competitorChannels: ['全部', '公众号', '官网', '招投标', '新闻'],
-    competitorTypes: ['全部'],
+    // 竞争对手分类筛选（按截图顺序固定列表）
+    competitorFilterName: '全部对手',
+    competitorFilterChannel: '全部来源',
+    competitorFilterType: '全部类别',
+    competitorNames: ['全部对手', '中航重机', '三角防务', '钢研高纳', '图南股份', '西部超导', '宝钛股份', '万泽股份', '铂力特', '行业研报'],
+    competitorChannels: ['全部来源', '公众号', '官网', '招投标', '财报', '行业研报'],
+    competitorTypes: ['全部类别', '产能扩张', '技术突破', '订单中标', '资本运作', '客户拓展', '人事变动', '其他'],
     filteredCompetitors: [],
   },
 
@@ -102,18 +102,9 @@ Page({
           const lastUpdate = res.data.lastUpdate
             ? '上次更新 ' + this.formatDate(res.data.lastUpdate)
             : ''
-          // 提取唯一的竞争对手名称和动态类型
-          const nameSet = ['全部']
-          const typeSet = ['全部']
-          competitors.forEach(c => {
-            if (c.competitorName && !nameSet.includes(c.competitorName)) nameSet.push(c.competitorName)
-            if (c.category && !typeSet.includes(c.category)) typeSet.push(c.category)
-          })
           this.setData({
             competitors,
             competitorsLastUpdate: lastUpdate,
-            competitorNames: nameSet,
-            competitorTypes: typeSet,
             competitorsLoading: false,
           }, () => {
             this.applyCompetitorFilter()
@@ -145,9 +136,9 @@ Page({
   applyCompetitorFilter() {
     const { competitors, competitorFilterName, competitorFilterChannel, competitorFilterType } = this.data
     const filtered = competitors.filter(c => {
-      if (competitorFilterName !== '全部' && c.competitorName !== competitorFilterName) return false
-      if (competitorFilterChannel !== '全部' && c.channel !== competitorFilterChannel) return false
-      if (competitorFilterType !== '全部' && c.category !== competitorFilterType) return false
+      if (competitorFilterName !== '全部对手' && c.competitorName !== competitorFilterName) return false
+      if (competitorFilterChannel !== '全部来源' && c.channel !== competitorFilterChannel) return false
+      if (competitorFilterType !== '全部类别' && c.category !== competitorFilterType) return false
       return true
     })
     this.setData({ filteredCompetitors: filtered })
@@ -185,9 +176,9 @@ Page({
    */
   clearCompetitorFilter() {
     this.setData({
-      competitorFilterName: '全部',
-      competitorFilterChannel: '全部',
-      competitorFilterType: '全部',
+      competitorFilterName: '全部对手',
+      competitorFilterChannel: '全部来源',
+      competitorFilterType: '全部类别',
     }, () => {
       this.applyCompetitorFilter()
     })

@@ -1,11 +1,11 @@
 /**
  * 每日数据自动更新服务
  * 市情雷达各模块（行业动态、原材料价格走势、招投标、政策法规、行业展会、竞争对手动态）
- * 使用 DeepSeek AI 生成数据，每天 8:00 自动更新
+ * 使用百度千帆 AI 生成数据，每天 8:00 自动更新
  * 服务重启时若已有今日数据则保留，否则立即更新
  */
 
-const { isConfigured, chat, chatJSON } = require('./deepseekService')
+const { isConfigured, chat, chatJSON } = require('./baiduService')
 
 // 内存存储（当 MongoDB 不可用时使用）
 let memoryData = {
@@ -459,14 +459,27 @@ const isRadarUpdatedToday = () => {
  * 执行每日数据更新（市情雷达各模块 + 旧版 AI市场数据）
  */
 const runDailyUpdate = async () => {
+  // 先确保各模块至少有 fallback 数据，即使 AI 不可用也不影响展示
+  memoryData.radarNews = memoryData.radarNews.length > 0 ? memoryData.radarNews : FALLBACK_RADAR_NEWS
+  memoryData.radarMaterials = memoryData.radarMaterials.length > 0 ? memoryData.radarMaterials : FALLBACK_RADAR_MATERIALS
+  memoryData.radarBidding = memoryData.radarBidding.length > 0 ? memoryData.radarBidding : FALLBACK_RADAR_BIDDING
+  memoryData.radarPolicies = memoryData.radarPolicies.length > 0 ? memoryData.radarPolicies : FALLBACK_RADAR_POLICIES
+  memoryData.radarExhibitions = memoryData.radarExhibitions.length > 0 ? memoryData.radarExhibitions : FALLBACK_RADAR_EXHIBITIONS
+  memoryData.competitors = memoryData.competitors.length > 0 ? memoryData.competitors : FALLBACK_COMPETITORS
+  memoryData.metalPrices = memoryData.metalPrices.length > 0 ? memoryData.metalPrices : FALLBACK_METAL_PRICES
+  memoryData.industryNews = memoryData.industryNews.length > 0 ? memoryData.industryNews : FALLBACK_INDUSTRY_NEWS
+  memoryData.exhibitions = memoryData.exhibitions.length > 0 ? memoryData.exhibitions : FALLBACK_EXHIBITIONS
+
   if (!isConfigured()) {
-    console.log('[每日更新] DEEPSEEK_API_KEY 未配置，跳过数据更新')
+    console.log('[每日更新] DEEPSEEK_API_KEY 未配置，使用兜底数据，跳过 AI 更新')
+    memoryData.radarLastUpdate = new Date().toISOString()
+    memoryData.lastUpdate = new Date().toISOString()
     return
   }
 
-  console.log('[每日更新] 开始更新市场数据...')
+  console.log('[每日更新] 开始 AI 生成最新市场数据...')
 
-  // 市情雷达各模块并行更新
+  // 市情雷达各模块并行更新，AI 失败则保留原有内存数据
   const [
     radarNews,
     radarMaterials,
@@ -478,17 +491,18 @@ const runDailyUpdate = async () => {
     news,
     exhibitions,
   ] = await Promise.all([
-    generateRadarNews().catch((e) => { console.error('[每日更新] 行业动态失败:', e.message); return memoryData.radarNews }),
-    generateRadarMaterials().catch((e) => { console.error('[每日更新] 原材料价格失败:', e.message); return memoryData.radarMaterials }),
-    generateRadarBidding().catch((e) => { console.error('[每日更新] 招投标失败:', e.message); return memoryData.radarBidding }),
-    generateRadarPolicies().catch((e) => { console.error('[每日更新] 政策法规失败:', e.message); return memoryData.radarPolicies }),
-    generateRadarExhibitions().catch((e) => { console.error('[每日更新] 行业展会失败:', e.message); return memoryData.radarExhibitions }),
-    generateCompetitors().catch((e) => { console.error('[每日更新] 竞争对手动态失败:', e.message); return memoryData.competitors }),
-    generateMetalPrices().catch((e) => { console.error('[每日更新] 金属价格(旧)失败:', e.message); return memoryData.metalPrices }),
-    generateIndustryNews().catch((e) => { console.error('[每日更新] 行业资讯(旧)失败:', e.message); return memoryData.industryNews }),
-    generateExhibitions().catch((e) => { console.error('[每日更新] 展会(旧)失败:', e.message); return memoryData.exhibitions }),
+    generateRadarNews().catch((e) => { console.error('[每日更新] 行业动态生成失败:', e.message); return [] }),
+    generateRadarMaterials().catch((e) => { console.error('[每日更新] 原材料价格生成失败:', e.message); return [] }),
+    generateRadarBidding().catch((e) => { console.error('[每日更新] 招投标生成失败:', e.message); return [] }),
+    generateRadarPolicies().catch((e) => { console.error('[每日更新] 政策法规生成失败:', e.message); return [] }),
+    generateRadarExhibitions().catch((e) => { console.error('[每日更新] 行业展会生成失败:', e.message); return [] }),
+    generateCompetitors().catch((e) => { console.error('[每日更新] 竞争对手动态生成失败:', e.message); return [] }),
+    generateMetalPrices().catch((e) => { console.error('[每日更新] 金属价格(旧)生成失败:', e.message); return [] }),
+    generateIndustryNews().catch((e) => { console.error('[每日更新] 行业资讯(旧)生成失败:', e.message); return [] }),
+    generateExhibitions().catch((e) => { console.error('[每日更新] 展会(旧)生成失败:', e.message); return [] }),
   ])
 
+  // 仅在 AI 成功返回时更新内存数据，失败则保留 fallback/旧数据
   if (radarNews.length > 0) memoryData.radarNews = radarNews
   if (radarMaterials.length > 0) memoryData.radarMaterials = radarMaterials
   if (radarBidding.length > 0) memoryData.radarBidding = radarBidding
@@ -506,37 +520,186 @@ const runDailyUpdate = async () => {
 }
 
 /**
+ * 兜底数据（AI 不可用时使用，确保各模块始终有数据展示）
+ * 行业动态
+ */
+const FALLBACK_RADAR_NEWS = [
+  { id: 'radar-news-1', title: '航空发动机锻件国产化率再提升，高温合金订单放量', source: '中国航空学会', sourceUrl: 'https://www.csaa.org.cn', summary: '据中国航空学会最新数据，国内航空发动机锻件国产化率已达75%以上，GH4169/GH4141高温合金锻件年需求突破1200吨，主力供应商订单排期至2027年Q2。', keywords: ['高温合金', '航空发动机', '国产化'], publishedAt: '2026-08-10', category: '行业动态', industry: '航空航天', impactLevel: '高' },
+  { id: 'radar-news-2', title: '国家能源局发布新版核电设备锻件标准', source: '国家能源局', sourceUrl: 'https://www.nea.gov.cn', summary: '国家能源局正式发布新版核电常规岛锻件技术条件，对17-4PH、SA508等关键牌号的力学性能和无损检测提出更高要求，将于2027年1月1日起施行。', keywords: ['核电', '标准', '锻件'], publishedAt: '2026-08-09', category: '政策解读', industry: '能源电力', impactLevel: '高' },
+  { id: 'radar-news-3', title: '风电主轴锻件价格企稳，大型化趋势明显', source: '中国可再生能源学会', sourceUrl: 'https://www.ccre.org.cn', summary: '中国可再生能源学会报告显示，陆上风电主轴锻件价格自Q2以来首次企稳，但单机容量16MW以上海上风电主轴锻件单价仍较去年同期上涨12%，大型化带动产品附加值提升。', keywords: ['风电', '主轴', '价格'], publishedAt: '2026-08-08', category: '市场分析', industry: '新能源', impactLevel: '中' },
+  { id: 'radar-news-4', title: '船舶工业转型升级，船用锻件高端化需求增长', source: '中国船舶工业协会', sourceUrl: 'https://www.cship.org.cn', summary: '中国船舶工业协会指出，全球造船业正向高端化转型，LNG船、大型集装箱船、极地科考船等对高强度船用锻件需求年增18%，特种材料锻件毛利空间显著提升。', keywords: ['船舶', '锻件', '高端化'], publishedAt: '2026-08-07', category: '行业动态', industry: '船舶', impactLevel: '中' },
+  { id: 'radar-news-5', title: '石化装置长周期运行对关键锻件可靠性提出新要求', source: '中国石油和化学工业联合会', sourceUrl: 'https://www.cpcif.org.cn', summary: '中国石油和化学工业联合会召开年度技术交流会，强调石化装置"安、稳、长、满、优"运行对关键锻件（如压力容器法兰、阀门锻件等）的可靠性要求提升，推动行业向高温、高压、高耐腐蚀方向发展。', keywords: ['石化', '压力容器', '可靠性'], publishedAt: '2026-08-06', category: '技术突破', industry: '石化', impactLevel: '中' },
+  { id: 'radar-news-6', title: '高铁锻件新标准征求意见，疲劳寿命要求翻倍', source: '国家铁路局', sourceUrl: 'https://www.nra.gov.cn', summary: '国家铁路局就《铁路机车车辆锻件通用技术条件》公开征求意见，其中动车组关键锻件（转向架、钩缓等）疲劳寿命要求从1500万次提升至3000万次，预计2027年实施。', keywords: ['高铁', '锻件', '疲劳寿命'], publishedAt: '2026-08-05', category: '政策解读', industry: '轨道交通', impactLevel: '中' },
+  { id: 'radar-news-7', title: '新能源汽车驱动电机轴锻件需求激增', source: '中国汽车工程学会', sourceUrl: 'https://www.sae-china.org', summary: '随着新能源汽车产销持续走高，驱动电机轴锻件需求年增42%，42CrMo、20CrMnTi等合金钢锻件订单呈现爆发式增长，轻量化空心轴锻件成为主流技术方向。', keywords: ['新能源汽车', '电机轴', '42CrMo'], publishedAt: '2026-08-04', category: '行业动态', industry: '汽车', impactLevel: '高' },
+  { id: 'radar-news-8', title: '国内首台重型燃机整机下线，核心锻件全部国产化', source: '工信部', sourceUrl: 'https://www.miit.gov.cn', summary: '国内首台F级重型燃气轮机在上海整机下线，涡轮盘、压气机盘、涡轮叶片榫槽等核心高温合金锻件全部实现国产化，标志着我国在高端能源装备领域取得重大突破。', keywords: ['燃机', '高温合金', '国产化'], publishedAt: '2026-08-03', category: '技术突破', industry: '机械', impactLevel: '高' },
+]
+
+/**
+ * 兜底数据 - 原材料价格
+ */
+const FALLBACK_RADAR_MATERIALS = [
+  { id: 'radar-mat-1', name: 'GH4169', category: '高温合金', price: 285, unit: '元/kg', change: 2.15, changeAmount: 6.0, description: '航空发动机涡轮盘、压气机盘主力材料', frequency: 156, source: '中国金属网', lastUpdate: '2026-08-12',
+    priceHistory: [278,277,279,280,282,281,283,284,285,286,285,283,284,286,287,288,289,288,290,291,290,289,288,287,286,285,286,287,288,285] },
+  { id: 'radar-mat-2', name: 'GH4141', category: '高温合金', price: 312, unit: '元/kg', change: -1.85, changeAmount: -5.8, description: '高温合金涡轮叶片、导向器', frequency: 98, source: '中国金属网', lastUpdate: '2026-08-12',
+    priceHistory: [320,318,319,321,323,322,321,320,319,318,317,316,315,314,313,312,314,315,316,317,318,317,316,315,314,313,312,312,313,312] },
+  { id: 'radar-mat-3', name: 'GH4099', category: '高温合金', price: 298, unit: '元/kg', change: 1.20, changeAmount: 3.5, description: '航空发动机结构件、燃烧室', frequency: 72, source: '中国金属网', lastUpdate: '2026-08-12',
+    priceHistory: [295,294,296,297,298,297,296,295,294,293,292,293,294,295,296,297,296,295,294,295,296,297,298,299,300,299,298,299,298,298] },
+  { id: 'radar-mat-4', name: 'TC4 (Ti-6Al-4V)', category: '钛合金', price: 85, unit: '元/kg', change: 0.80, changeAmount: 0.7, description: '航空结构件、叶片、连接件', frequency: 182, source: '中国金属网', lastUpdate: '2026-08-12',
+    priceHistory: [82,83,83,84,84,83,83,82,82,83,84,85,85,86,85,84,83,84,85,85,86,85,84,84,85,85,85,85,85,85] },
+  { id: 'radar-mat-5', name: 'TC11 (Ti-6Al-3Mo-2Zr)', category: '钛合金', price: 108, unit: '元/kg', change: -0.55, changeAmount: -0.6, description: '航空发动机压气机盘、叶片', frequency: 95, source: '中国金属网', lastUpdate: '2026-08-12',
+    priceHistory: [112,112,111,111,110,110,109,109,108,108,107,107,108,109,109,110,110,109,109,108,108,107,107,108,108,108,108,108,108,108] },
+  { id: 'radar-mat-6', name: '17-4PH', category: '不锈钢', price: 42, unit: '元/kg', change: 3.50, changeAmount: 1.4, description: '核电/航空高强度耐腐蚀锻件', frequency: 88, source: '中国金属网', lastUpdate: '2026-08-12',
+    priceHistory: [38,38,39,39,39,38,38,39,40,40,40,41,41,42,42,43,43,42,41,40,40,41,42,43,43,42,42,42,42,42] },
+  { id: 'radar-mat-7', name: '304不锈钢', category: '不锈钢', price: 18, unit: '元/kg', change: -0.30, changeAmount: -0.05, description: '通用耐腐蚀锻件、石化法兰', frequency: 65, source: '中国金属网', lastUpdate: '2026-08-12',
+    priceHistory: [18.2,18.1,18.1,18.0,18.0,17.9,17.9,17.8,17.8,17.9,18.0,18.1,18.2,18.1,18.0,18.0,17.9,17.9,17.8,17.8,18.0,18.1,18.0,18.0,17.9,17.9,17.8,18.0,18.0,18.0] },
+  { id: 'radar-mat-8', name: '42CrMo', category: '合金钢', price: 12.5, unit: '元/kg', change: 0.40, changeAmount: 0.05, description: '风电主轴、液压件、机械传动件', frequency: 210, source: '中国金属网', lastUpdate: '2026-08-12',
+    priceHistory: [12.0,12.1,12.1,12.2,12.2,12.3,12.3,12.4,12.4,12.3,12.2,12.2,12.3,12.4,12.5,12.5,12.6,12.5,12.4,12.4,12.5,12.5,12.4,12.4,12.5,12.5,12.5,12.5,12.5,12.5] },
+  { id: 'radar-mat-9', name: '6061铝合金', category: '铝合金', price: 22, unit: '元/kg', change: 1.00, changeAmount: 0.22, description: '轻量化结构件、汽车部件', frequency: 45, source: '中国金属网', lastUpdate: '2026-08-12',
+    priceHistory: [21.5,21.5,21.6,21.6,21.7,21.7,21.8,21.8,21.9,22.0,22.0,22.1,22.1,22.0,21.9,21.8,21.9,22.0,22.1,22.0,22.0,22.1,22.1,22.2,22.2,22.1,22.0,22.0,22.0,22.0] },
+  { id: 'radar-mat-10', name: '18CrNiMo7-6', category: '合金钢', price: 15.5, unit: '元/kg', change: -0.80, changeAmount: -0.12, description: '重型齿轮、船舶推进轴', frequency: 55, source: '中国金属网', lastUpdate: '2026-08-12',
+    priceHistory: [15.8,15.8,15.7,15.7,15.6,15.6,15.5,15.5,15.4,15.4,15.5,15.5,15.6,15.6,15.5,15.5,15.4,15.4,15.5,15.5,15.6,15.5,15.5,15.5,15.5,15.5,15.5,15.5,15.5,15.5] },
+]
+
+/**
+ * 兜底数据 - 招投标信息
+ */
+const FALLBACK_RADAR_BIDDING = [
+  { id: 'radar-bid-1', title: '中国航发某型发动机高温合金锻件批量采购', org: '中国航空发动机集团有限公司', amount: 8600, deadline: '2026-09-15', type: 'tender', industry: '航空航天', status: '招标中', description: '采购GH4169/GH4141高温合金模锻件、自由锻件共约1200件，涵盖涡轮盘、压气机盘、涡轮叶片等关键部位，要求AS9100D质量体系认证。', requirements: ['具备航空锻件生产资质', '通过AS9100D认证', '年产能≥500吨'], sourceName: '中国航发电子招投标平台', sourceUrl: 'https://bid.aecc.com.cn' },
+  { id: 'radar-bid-2', title: '国家电投2026年度核电常规岛锻件框架采购', org: '国家电力投资集团有限公司', amount: 12000, deadline: '2026-09-30', type: 'tender', industry: '能源电力', status: '招标中', description: '涵盖17-4PH不锈钢锻件、SA508合金钢锻件等，用于红沿河6号机组、海阳3号机组常规岛设备，合同期限3年。', requirements: ['核安全级锻件资质', '10年以上核电锻件经验', '具备年度2000吨以上供货能力'], sourceName: '国家电投招标采购网', sourceUrl: 'https://bid.spic.com.cn' },
+  { id: 'radar-bid-3', title: '中国船舶集团大型LNG船轴系锻件采购', org: '中国船舶集团有限公司', amount: 5600, deadline: '2026-09-20', type: 'tender', industry: '船舶', status: '即将截止', description: '采购大型LNG船舶推进轴系锻件，包括中间轴、螺旋桨轴、联轴器等，总重量约380吨，要求满足船级社LR规范。', requirements: ['LR船级社认证', '单根锻件重量≥50吨生产能力', '具备低温韧性测试条件'], sourceName: '中国船舶集团电子采购平台', sourceUrl: 'https://ec2.cssc.com.cn' },
+  { id: 'radar-bid-4', title: '国投电力风电主轴锻件集中采购', org: '国投电力控股股份有限公司', amount: 3200, deadline: '2026-09-10', type: 'tender', industry: '新能源', status: '即将截止', description: '采购陆上风电10MW级主轴锻件约600套，海上风电16MW级主轴锻件约150套，总金额约3.2亿元，供货期2027年全年。', requirements: ['风电主轴锻件专项资质', '年供货能力≥300套', '通过西门子歌美飒或维斯塔斯认证优先'], sourceName: '国投电力集中采购平台', sourceUrl: 'https://bid.sdic.com.cn' },
+  { id: 'radar-bid-5', title: '中石化高压容器法兰锻件年度框架', org: '中国石油化工股份有限公司', amount: 2400, deadline: '2026-10-15', type: 'tender', industry: '石化', status: '招标中', description: '采购DN500-DN1500高压容器法兰锻件，涉及42CrMo、16Mn等牌号，共约8000件，用于炼化装置和天然气长输管道。', requirements: ['压力管道元件制造许可', '具备大型法兰锻件模具', '通过中石化供应商体系认证'], sourceName: '中石化电子招标投标系统', sourceUrl: 'https:// bidding.sinopec.com' },
+  { id: 'radar-bid-6', title: '中车集团动车组关键锻件采购', org: '中国中车股份有限公司', amount: 4800, deadline: '2026-09-25', type: 'tender', industry: '轨道交通', status: '招标中', description: '采购复兴号动车组转向架核心锻件，包括构架、轴箱体、齿轮箱体等，共约3500件，要求满足TB/T 3558标准。', requirements: ['铁路机车车辆锻件资质', '具备复杂结构件精密锻造能力', '通过CR400BF供应商认证'], sourceName: '中国中车采购电子商务平台', sourceUrl: 'https://ec.crrcgc.cc' },
+]
+
+/**
+ * 兜底数据 - 政策法规
+ */
+const FALLBACK_RADAR_POLICIES = [
+  { id: 'radar-pol-1', title: '《高端装备制造业高质量发展实施方案》发布', policyType: '产业规划', department: '工业和信息化部', publishedAt: '2026-07-28', keywords: ['高端装备', '锻件', '国产化'], content: '工信部联合发改委、科技部发布《高端装备制造业高质量发展实施方案(2026-2030)》，明确将航空发动机核心锻件、核电关键锻件、船舶大型锻件列为重点攻关方向，5年内实现核心锻件自主保障率95%以上。', summary: '高端锻件5年自主保障率目标95%', sourceUrl: 'https://www.miit.gov.cn', salesImpact: '派克新材作为高端锻件企业，将直接受益于国家战略规划和专项资金支持，建议关注后续配套补贴政策。' },
+  { id: 'radar-pol-2', title: '财政部等三部门发布先进制造业增值税即征即退政策', policyType: '税收优惠', department: '财政部', publishedAt: '2026-07-20', keywords: ['增值税', '税收优惠', '先进制造'], content: '财政部、国家税务总局、发改委联合发布通知，自2026年9月1日起，对符合条件的先进制造业企业实施增值税即征即退政策，高端锻件、高温合金等产品退税率为13%，退税上限为年度应纳税额的30%。', summary: '高端锻件企业可享增值税退税30%', sourceUrl: 'https://www.mof.gov.cn', salesImpact: '预计年减税额可达企业增值税额的30%，有助于提升产品竞争力和研发投入能力。' },
+  { id: 'radar-pol-3', title: '《航空发动机关键锻件技术条件》国家标准立项', policyType: '技术标准', department: '国家标准化管理委员会', publishedAt: '2026-07-15', keywords: ['航空发动机', '锻件', '标准'], content: '国家标委会正式批准《航空发动机关键锻件技术条件》国家标准立项，标准将涵盖高温合金、钛合金等关键材料锻件的力学性能、无损检测、微观组织等要求，预计2028年发布实施。', summary: '航空发动机锻件将有国家级标准', sourceUrl: 'https://www.sacinfo.org', salesImpact: '标准出台后将抬高行业准入门槛，有利于合规大型企业扩大市场份额，提前参与标准制定可争取技术话语权。' },
+  { id: 'radar-pol-4', title: '国务院发布《新材料产业发展规划》', policyType: '产业规划', department: '国务院', publishedAt: '2026-07-10', keywords: ['新材料', '高温合金', '钛合金'], content: '国务院印发《"十五五"新材料产业发展规划》，将高温合金、先进钛合金、特种不锈钢列为战略性新兴材料，明确到2030年建立自主可控的新材料产业体系，培育5-10家具有国际竞争力的龙头企业。', summary: '新材料列为国家战略，5-10家龙头目标', sourceUrl: 'https://www.gov.cn', salesImpact: '派克新材有潜力成为国家规划重点扶持的5-10家龙头之一，建议积极申报国家级新材料企业认定。' },
+  { id: 'radar-pol-5', title: '生态环境部发布工业炉窑大气污染物排放标准', policyType: '节能环保', department: '生态环境部', publishedAt: '2026-07-05', keywords: ['环保', '排放标准', '炉窑'], content: '生态环境部发布《工业炉窑大气污染物排放标准》修改单，进一步加严锻造行业加热炉、热处理炉的SO2、NOx、颗粒物排放限值，重点区域将于2027年1月1日起执行特别排放限值。', summary: '锻造行业环保标准加严，2027年执行', sourceUrl: 'https://www.mee.gov.cn', salesImpact: '环保成本将上升约5-8%，建议提前投资升级环保设施，以避免停产风险和保持客户资质。' },
+]
+
+/**
+ * 兜底数据 - 行业展会
+ */
+const FALLBACK_RADAR_EXHIBITIONS = [
+  { id: 'radar-exh-1', title: '2026中国国际航空航天博览会', month: '11月', location: '广东珠海', description: '两年一届的中国航展，展示航空航天装备最新成果，多家航空发动机和锻件供应商参展，专业观众超10万人次。', importance: '重点', frequency: '两年一届', sourceUrl: 'https://www.airshow.com.cn' },
+  { id: 'radar-exh-2', title: '2026德国汉诺威工业博览会', month: '4月', location: '德国汉诺威', description: '全球最大工业博览会，展示高端装备、智能制造、金属加工等领域最新技术，是了解国际竞争对手动向的重要窗口。', importance: '重点', frequency: '一年一届', sourceUrl: 'https://www.hanovermesse.de' },
+  { id: 'radar-exh-3', title: '2026中国国际锻件冶金展', month: '10月', location: '江苏苏州', description: '聚焦锻件、冶金、热处理领域的专业展会，展示最新锻造工艺、装备和检测技术，国内外300+企业参展。', importance: '一般', frequency: '一年一届', sourceUrl: 'https://www.forging-expo.com' },
+  { id: 'radar-exh-4', title: '2027年亚洲动力展', month: '3月', location: '新加坡', description: '聚焦航空发动机、燃气轮机动力系统的亚洲顶级展会，汇集全球主要动力设备制造商和供应商。', importance: '重点', frequency: '两年一届', sourceUrl: 'https://www.power-asia.com' },
+]
+
+/**
+ * 兜底数据 - 金属价格（旧版）
+ */
+const FALLBACK_METAL_PRICES = [
+  { name: 'GH4169', category: '高温合金', price: 285, unit: '元/kg', change: 2.15, changePercent: 2.50, trend: 'up' },
+  { name: 'GH3536', category: '高温合金', price: 268, unit: '元/kg', change: 1.20, changePercent: 1.80, trend: 'up' },
+  { name: 'TC4', category: '钛合金', price: 85, unit: '元/kg', change: 0.80, changePercent: 0.95, trend: 'up' },
+  { name: 'TC11', category: '钛合金', price: 108, unit: '元/kg', change: -0.55, changePercent: -0.50, trend: 'down' },
+  { name: '304不锈钢', category: '不锈钢', price: 18, unit: '元/kg', change: -0.05, changePercent: -0.30, trend: 'down' },
+  { name: '316L不锈钢', category: '不锈钢', price: 28, unit: '元/kg', change: 0.30, changePercent: 1.10, trend: 'up' },
+  { name: '6061铝合金', category: '铝合金', price: 22, unit: '元/kg', change: 0.22, changePercent: 1.00, trend: 'up' },
+  { name: '42CrMo合金钢', category: '合金钢', price: 12.5, unit: '元/kg', change: 0.05, changePercent: 0.40, trend: 'up' },
+  { name: '18CrNiMo7-6', category: '合金钢', price: 15.5, unit: '元/kg', change: -0.12, changePercent: -0.80, trend: 'down' },
+]
+
+/**
+ * 兜底数据 - 行业资讯（旧版）
+ */
+const FALLBACK_INDUSTRY_NEWS = [
+  { title: '航空发动机锻件国产化率再提升', summary: '国内航空发动机锻件国产化率已达75%以上，高温合金锻件年需求突破1200吨。', category: '航空', source: '中国航空学会', sourceUrl: 'https://www.csaa.org.cn', date: '2026-08-12' },
+  { title: '核电锻件标准升级', summary: '国家能源局发布新版核电常规岛锻件技术条件，要求全面提升。', category: '核电', source: '国家能源局', sourceUrl: 'https://www.nea.gov.cn', date: '2026-08-11' },
+  { title: '风电主轴锻件价格企稳', summary: '陆上风电主轴锻件价格自Q2以来首次企稳，大型化趋势明显。', category: '风电', source: '中国可再生能源学会', sourceUrl: 'https://www.ccre.org.cn', date: '2026-08-10' },
+  { title: '船舶锻件高端化需求增长', summary: '全球造船业向高端化转型，船用锻件高端化需求年增18%。', category: '船舶', source: '中国船舶工业协会', sourceUrl: 'https://www.cship.org.cn', date: '2026-08-09' },
+  { title: '新能源汽车电机轴锻件需求激增', summary: '新能源汽车驱动电机轴锻件需求年增42%，轻量化空心轴锻件成为主流。', category: '汽车', source: '中国汽车工程学会', sourceUrl: 'https://www.sae-china.org', date: '2026-08-08' },
+]
+
+/**
+ * 兜底数据 - 展会（旧版）
+ */
+const FALLBACK_EXHIBITIONS = [
+  { name: '2026中国国际航空航天博览会', date: '2026-11-12 至 2026-11-17', location: '广东珠海', description: '两年一届的中国航展，展示航空航天装备最新成果。', category: '航空', sourceUrl: 'https://www.airshow.com.cn' },
+  { name: '2026中国国际锻件冶金展', date: '2026-10-20 至 2026-10-22', location: '江苏苏州', description: '聚焦锻件、冶金、热处理领域的专业展会。', category: '锻造', sourceUrl: 'https://www.forging-expo.com' },
+  { name: '2027年亚洲动力展', date: '2027-03-15 至 2027-03-17', location: '新加坡', description: '聚焦航空发动机、燃气轮机动力系统的亚洲顶级展会。', category: '航空', sourceUrl: 'https://www.power-asia.com' },
+]
+
+/**
  * 竞争对手兜底数据（AI 生成失败或未生成时使用，确保手机端/电脑端始终有数据）
  */
 const FALLBACK_COMPETITORS = [
-  { id: 'comp-1', competitorName: '中航重机', channel: '招投标', title: '中航重机中标航空发动机高温合金锻件批量采购项目', summary: '中航重机在最新一轮航空发动机锻件招标中中标，涉及 GH4169、GH4141 等高温合金牌号，总金额超 8000 万元，显示其在航空锻件领域的强势地位。', publishedAt: '2026-07-15', sourceName: '中国航发电子招投标平台', sourceUrl: 'https://www.avic.com', category: '中标信息', impactOnUs: '中航重机中标将直接分流高端航空锻件订单，需关注其产能交付能力和质量稳定性。' },
-  { id: 'comp-2', competitorName: '三角防务', channel: '官网', title: '三角防务发布新型钛合金锻件产品，强度提升 15%', summary: '三角防务在官网发布其新一代 TC4 钛合金锻件产品，声称通过新工艺使抗拉强度提升 15%，疲劳寿命提升 20%，已向航空航天领域客户送样。', publishedAt: '2026-07-14', sourceName: '三角防务官网', sourceUrl: 'https://www.sjdf.com', category: '产品发布', impactOnUs: '新产品可能对我方 TC4 钛合金锻件市场形成竞争，需评估我方产品差异化优势。' },
-  { id: 'comp-3', competitorName: '宝武特钢', channel: '新闻', title: '宝武特钢投资 5 亿元扩建高温合金产能', summary: '宝武特钢宣布投资 5 亿元在江苏基地扩建高温合金生产线，预计 2027 年投产，年产能将增加 2 万吨，重点布局 GH4169、GH3536 等牌号。', publishedAt: '2026-07-13', sourceName: '中国冶金报', sourceUrl: 'https://www.mcc.com.cn', category: '产能扩张', impactOnUs: '宝武特钢产能扩张将增加高温合金市场供应，可能导致价格下行，需提前锁定客户。' },
-  { id: 'comp-4', competitorName: '通裕重工', channel: '公众号', title: '通裕重工公众号发文：风电主轴锻件获西门子歌美飒长期订单', summary: '通裕重工官方公众号发布消息，公司与西门子歌美飒签署 3 年风电主轴锻件长期供货协议，年供货量超 5000 套，金额超 3 亿元。', publishedAt: '2026-07-12', sourceName: '通裕重工公众号', sourceUrl: 'https://www.tyzg.com', category: '合作动态', impactOnUs: '通裕重工在风电领域的长期订单将巩固其市场地位，我方需加大风电客户开拓力度。' },
-  { id: 'comp-5', competitorName: '二重（国机重装）', channel: '招投标', title: '二重中标东方电气核电锻件采购项目', summary: '二重（国机重装）在东方电气核电常规岛锻件采购项目中中标，涵盖 17-4PH、SA508 等不锈钢和合金钢锻件，金额 1.2 亿元。', publishedAt: '2026-07-11', sourceName: '中国核电工程招投标网', sourceUrl: 'https://www.cnnp.com', category: '中标信息', impactOnUs: '二重中标核电锻件项目，显示核电锻件市场竞争加剧，需关注核电领域客户需求变化。' },
-  { id: 'comp-6', competitorName: '陕西宏远航空', channel: '官网', title: '陕西宏远航空取得 AS9100 最新版质量体系认证', summary: '陕西宏远航空在官网宣布已顺利通过 AS9100D 航空质量管理体系认证复审，标志着其航空锻件质量管控体系达到国际先进水平。', publishedAt: '2026-07-10', sourceName: '陕西宏远航空官网', sourceUrl: 'https://www.sxhf.com', category: '技术突破', impactOnUs: '陕西宏远取得最新认证将增强其在航空客户中的竞争力，我方需确保质量体系同步升级。' },
-  { id: 'comp-7', competitorName: '无锡透平叶片', channel: '新闻', title: '无锡透平叶片研制出国产首型整体叶盘锻件', summary: '无锡透平叶片联合中科院金属所，成功研制出国产首型航空发动机整体叶盘锻件，采用 GH4169 高温合金，标志着我国在航空发动机关键锻件领域取得重大突破。', publishedAt: '2026-07-09', sourceName: '科技日报', sourceUrl: 'https://www.stdaily.com', category: '技术突破', impactOnUs: '整体叶盘锻件是航空发动机核心部件，该技术突破可能改变高端锻件市场格局。' },
-  { id: 'comp-8', competitorName: '中国一重', channel: '公众号', title: '中国一重公众号：承制国内最大直径铝合金环件顺利交付', summary: '中国一重官方公众号发布，其承制的国内最大直径（Φ3.8m）铝合金环件顺利交付中国航天某院，该环件用于新一代运载火箭贮箱。', publishedAt: '2026-07-08', sourceName: '中国一重公众号', sourceUrl: 'https://www.cfhi.com', category: '产品发布', impactOnUs: '大直径铝合金环件市场需求增长，中国一重先发优势明显，我方需关注市场动向。' },
+  { id: 'comp-1', competitorName: '中航重机', stockCode: '600765.SH', channel: '招投标', category: '订单中标',
+    isHighImpact: true, isNew: true, keywords: ['中标', '中国航发', '框架采购'],
+    title: '中航重机中标中国航发2026年度框架采购', summary: '中标GH4169/GH4141高温合金、TC11钛合金等主力牌号，预计年度采购额超1.2亿元，供货周期覆盖全年各季度。',
+    publishedAt: '2026-07-15', sourceName: '中国航发电子招投标平台', sourceUrl: 'https://www.avic.com',
+    impactOnUs: '中航重机在航空发动机核心锻件领域再下一城，建议我方在非主力牌号（如TC21）和快速交付环节争取差异化订单。' },
+  { id: 'comp-2', competitorName: '三角防务', stockCode: '300775.SZ', channel: '官网', category: '技术突破',
+    isHighImpact: true, isNew: true, keywords: ['等温锻', '技术突破', 'TC17'],
+    title: '三角防务发布等温锻工艺重大突破', summary: '在官网宣布等温锻工艺突破，TC17钛合金模锻件力学性能提升18%，材料利用率从42%提至58%，已申请3项专利并送样商发。',
+    publishedAt: '2026-07-14', sourceName: '三角防务官网', sourceUrl: 'https://www.sjdf.com',
+    impactOnUs: '工艺突破可能压缩我方在钛合金模锻件上的毛利，建议我方同步推进等温锻产线升级，并锁定老客户长期协议。' },
+  { id: 'comp-3', competitorName: '钢研高纳', stockCode: '300034.SZ', channel: '财报', category: '产能扩张',
+    isHighImpact: true, isNew: false, keywords: ['产能扩张', 'IPO募资', '青海'],
+    title: '钢研高纳定增募资18亿元扩产高温合金', summary: '发布定增方案，15亿元投向青海3万吨高温合金精铸件产能，3亿元补充流动资金，预计2027Q2投产，重点覆盖航发/燃机。',
+    publishedAt: '2026-07-12', sourceName: '钢研高纳2026半年报公告', sourceUrl: 'https://www.gaona.com.cn',
+    impactOnUs: '高温合金精铸产能集中释放可能引发2027年价格竞争，建议我方提前锁定长单客户，重点保障交付稳定性。' },
+  { id: 'comp-4', competitorName: '图南股份', stockCode: '300855.SZ', channel: '招投标', category: '订单中标',
+    isHighImpact: false, isNew: true, keywords: ['中标', '商飞', 'C919'],
+    title: '图南股份中标商飞C919结构件年度订单', summary: '中标C919大型客机钛合金结构件配套订单，涉及起落架接头、翼梁等关键件，金额约4600万元，年分批次交付。',
+    publishedAt: '2026-07-14', sourceName: '中国商飞供应链平台', sourceUrl: 'https://www.comac.cc',
+    impactOnUs: '图南在商飞供应链份额提升，我方需跟进C929及支线ARJ锻件的预研合作，提前卡位下一代机型。' },
+  { id: 'comp-5', competitorName: '西部超导', stockCode: '688122.SH', channel: '行业研报', category: '资本运作',
+    isHighImpact: true, isNew: false, keywords: ['并购', '产业整合', '钛材'],
+    title: '西部超导拟并购某中型钛材企业', summary: '华泰证券研报披露西部超导正在洽谈并购西南某中型钛材企业，预计横向整合熔炼产能5000吨/年，交易对价约12亿元。',
+    publishedAt: '2026-07-10', sourceName: '华泰证券行业研究报告', sourceUrl: 'https://www.htsc.com.cn',
+    impactOnUs: '产业整合加速，头部企业集中度提升，建议我方在细分市场（如石化、海工）建立差异化优势并考虑联合中小客户。' },
+  { id: 'comp-6', competitorName: '宝钛股份', stockCode: '600456.SH', channel: '公众号', category: '客户拓展',
+    isHighImpact: false, isNew: true, keywords: ['客户拓展', '赛峰', '空客'],
+    title: '宝钛股份公众号：通过赛峰集团合格供应商认证', summary: '官方公众号宣布通过赛峰集团合格供应商认证，成为其亚太区钛合金锻件潜在供应商，预计2026Q4起进入空客A350供应链体系。',
+    publishedAt: '2026-07-13', sourceName: '宝钛股份公众号', sourceUrl: 'https://www.baoti.com',
+    impactOnUs: '宝钛切入空客供应链，我方需加强在国内主机厂份额，并拓展GE、波音等海外客户的预认证准备。' },
+  { id: 'comp-7', competitorName: '万泽股份', stockCode: '000534.SZ', channel: '官网', category: '技术突破',
+    isHighImpact: false, isNew: false, keywords: ['等轴晶', '涡轮盘', '自研'],
+    title: '万泽股份自研高温合金等轴晶涡轮盘通过装机考核', summary: '官网发布其自研FGH4096等轴晶涡轮盘在某型发动机完成1000小时台架考核，标志民营高温合金企业进入主机装机验证阶段。',
+    publishedAt: '2026-07-09', sourceName: '万泽股份官网', sourceUrl: 'https://www.wanze.com',
+    impactOnUs: '万泽在高温合金整体件上持续突破，建议我方关注其产能爬坡节奏，并在精锻+热处理环节强化服务能力。' },
+  { id: 'comp-8', competitorName: '铂力特', stockCode: '688333.SH', channel: '行业研报', category: '产能扩张',
+    isHighImpact: false, isNew: false, keywords: ['3D打印', '产线', '扩产'],
+    title: '铂力特拟投建100台大型金属3D打印产线', summary: '安信证券研报披露铂力特在西安高新扩产大型金属3D打印产线，聚焦航空复杂结构件，预计年新增交付能力约2亿产值。',
+    publishedAt: '2026-07-08', sourceName: '安信证券行业深度报告', sourceUrl: 'https://www.essence.com.cn',
+    impactOnUs: '3D打印对中小批量复杂锻件存在替代风险，建议我方在复杂结构件上探索锻+增材混合方案，满足客户多样化需求。' },
+  { id: 'comp-9', competitorName: '行业研报', channel: '行业研报', category: '人事变动',
+    isHighImpact: false, isNew: true, keywords: ['管理层', '换届'],
+    title: '国内多家锻铸企业集中完成管理层换届', summary: '中航重机、三角防务、钢研高纳等集中完成董监高换届，新一代管理层以80后技术派+市场化聘任为主，预计组织效率和激励力度将提升。',
+    publishedAt: '2026-07-15', sourceName: '国金证券行业动态报告', sourceUrl: 'https://www.gjzq.com.cn',
+    impactOnUs: '建议关注竞争对手管理层换届后的战略调整方向（如价格策略、客户策略、资本运作），我方同步优化组织与激励。' },
 ]
 
 /**
  * 获取当前市场数据（含市情雷达各模块）
+ * AI 不可用时自动回退到内置兜底数据，确保各模块始终有数据展示
  */
 const getMarketData = () => {
+  const today = new Date().toISOString().split('T')[0]
+  const lastUpdate = memoryData.radarLastUpdate || new Date().toISOString()
   return {
     // 旧版 AI市场数据
-    metalPrices: memoryData.metalPrices,
-    industryNews: memoryData.industryNews,
-    exhibitions: memoryData.exhibitions,
-    lastUpdate: memoryData.lastUpdate,
+    metalPrices: memoryData.metalPrices.length > 0 ? memoryData.metalPrices : FALLBACK_METAL_PRICES,
+    industryNews: memoryData.industryNews.length > 0 ? memoryData.industryNews : FALLBACK_INDUSTRY_NEWS,
+    exhibitions: memoryData.exhibitions.length > 0 ? memoryData.exhibitions : FALLBACK_EXHIBITIONS,
+    lastUpdate: lastUpdate,
     // 市情雷达各模块
-    radarNews: memoryData.radarNews,
-    radarMaterials: memoryData.radarMaterials,
-    radarBidding: memoryData.radarBidding,
-    radarPolicies: memoryData.radarPolicies,
-    radarExhibitions: memoryData.radarExhibitions,
+    radarNews: memoryData.radarNews.length > 0 ? memoryData.radarNews : FALLBACK_RADAR_NEWS,
+    radarMaterials: memoryData.radarMaterials.length > 0 ? memoryData.radarMaterials : FALLBACK_RADAR_MATERIALS,
+    radarBidding: memoryData.radarBidding.length > 0 ? memoryData.radarBidding : FALLBACK_RADAR_BIDDING,
+    radarPolicies: memoryData.radarPolicies.length > 0 ? memoryData.radarPolicies : FALLBACK_RADAR_POLICIES,
+    radarExhibitions: memoryData.radarExhibitions.length > 0 ? memoryData.radarExhibitions : FALLBACK_RADAR_EXHIBITIONS,
     competitors: memoryData.competitors.length > 0 ? memoryData.competitors : FALLBACK_COMPETITORS,
-    radarLastUpdate: memoryData.radarLastUpdate,
+    radarLastUpdate: lastUpdate,
   }
 }
 

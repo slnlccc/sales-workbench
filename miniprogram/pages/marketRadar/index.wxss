@@ -42,3 +42,13 @@
   color: #6F4E37;
   margin: 4rpx 6rpx 4rpx 0;
 }
+
+.comp-keyword-tag {
+  padding: 4rpx 14rpx;
+  background: #F5F3F0;
+  border: 1rpx solid #E6DFD7;
+  border-radius: 16rpx;
+  font-size: 20rpx;
+  color: #6F4E37;
+  margin: 4rpx 6rpx 4rpx 0;
+}

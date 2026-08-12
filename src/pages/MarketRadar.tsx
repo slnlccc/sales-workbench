@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search, TrendingUp, TrendingDown, X, Newspaper, BarChart3, Briefcase, Scale, Calendar,
   ArrowRight, ArrowLeft, FileText, ChevronRight, Users, RefreshCw, Sparkles, ExternalLink, Swords,
+  Flame, Bell,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import MarketDataPanel from '@/components/MarketDataPanel';
@@ -62,14 +63,78 @@ const impactLevelMap: Record<string, string> = {
 
 // 静态兜底竞争对手数据（后端 AI 不可用时使用）
 const fallbackCompetitors: CompetitorItem[] = [
-  { id: 'comp-1', competitorName: '中航重机', channel: '招投标', title: '中航重机中标航空发动机高温合金锻件批量采购项目', summary: '中航重机在最新一轮航空发动机锻件招标中中标，涉及 GH4169、GH4141 等高温合金牌号，总金额超 8000 万元，显示其在航空锻件领域的强势地位。', publishedAt: '2026-07-15', sourceName: '中国航发电子招投标平台', sourceUrl: 'https://www.avic.com', category: '中标信息', impactOnUs: '中航重机中标将直接分流高端航空锻件订单，需关注其产能交付能力和质量稳定性。' },
-  { id: 'comp-2', competitorName: '三角防务', channel: '官网', title: '三角防务发布新型钛合金锻件产品，强度提升 15%', summary: '三角防务在官网发布其新一代 TC4 钛合金锻件产品，声称通过新工艺使抗拉强度提升 15%，疲劳寿命提升 20%，已向航空航天领域客户送样。', publishedAt: '2026-07-14', sourceName: '三角防务官网', sourceUrl: 'https://www.sjdf.com', category: '产品发布', impactOnUs: '新产品可能对我方 TC4 钛合金锻件市场形成竞争，需评估我方产品差异化优势。' },
-  { id: 'comp-3', competitorName: '宝武特钢', channel: '新闻', title: '宝武特钢投资 5 亿元扩建高温合金产能', summary: '宝武特钢宣布投资 5 亿元在江苏基地扩建高温合金生产线，预计 2027 年投产，年产能将增加 2 万吨，重点布局 GH4169、GH3536 等牌号。', publishedAt: '2026-07-13', sourceName: '中国冶金报', sourceUrl: 'https://www.mcc.com.cn', category: '产能扩张', impactOnUs: '宝武特钢产能扩张将增加高温合金市场供应，可能导致价格下行，需提前锁定客户。' },
-  { id: 'comp-4', competitorName: '通裕重工', channel: '公众号', title: '通裕重工公众号发文：风电主轴锻件获西门子歌美飒长期订单', summary: '通裕重工官方公众号发布消息，公司与西门子歌美飒签署 3 年风电主轴锻件长期供货协议，年供货量超 5000 套，金额超 3 亿元。', publishedAt: '2026-07-12', sourceName: '通裕重工公众号', sourceUrl: 'https://www.tyzg.com', category: '合作动态', impactOnUs: '通裕重工在风电领域的长期订单将巩固其市场地位，我方需加大风电客户开拓力度。' },
-  { id: 'comp-5', competitorName: '二重（国机重装）', channel: '招投标', title: '二重中标东方电气核电锻件采购项目', summary: '二重（国机重装）在东方电气核电常规岛锻件采购项目中中标，涵盖 17-4PH、SA508 等不锈钢和合金钢锻件，金额 1.2 亿元。', publishedAt: '2026-07-11', sourceName: '中国核电工程招投标网', sourceUrl: 'https://www.cnnp.com', category: '中标信息', impactOnUs: '二重中标核电锻件项目，显示核电锻件市场竞争加剧，需关注核电领域客户需求变化。' },
-  { id: 'comp-6', competitorName: '陕西宏远航空', channel: '官网', title: '陕西宏远航空取得 AS9100 最新版质量体系认证', summary: '陕西宏远航空在官网宣布已顺利通过 AS9100D 航空质量管理体系认证复审，标志着其航空锻件质量管控体系达到国际先进水平。', publishedAt: '2026-07-10', sourceName: '陕西宏远航空官网', sourceUrl: 'https://www.sxhf.com', category: '技术突破', impactOnUs: '陕西宏远取得最新认证将增强其在航空客户中的竞争力，我方需确保质量体系同步升级。' },
-  { id: 'comp-7', competitorName: '无锡透平叶片', channel: '新闻', title: '无锡透平叶片研制出国产首型整体叶盘锻件', summary: '无锡透平叶片联合中科院金属所，成功研制出国产首型航空发动机整体叶盘锻件，采用 GH4169 高温合金，标志着我国在航空发动机关键锻件领域取得重大突破。', publishedAt: '2026-07-09', sourceName: '科技日报', sourceUrl: 'https://www.stdaily.com', category: '技术突破', impactOnUs: '整体叶盘锻件是航空发动机核心部件，该技术突破可能改变高端锻件市场格局。' },
-  { id: 'comp-8', competitorName: '中国一重', channel: '公众号', title: '中国一重公众号：承制国内最大直径铝合金环件顺利交付', summary: '中国一重官方公众号发布，其承制的国内最大直径（Φ3.8m）铝合金环件顺利交付中国航天某院，该环件用于新一代运载火箭贮箱。', publishedAt: '2026-07-08', sourceName: '中国一重公众号', sourceUrl: 'https://www.cfhi.com', category: '产品发布', impactOnUs: '大直径铝合金环件市场需求增长，中国一重先发优势明显，我方需关注市场动向。' },
+  {
+    id: 'comp-1', competitorName: '中航重机', stockCode: '600765.SH', channel: '招投标', category: '订单中标',
+    title: '中航重机中标中国航发2026年第二批涡轮盘锻件框架采购，总额约6.2亿',
+    summary: '中国航发物资采购中心公示2026年第二批高温合金涡轮盘/压气机盘锻件框架协议中标结果，中航重机凭借稳定的产品质量和交付能力一举拿下主力席位，总额约6.2亿元。',
+    publishedAt: '2026-08-09', sourceName: '中国航发物资采购网', sourceUrl: 'https://www.avic.com',
+    isHighImpact: true, isNew: true, keywords: ['中标', '中国航发', '框架采购'],
+    impactOnUs: '中航重机在涡轮盘框架采购中大幅中标，将压缩我方在高温合金涡轮盘领域的市场份额，需重点关注后续小批量试制需求。',
+  },
+  {
+    id: 'comp-2', competitorName: '三角防务', stockCode: '300775.SZ', channel: '官网', category: '产品发布',
+    title: '三角防务发布新一代TC4整体叶盘精锻工艺，材料利用率提升28%',
+    summary: '三角防务在官网发布最新整体叶盘精锻工艺，通过分区加热和多向锤锻复合路线，将TC4钛合金整体叶盘材料利用率从传统的35%提升至63%，成本下降约22%。',
+    publishedAt: '2026-08-08', sourceName: '三角防务官网', sourceUrl: 'https://www.sjdf.com',
+    isHighImpact: true, keywords: ['TC4', '整体叶盘', '材料利用率'],
+    impactOnUs: '整体叶盘工艺突破将改变钛合金精锻市场格局，我方需评估现有工艺路线，加快整体叶盘技术储备。',
+  },
+  {
+    id: 'comp-3', competitorName: '钢研高纳', stockCode: '300034.SZ', channel: '财报', category: '资本运作',
+    title: '钢研高纳定增募资15亿元，投向高温合金大型铸锻件产能扩建',
+    summary: '钢研高纳发布定增公告，拟募资15亿元，其中11亿元用于河北沧州大型高温合金铸锻件生产基地二期扩建，预计新增年产能约1.8万吨，预计2028年Q2达产。',
+    publishedAt: '2026-08-07', sourceName: '深交所公告', sourceUrl: 'https://www.cninfo.com.cn',
+    isHighImpact: true, keywords: ['定增', '产能扩建', '高温合金'],
+    impactOnUs: '钢研高纳产能扩张将加剧中低端高温合金锻件价格竞争，我方需坚持高端市场路线，提升特种合金占比。',
+  },
+  {
+    id: 'comp-4', competitorName: '图南股份', stockCode: '300855.SZ', channel: '公众号', category: '客户拓展',
+    title: '图南股份公众号：正式取得GE Aerospace供应商代码，进入全球供应链',
+    summary: '图南股份官方公众号宣布，公司已通过GE Aerospace为期18个月的审核，正式取得其供应商代码，首批订单预计为Inconel718合金锻件约300万美元。',
+    publishedAt: '2026-08-06', sourceName: '图南股份公众号', sourceUrl: 'https://www.tunan.com',
+    isHighImpact: false, keywords: ['GE', '供应商资质', '出口'],
+    impactOnUs: '图南股份取得GE资质将对我方国际业务形成挑战，我方需加速Rolls-Royce、Safran等国际客户的审核进度。',
+  },
+  {
+    id: 'comp-5', competitorName: '西部超导', stockCode: '688122.SH', channel: '招投标', category: '订单中标',
+    title: '西部超导中标中国商飞C929钛合金长锻件框架协议',
+    summary: '中国商飞物资采购中心公示C929宽体客机机身钛合金长锻件框架中标结果，西部超导以约4.8亿元的订单额位居第一供应商，产品覆盖TC4、TC21牌号。',
+    publishedAt: '2026-08-05', sourceName: '中国商飞招标网', sourceUrl: 'https://www.comac.cc',
+    isHighImpact: true, isNew: true, keywords: ['C929', '中国商飞', '钛合金长锻件'],
+    impactOnUs: 'C929项目是国产大飞机战略的下一个重点，西部超导的先发优势需要我方重点关注民机钛合金领域。',
+  },
+  {
+    id: 'comp-6', competitorName: '宝钛股份', stockCode: '600456.SH', channel: '官网', category: '产能扩张',
+    title: '宝钛股份投资20亿启动"西部钛都"三期，钛合金年产能突破5万吨',
+    summary: '宝钛股份在官网宣布启动三期扩建项目，总投资20亿元，建设海绵钛联合生产线与高端钛合金精锻车间，预计2029年达产后总钛合金年产能突破5万吨。',
+    publishedAt: '2026-08-04', sourceName: '宝钛股份官网', sourceUrl: 'https://www.baoti.com',
+    isHighImpact: false, keywords: ['产能扩建', '海绵钛', '钛合金'],
+    impactOnUs: '宝钛产能扩张可能影响钛合金原材料价格走势，我方需评估海绵钛长单采购节奏，锁定低价原料。',
+  },
+  {
+    id: 'comp-7', competitorName: '万泽股份', stockCode: '000534.SZ', channel: '行业研报', category: '技术突破',
+    title: '万泽股份高温合金单晶叶片通过国产大涵道比发动机长试',
+    summary: '国信证券发布行业研报指出，万泽股份下属子公司万泽精锻的第一代单晶高温合金涡轮叶片已通过国产大涵道比发动机1500小时长时试车考核，预计2027年进入量产。',
+    publishedAt: '2026-08-03', sourceName: '国信证券行业研报', sourceUrl: 'https://www.guosen.com.cn',
+    isHighImpact: false, keywords: ['单晶叶片', '长试考核', '大涵道比'],
+    impactOnUs: '单晶叶片量产突破可能带来产业链利润重新分配，我方需关注是否向上游延伸或寻求合作机会。',
+  },
+  {
+    id: 'comp-8', competitorName: '铂力特', stockCode: '688333.SH', channel: '官网', category: '人事变动',
+    title: '铂力特公告增材制造事业部新任总经理，原中国航发材料所专家加盟',
+    summary: '铂力特公告聘任增材制造事业部新任总经理——李某，此前为中国航发北京航空材料研究院金属增材研究室主任，拥有20余年航空金属3D打印研发经验。',
+    publishedAt: '2026-08-02', sourceName: '铂力特官网公告', sourceUrl: 'https://www.xjbolt.com',
+    isHighImpact: false, keywords: ['人事任命', '3D打印', '航材院'],
+    impactOnUs: '铂力特引入航材院专家可能加速增材制造替代传统锻件的进程，我方需评估增材+锻件混合工艺路线。',
+  },
+  {
+    id: 'comp-9', competitorName: '行业研报', stockCode: '', channel: '行业研报', category: '其他',
+    title: '2026年上半年航空航天锻件行业报告：高温合金需求同比增长34%',
+    summary: '中信建投国防军工团队发布2026年上半年航空航天锻件行业深度报告，指出高温合金需求同比增长34%，钛合金需求同比增长27%，竞争格局呈"高端集中、中低端分散"趋势。',
+    publishedAt: '2026-08-01', sourceName: '中信建投行业研报', sourceUrl: 'https://www.csc108.com',
+    isHighImpact: true, keywords: ['行业报告', '高温合金', '钛合金'],
+    impactOnUs: '行业报告数据与我方订单走势一致，可作为销售策略依据，加大高端航空锻件的市场开拓。',
+  },
 ];
 
 export default function MarketRadar() {
@@ -93,7 +158,7 @@ export default function MarketRadar() {
   const [radarPolicies, setRadarPolicies] = useState<PolicyItem[]>([]);
   const [radarExhibitions, setRadarExhibitions] = useState<ExhibitionItem[]>([]);
   const [competitors, setCompetitors] = useState<CompetitorItem[]>([]);
-  const [competitorFilter, setCompetitorFilter] = useState({ name: '全部', channel: '全部', type: '全部' });
+  const [competitorFilter, setCompetitorFilter] = useState({ name: '全部对手', channel: '全部来源', type: '全部类别' });
   const [radarLoading, setRadarLoading] = useState(false);
   const [radarLastUpdate, setRadarLastUpdate] = useState<string | null>(null);
 
@@ -238,24 +303,25 @@ export default function MarketRadar() {
   const allCompetitors = useMemo(() => {
     const source = competitors.length > 0 ? competitors : fallbackCompetitors;
     return source.filter((c) => {
-      if (competitorFilter.name !== '全部' && c.competitorName !== competitorFilter.name) return false;
-      if (competitorFilter.channel !== '全部' && c.channel !== competitorFilter.channel) return false;
-      if (competitorFilter.type !== '全部' && c.category !== competitorFilter.type) return false;
+      if (competitorFilter.name !== '全部对手' && c.competitorName !== competitorFilter.name) return false;
+      if (competitorFilter.channel !== '全部来源' && c.channel !== competitorFilter.channel) return false;
+      if (competitorFilter.type !== '全部类别' && c.category !== competitorFilter.type) return false;
       return true;
     });
   }, [competitors, competitorFilter]);
 
   // 提取所有唯一的竞争对手名称、渠道、类型
   const competitorNames = useMemo(() => {
-    const source = competitors.length > 0 ? competitors : fallbackCompetitors;
-    return ['全部', ...new Set(source.map((c) => c.competitorName))];
-  }, [competitors]);
+    // 按截图顺序，固定列表
+    return ['全部对手', '中航重机', '三角防务', '钢研高纳', '图南股份', '西部超导', '宝钛股份', '万泽股份', '铂力特', '行业研报'];
+  }, []);
 
-  const competitorChannels = ['全部', '公众号', '官网', '招投标', '新闻'];
+  const competitorChannels = ['全部来源', '公众号', '官网', '招投标', '财报', '行业研报'];
   const competitorTypes = useMemo(() => {
-    const source = competitors.length > 0 ? competitors : fallbackCompetitors;
-    return ['全部', ...new Set(source.map((c) => c.category))];
-  }, [competitors]);
+    // 按截图顺序：产能扩张/技术突破/订单中标/资本运作/客户拓展/人事变动/其他
+    const order = ['全部类别', '产能扩张', '技术突破', '订单中标', '资本运作', '客户拓展', '人事变动', '其他'];
+    return order;
+  }, []);
 
   const allExhibitions = useMemo(() => {
     const merged = [...radarExhibitions, ...exhibitionItems];
@@ -563,9 +629,9 @@ export default function MarketRadar() {
                     ))}
                   </div>
                 </div>
-                {(competitorFilter.name !== '全部' || competitorFilter.channel !== '全部' || competitorFilter.type !== '全部') && (
+                {(competitorFilter.name !== '全部对手' || competitorFilter.channel !== '全部来源' || competitorFilter.type !== '全部类别') && (
                   <button
-                    onClick={() => setCompetitorFilter({ name: '全部', channel: '全部', type: '全部' })}
+                    onClick={() => setCompetitorFilter({ name: '全部对手', channel: '全部来源', type: '全部类别' })}
                     className="text-xs text-cream-500 hover:text-cream-700 underline">
                     清除筛选条件
                   </button>
@@ -574,9 +640,9 @@ export default function MarketRadar() {
               {/* 筛选结果统计 */}
               <div className="text-xs text-cream-500">
                 共 {allCompetitors.length} 条动态
-                {competitorFilter.name !== '全部' && <span> · {competitorFilter.name}</span>}
-                {competitorFilter.channel !== '全部' && <span> · {competitorFilter.channel}</span>}
-                {competitorFilter.type !== '全部' && <span> · {competitorFilter.type}</span>}
+                {competitorFilter.name !== '全部对手' && <span> · {competitorFilter.name}</span>}
+                {competitorFilter.channel !== '全部来源' && <span> · {competitorFilter.channel}</span>}
+                {competitorFilter.type !== '全部类别' && <span> · {competitorFilter.type}</span>}
               </div>
               {allCompetitors.length === 0 && (
                 <EmptyState>暂无符合筛选条件的竞争对手动态</EmptyState>
@@ -584,23 +650,66 @@ export default function MarketRadar() {
               {allCompetitors.map((comp) => (
                 <div key={comp.id} onClick={() => setSelectedCompetitor(comp)}
                   className="bg-white rounded-2xl p-5 shadow-soft hover:shadow-card transition-all cursor-pointer">
-                  <div className="flex items-start gap-2 mb-2 flex-wrap">
-                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">{comp.competitorName}</span>
-                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">{comp.channel}</span>
-                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-cream-100 text-cream-700">{comp.category}</span>
-                    <span className="ml-auto text-xs text-cream-500">{comp.publishedAt}</span>
+                  <div className="flex items-start gap-2 mb-3 flex-wrap">
+                    {/* 竞争对手名称 + 股票代码 */}
+                    <span className="px-2.5 py-1 rounded text-xs font-medium bg-red-100 text-red-700">
+                      {comp.competitorName}
+                      {comp.stockCode && <span className="ml-1 text-red-500 font-normal">{comp.stockCode}</span>}
+                    </span>
+                    {/* 信息来源渠道 */}
+                    <span className={cn(
+                      'px-2.5 py-1 rounded text-xs font-medium',
+                      comp.channel === '招投标' && 'bg-purple-100 text-purple-700',
+                      comp.channel === '官网' && 'bg-sky-100 text-sky-700',
+                      comp.channel === '公众号' && 'bg-emerald-100 text-emerald-700',
+                      comp.channel === '财报' && 'bg-amber-100 text-amber-700',
+                      comp.channel === '行业研报' && 'bg-indigo-100 text-indigo-700',
+                    )}>{comp.channel}</span>
+                    {/* 动态类别 */}
+                    <span className="px-2.5 py-1 rounded text-xs font-medium bg-cyan-100 text-cyan-700">{comp.category}</span>
+                    {/* 高影响标签 */}
+                    {comp.isHighImpact && (
+                      <span className="inline-flex items-center gap-0.5 px-2 py-1 rounded text-xs font-medium bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-sm">
+                        <Flame className="w-3 h-3" />高影响
+                      </span>
+                    )}
+                    {/* 新标签 */}
+                    {comp.isNew && (
+                      <span className="inline-flex items-center gap-0.5 px-2 py-1 rounded text-xs font-bold bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-sm">
+                        <Bell className="w-3 h-3" />新
+                      </span>
+                    )}
+                    {/* 时间 */}
+                    <span className="ml-auto text-xs text-cream-500 pt-1">{comp.publishedAt}</span>
                   </div>
-                  <h3 className="text-base font-semibold text-cream-900 mb-2">{comp.title}</h3>
-                  <p className="text-sm text-cream-700 leading-relaxed mb-3 line-clamp-2">{comp.summary}</p>
+                  <h3 className="text-lg font-bold text-cream-900 mb-2 leading-snug">{comp.title}</h3>
+                  <p className="text-sm text-cream-700 leading-relaxed mb-3 line-clamp-3">{comp.summary}</p>
+                  {/* 关键词标签 */}
+                  {comp.keywords && comp.keywords.length > 0 && (
+                    <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                      {comp.keywords.map((kw, i) => (
+                        <span key={i} className="px-2.5 py-1 rounded-full text-xs bg-cream-100 text-cream-600 border border-cream-200">
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-cream-500">{comp.sourceName}</span>
-                    {comp.sourceUrl && (
-                      <a href={comp.sourceUrl} target="_blank" rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-800 hover:underline">
-                        <ExternalLink className="w-3 h-3" />核实来源
-                      </a>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {comp.sourceUrl && (
+                        <a href={comp.sourceUrl} target="_blank" rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                          <ExternalLink className="w-3 h-3" />核实来源
+                        </a>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedCompetitor(comp); }}
+                        className="inline-flex items-center gap-0.5 text-xs font-semibold text-red-600 hover:text-red-700 hover:underline">
+                        竞争分析 <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

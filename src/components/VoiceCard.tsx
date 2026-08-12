@@ -101,8 +101,9 @@ export default function VoiceCard() {
     setLiveTranscript(mockText);
     setIsRecording(false);
     setRecognizing(false);
-    void callAICorrect(mockText);
-  }, [callAICorrect, setIsRecording]);
+    setInputText(mockText);
+    setCorrectInfo('语音文本已填入，可直接手动修改并提交分类');
+  }, [setIsRecording, setInputText]);
 
   const handleStart = useCallback(() => {
     // 会话 ID，防止旧回调污染新会话
@@ -180,23 +181,13 @@ export default function VoiceCard() {
       if (sessionIdRef.current !== mySession) return;
       setRecognizing(false);
       const finalText = finalTextRef.current.trim();
-      if (isManualStopRef.current) {
-        setIsRecording(false);
-        if (finalText) {
-          setLiveTranscript(finalText);
-          void callAICorrect(finalText);
-        } else {
-          useMockText();
-        }
+      setIsRecording(false);
+      if (finalText) {
+        setLiveTranscript(finalText);
+        setInputText(finalText);
+        setCorrectInfo('语音识别完成，可手动修改文本后点击"AI分析提取"并手动调整分类');
       } else {
-        // 自动结束（浏览器静音超时）
-        setIsRecording(false);
-        if (finalText) {
-          setLiveTranscript(finalText);
-          void callAICorrect(finalText);
-        } else {
-          useMockText();
-        }
+        useMockText();
       }
     };
 
@@ -295,7 +286,7 @@ export default function VoiceCard() {
             {correcting
               ? 'DeepSeek AI 正在修正锻造专业术语中的同音错别字…'
               : speechSupported
-              ? '点击说话，再点停止；AI 自动矫正锻造术语（段造→锻造、翠火→淬火等）'
+              ? '点击说话，再点停止；识别后直接填入文本，可手动修改并使用"AI分析提取"后手动分类修改'
               : '点击后将使用示例文本演示，可手动点击"使用示例文本"按钮'}
           </p>
           {!speechSupported && !isRecording && !recognizing && !correcting && (

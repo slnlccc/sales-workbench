@@ -6,13 +6,13 @@
 const express = require('express')
 const router = express.Router()
 const { protect } = require('../middleware/auth')
-const { isConfigured, chat, chatStream, chatJSON } = require('../services/deepseekService')
+const { isConfigured, chat, chatStream, chatJSON } = require('../services/baiduService')
 
 // AI 未配置时的中间件
 const checkAIConfig = (req, res, next) => {
   if (!isConfigured()) {
     return res.status(503).json({
-      message: 'AI 功能未启用，请配置 DEEPSEEK_API_KEY 环境变量',
+      message: 'AI 功能未启用，请配置 BAIDU_API_KEY 和 BAIDU_SECRET_KEY 环境变量',
     })
   }
   next()

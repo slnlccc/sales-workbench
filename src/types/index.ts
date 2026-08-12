@@ -119,14 +119,18 @@ export interface PolicyItem {
 export interface CompetitorItem {
   id: string;
   competitorName: string;        // 竞争对手名称
-  channel: '公众号' | '官网' | '招投标' | '新闻'; // 信息来源渠道
+  stockCode?: string;            // 股票代码 如 600765.SH
+  channel: string;               // 信息来源渠道：公众号/官网/招投标/财报/行业研报
   title: string;                 // 动态标题
   summary: string;               // 内容摘要
   publishedAt: string;           // 发布日期
   sourceUrl: string;             // 信息来源网址（可点击核实）
   sourceName: string;            // 来源名称
-  category: string;              // 动态类型：产品发布/中标/产能扩张/技术突破/合作动态
+  category: string;              // 动态类别：产能扩张/技术突破/订单中标/资本运作/客户拓展/人事变动/其他
   impactOnUs?: string;           // 对我方影响分析
+  isHighImpact?: boolean;        // 是否高影响
+  isNew?: boolean;               // 是否最新（新标签）
+  keywords?: string[];           // 关键词标签：如 ['中标','中国航发','框架采购']
 }
 
 export interface ExhibitionItem {

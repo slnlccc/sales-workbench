@@ -118,7 +118,7 @@
       <view class="flex justify-between items-center" style="margin-top:4rpx;">
         <text class="text-xs text-coffee-400">共 {{filteredCompetitors.length}} 条动态</text>
         <text
-          wx:if="{{competitorFilterName !== '全部' || competitorFilterChannel !== '全部' || competitorFilterType !== '全部'}}"
+          wx:if="{{competitorFilterName !== '全部对手' || competitorFilterChannel !== '全部来源' || competitorFilterType !== '全部类别'}}"
           class="text-xs text-blue-500"
           bindtap="clearCompetitorFilter"
         >清除筛选</text>
@@ -134,17 +134,39 @@
     <view wx:for="{{filteredCompetitors}}" wx:key="id" class="news-item" bindtap="goCompetitorDetail" data-id="{{item.id}}">
       <view class="flex justify-between items-start">
         <view class="flex-1">
-          <view class="flex items-center" style="margin-bottom:4rpx;">
-            <text class="tag tag-red" style="margin-right:8rpx;">{{item.competitorName}}</text>
-            <text class="tag" style="background:#A78BFA;color:#fff;margin-right:8rpx;">{{item.channel}}</text>
-            <text class="text-xs text-coffee-400">{{item.category}}</text>
+          <view class="flex items-center" style="margin-bottom:4rpx;flex-wrap:wrap;">
+            <view class="tag tag-red" style="margin-right:8rpx;">
+              <text>{{item.competitorName}}</text>
+              <text wx:if="{{item.stockCode}}" style="font-weight:normal;margin-left:4rpx;color:#F87171;">{{item.stockCode}}</text>
+            </view>
+            <text wx:if="{{item.channel === '招投标'}}" class="tag" style="background:#A78BFA;color:#fff;margin-right:8rpx;">{{item.channel}}</text>
+            <text wx:elif="{{item.channel === '官网'}}" class="tag" style="background:#0EA5E9;color:#fff;margin-right:8rpx;">{{item.channel}}</text>
+            <text wx:elif="{{item.channel === '公众号'}}" class="tag" style="background:#10B981;color:#fff;margin-right:8rpx;">{{item.channel}}</text>
+            <text wx:elif="{{item.channel === '财报'}}" class="tag" style="background:#F59E0B;color:#fff;margin-right:8rpx;">{{item.channel}}</text>
+            <text wx:elif="{{item.channel === '行业研报'}}" class="tag" style="background:#6366F1;color:#fff;margin-right:8rpx;">{{item.channel}}</text>
+            <text wx:else class="tag" style="background:#A78BFA;color:#fff;margin-right:8rpx;">{{item.channel}}</text>
+            <text class="tag" style="background:#06B6D4;color:#fff;margin-right:8rpx;">{{item.category}}</text>
+            <text wx:if="{{item.isHighImpact}}" class="tag" style="background:linear-gradient(90deg,#EF4444,#F43F5E);color:#fff;margin-right:8rpx;">🔥高影响</text>
+            <text wx:if="{{item.isNew}}" class="tag" style="background:linear-gradient(90deg,#FBBF24,#F97316);color:#fff;">⚡新</text>
+            <text class="text-xs text-coffee-400" style="margin-left:auto;">{{item.publishedAt}}</text>
           </view>
-          <text class="text-sm font-medium">{{item.title}}</text>
-          <text class="text-xs text-coffee-400" style="display:block;margin-top:4rpx;">{{item.sourceName}} · {{item.publishedAt}}</text>
+          <text class="text-base font-bold" style="display:block;margin-top:4rpx;">{{item.title}}</text>
         </view>
       </view>
-      <text class="text-xs text-coffee-500" style="display:block;margin-top:8rpx;">{{item.summary}}</text>
-      <text class="text-xs text-blue-500" style="display:block;margin-top:8rpx;">核实来源 ›</text>
+      <text class="text-xs text-coffee-500" style="display:block;margin-top:8rpx;line-height:1.6;">{{item.summary}}</text>
+      <!-- 关键词标签 -->
+      <view wx:if="{{item.keywords && item.keywords.length > 0}}" class="flex items-center" style="margin-top:12rpx;flex-wrap:wrap;">
+        <text
+          wx:for="{{item.keywords}}"
+          wx:for-item="kw"
+          wx:key="index"
+          class="comp-keyword-tag"
+        >{{kw}}</text>
+      </view>
+      <view class="flex justify-between items-center" style="margin-top:12rpx;">
+        <text class="text-xs text-coffee-400">{{item.sourceName}}</text>
+        <text class="text-xs font-bold" style="color:#DC2626;">竞争分析 ›</text>
+      </view>
     </view>
   </view>
 </view>
