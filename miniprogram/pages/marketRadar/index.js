@@ -72,6 +72,14 @@ Page({
     competitors: [],
     competitorsLoading: false,
     competitorsLastUpdate: '',
+    // 竞争对手分类筛选
+    competitorFilterName: '全部',
+    competitorFilterChannel: '全部',
+    competitorFilterType: '全部',
+    competitorNames: ['全部'],
+    competitorChannels: ['全部', '公众号', '官网', '招投标', '新闻'],
+    competitorTypes: ['全部'],
+    filteredCompetitors: [],
   },
 
   onLoad() {
@@ -94,10 +102,21 @@ Page({
           const lastUpdate = res.data.lastUpdate
             ? '上次更新 ' + this.formatDate(res.data.lastUpdate)
             : ''
+          // 提取唯一的竞争对手名称和动态类型
+          const nameSet = ['全部']
+          const typeSet = ['全部']
+          competitors.forEach(c => {
+            if (c.competitorName && !nameSet.includes(c.competitorName)) nameSet.push(c.competitorName)
+            if (c.category && !typeSet.includes(c.category)) typeSet.push(c.category)
+          })
           this.setData({
             competitors,
             competitorsLastUpdate: lastUpdate,
+            competitorNames: nameSet,
+            competitorTypes: typeSet,
             competitorsLoading: false,
+          }, () => {
+            this.applyCompetitorFilter()
           })
         } else {
           this.setData({ competitorsLoading: false })
@@ -118,6 +137,60 @@ Page({
 
   refreshCompetitors() {
     this.fetchCompetitors()
+  },
+
+  /**
+   * 应用竞争对手筛选
+   */
+  applyCompetitorFilter() {
+    const { competitors, competitorFilterName, competitorFilterChannel, competitorFilterType } = this.data
+    const filtered = competitors.filter(c => {
+      if (competitorFilterName !== '全部' && c.competitorName !== competitorFilterName) return false
+      if (competitorFilterChannel !== '全部' && c.channel !== competitorFilterChannel) return false
+      if (competitorFilterType !== '全部' && c.category !== competitorFilterType) return false
+      return true
+    })
+    this.setData({ filteredCompetitors: filtered })
+  },
+
+  /**
+   * 筛选事件：竞争对手名称
+   */
+  filterCompetitorName(e) {
+    this.setData({ competitorFilterName: e.currentTarget.dataset.name }, () => {
+      this.applyCompetitorFilter()
+    })
+  },
+
+  /**
+   * 筛选事件：信息渠道
+   */
+  filterCompetitorChannel(e) {
+    this.setData({ competitorFilterChannel: e.currentTarget.dataset.channel }, () => {
+      this.applyCompetitorFilter()
+    })
+  },
+
+  /**
+   * 筛选事件：动态类型
+   */
+  filterCompetitorType(e) {
+    this.setData({ competitorFilterType: e.currentTarget.dataset.type }, () => {
+      this.applyCompetitorFilter()
+    })
+  },
+
+  /**
+   * 清除筛选
+   */
+  clearCompetitorFilter() {
+    this.setData({
+      competitorFilterName: '全部',
+      competitorFilterChannel: '全部',
+      competitorFilterType: '全部',
+    }, () => {
+      this.applyCompetitorFilter()
+    })
   },
 
   filterNews(e) {

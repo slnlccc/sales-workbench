@@ -69,10 +69,69 @@
         <text class="text-xs text-coffee-400">{{competitorsLastUpdate}}</text>
       </view>
     </view>
+
+    <!-- 分类筛选器 -->
+    <view wx:if="{{competitors.length > 0}}" style="margin-bottom:16rpx;">
+      <!-- 竞争对手名称筛选 -->
+      <view class="flex items-center" style="margin-bottom:8rpx;flex-wrap:wrap;">
+        <text class="text-xs text-coffee-400" style="width:120rpx;flex-shrink:0;">竞争对手：</text>
+        <view class="flex" style="flex-wrap:wrap;flex:1;">
+          <text
+            wx:for="{{competitorNames}}"
+            wx:key="*this"
+            class="comp-filter-tag"
+            bindtap="filterCompetitorName"
+            data-name="{{item}}"
+            style="{{competitorFilterName === item ? 'background:#EF4444;color:#fff;' : ''}}"
+          >{{item}}</text>
+        </view>
+      </view>
+      <!-- 信息渠道筛选 -->
+      <view class="flex items-center" style="margin-bottom:8rpx;flex-wrap:wrap;">
+        <text class="text-xs text-coffee-400" style="width:120rpx;flex-shrink:0;">信息渠道：</text>
+        <view class="flex" style="flex-wrap:wrap;flex:1;">
+          <text
+            wx:for="{{competitorChannels}}"
+            wx:key="*this"
+            class="comp-filter-tag"
+            bindtap="filterCompetitorChannel"
+            data-channel="{{item}}"
+            style="{{competitorFilterChannel === item ? 'background:#A78BFA;color:#fff;' : ''}}"
+          >{{item}}</text>
+        </view>
+      </view>
+      <!-- 动态类型筛选 -->
+      <view class="flex items-center" style="margin-bottom:8rpx;flex-wrap:wrap;">
+        <text class="text-xs text-coffee-400" style="width:120rpx;flex-shrink:0;">动态类型：</text>
+        <view class="flex" style="flex-wrap:wrap;flex:1;">
+          <text
+            wx:for="{{competitorTypes}}"
+            wx:key="*this"
+            class="comp-filter-tag"
+            bindtap="filterCompetitorType"
+            data-type="{{item}}"
+            style="{{competitorFilterType === item ? 'background:#F59E0B;color:#fff;' : ''}}"
+          >{{item}}</text>
+        </view>
+      </view>
+      <!-- 筛选状态与清除 -->
+      <view class="flex justify-between items-center" style="margin-top:4rpx;">
+        <text class="text-xs text-coffee-400">共 {{filteredCompetitors.length}} 条动态</text>
+        <text
+          wx:if="{{competitorFilterName !== '全部' || competitorFilterChannel !== '全部' || competitorFilterType !== '全部'}}"
+          class="text-xs text-blue-500"
+          bindtap="clearCompetitorFilter"
+        >清除筛选</text>
+      </view>
+    </view>
+
     <view wx:if="{{competitors.length === 0}}" class="news-item">
       <text class="text-xs text-coffee-400">{{competitorsLoading ? '正在拉取最新动态...' : '暂无竞争对手动态，点击右上角刷新'}}</text>
     </view>
-    <view wx:for="{{competitors}}" wx:key="id" class="news-item" bindtap="goCompetitorDetail" data-id="{{item.id}}">
+    <view wx:if="{{filteredCompetitors.length === 0 && competitors.length > 0}}" class="news-item">
+      <text class="text-xs text-coffee-400">暂无符合筛选条件的动态</text>
+    </view>
+    <view wx:for="{{filteredCompetitors}}" wx:key="id" class="news-item" bindtap="goCompetitorDetail" data-id="{{item.id}}">
       <view class="flex justify-between items-start">
         <view class="flex-1">
           <view class="flex items-center" style="margin-bottom:4rpx;">
