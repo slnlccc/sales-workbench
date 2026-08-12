@@ -93,6 +93,7 @@ export default function MarketRadar() {
   const [radarPolicies, setRadarPolicies] = useState<PolicyItem[]>([]);
   const [radarExhibitions, setRadarExhibitions] = useState<ExhibitionItem[]>([]);
   const [competitors, setCompetitors] = useState<CompetitorItem[]>([]);
+  const [competitorFilter, setCompetitorFilter] = useState({ name: '全部', channel: '全部', type: '全部' });
   const [radarLoading, setRadarLoading] = useState(false);
   const [radarLastUpdate, setRadarLastUpdate] = useState<string | null>(null);
 
@@ -235,8 +236,25 @@ export default function MarketRadar() {
     return items;
   };
   const allCompetitors = useMemo(() => {
-    if (competitors.length > 0) return competitors;
-    return fallbackCompetitors;
+    const source = competitors.length > 0 ? competitors : fallbackCompetitors;
+    return source.filter((c) => {
+      if (competitorFilter.name !== '全部' && c.competitorName !== competitorFilter.name) return false;
+      if (competitorFilter.channel !== '全部' && c.channel !== competitorFilter.channel) return false;
+      if (competitorFilter.type !== '全部' && c.category !== competitorFilter.type) return false;
+      return true;
+    });
+  }, [competitors, competitorFilter]);
+
+  // 提取所有唯一的竞争对手名称、渠道、类型
+  const competitorNames = useMemo(() => {
+    const source = competitors.length > 0 ? competitors : fallbackCompetitors;
+    return ['全部', ...new Set(source.map((c) => c.competitorName))];
+  }, [competitors]);
+
+  const competitorChannels = ['全部', '公众号', '官网', '招投标', '新闻'];
+  const competitorTypes = useMemo(() => {
+    const source = competitors.length > 0 ? competitors : fallbackCompetitors;
+    return ['全部', ...new Set(source.map((c) => c.category))];
   }, [competitors]);
 
   const allExhibitions = useMemo(() => {
@@ -495,8 +513,73 @@ export default function MarketRadar() {
                   <span>刷新</span>
                 </button>
               </div>
+              {/* 分类筛选器 */}
+              <div className="bg-cream-50 rounded-2xl p-3 space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-cream-500 font-medium w-16 flex-shrink-0">竞争对手：</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {competitorNames.map((name) => (
+                      <button key={name} onClick={() => setCompetitorFilter((f) => ({ ...f, name }))}
+                        className={cn(
+                          'px-2.5 py-1 rounded-full text-xs font-medium transition-all',
+                          competitorFilter.name === name
+                            ? 'bg-red-500 text-white shadow-sm'
+                            : 'bg-white text-cream-600 hover:bg-red-50 hover:text-red-600'
+                        )}>
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-cream-500 font-medium w-16 flex-shrink-0">信息渠道：</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {competitorChannels.map((ch) => (
+                      <button key={ch} onClick={() => setCompetitorFilter((f) => ({ ...f, channel: ch }))}
+                        className={cn(
+                          'px-2.5 py-1 rounded-full text-xs font-medium transition-all',
+                          competitorFilter.channel === ch
+                            ? 'bg-purple-500 text-white shadow-sm'
+                            : 'bg-white text-cream-600 hover:bg-purple-50 hover:text-purple-600'
+                        )}>
+                        {ch}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-cream-500 font-medium w-16 flex-shrink-0">动态类型：</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {competitorTypes.map((t) => (
+                      <button key={t} onClick={() => setCompetitorFilter((f) => ({ ...f, type: t }))}
+                        className={cn(
+                          'px-2.5 py-1 rounded-full text-xs font-medium transition-all',
+                          competitorFilter.type === t
+                            ? 'bg-amber-500 text-white shadow-sm'
+                            : 'bg-white text-cream-600 hover:bg-amber-50 hover:text-amber-600'
+                        )}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {(competitorFilter.name !== '全部' || competitorFilter.channel !== '全部' || competitorFilter.type !== '全部') && (
+                  <button
+                    onClick={() => setCompetitorFilter({ name: '全部', channel: '全部', type: '全部' })}
+                    className="text-xs text-cream-500 hover:text-cream-700 underline">
+                    清除筛选条件
+                  </button>
+                )}
+              </div>
+              {/* 筛选结果统计 */}
+              <div className="text-xs text-cream-500">
+                共 {allCompetitors.length} 条动态
+                {competitorFilter.name !== '全部' && <span> · {competitorFilter.name}</span>}
+                {competitorFilter.channel !== '全部' && <span> · {competitorFilter.channel}</span>}
+                {competitorFilter.type !== '全部' && <span> · {competitorFilter.type}</span>}
+              </div>
               {allCompetitors.length === 0 && (
-                <EmptyState>暂无竞争对手动态数据，AI 启用后将每日自动扒取</EmptyState>
+                <EmptyState>暂无符合筛选条件的竞争对手动态</EmptyState>
               )}
               {allCompetitors.map((comp) => (
                 <div key={comp.id} onClick={() => setSelectedCompetitor(comp)}
