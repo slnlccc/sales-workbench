@@ -34,7 +34,7 @@ const resolveSource = (r: WorkbenchRecord): RecordSource => {
 };
 
 export default function RecordsList() {
-  const { records, memos, toggleRecordDone } = useWorkbenchStore();
+  const { records, memos, toggleRecordDone, deleteRecord, deleteMemo } = useWorkbenchStore();
   const [activeFilter, setActiveFilter] = useState<RecordType | 'all'>('all');
   const [activeSource, setActiveSource] = useState<RecordSource | 'all'>('all');
 
@@ -184,7 +184,16 @@ export default function RecordsList() {
                   >
                     {record.done ? <Check className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                   </button>
-                  <button className="w-7 h-7 rounded-lg text-coffee-300 hover:text-alert hover:bg-red-50 flex items-center justify-center">
+                  <button
+                    onClick={() => {
+                      if (!confirm('确定删除该记录吗？')) return;
+                      const isMemoOrigin = memos.some((m) => m.id === record.id);
+                      if (isMemoOrigin) deleteMemo(record.id);
+                      else deleteRecord(record.id);
+                    }}
+                    className="w-7 h-7 rounded-lg text-coffee-300 hover:text-alert hover:bg-red-50 flex items-center justify-center transition-colors"
+                    title="删除"
+                  >
                     <X className="w-4 h-4" />
                   </button>
                 </div>

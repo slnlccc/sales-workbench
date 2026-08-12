@@ -55,6 +55,8 @@ interface WorkbenchState {
   addMemoKnowledge: (knowledge: MemoKnowledge) => void;
   setJoinDate: (dateStr: string) => void;
   closeScheduleTask: (id: string) => void;
+  deleteRecord: (id: string) => void;
+  deleteMemo: (id: string) => void;
   clearInput: () => void;
   // 云同步：导出/导入前端数据
   exportLocalData: () => { records: WorkbenchRecord[]; memos: WorkbenchRecord[]; memoKnowledge: MemoKnowledge[] };
@@ -63,13 +65,19 @@ interface WorkbenchState {
 
 const detectType = (content: string): RecordType => {
   const text = content.toLowerCase();
-  if (text.includes('报告')) return 'meeting';
+  // 报告/周报/汇报类 → meeting 或 task（不要变成日程提醒）
+  if (text.includes('周报') || text.includes('日报') || text.includes('月报') || text.includes('周报总结')
+      || text.includes('总结') && (text.includes('工作') || text.includes('周'))) return 'task';
+  if (text.includes('报告') || text.includes('汇报')) return 'meeting';
   if (text.includes('订单')) return 'order';
   if (text.includes('拜访') || text.includes('访问')) return 'visit';
   if (text.includes('报价')) return 'quote';
   if (text.includes('电话') || text.includes('致电')) return 'call';
-  if (text.includes('明天') || text.includes('后天') || text.includes('点') || text.includes('日')) return 'schedule';
   if (text.includes('备忘') || text.includes('记') || text.includes('感受')) return 'memo';
+  // 日程：只有真正的时间提醒类词语才算 schedule
+  if (text.includes('提醒') || text.includes('交') || text.includes('提交') || text.includes('完成')
+      || text.includes('明天') || text.includes('后天') || text.includes('下周')
+      || text.includes('点') && /\d[点:]/.test(text) || /\d{1,2}[日号]/.test(text)) return 'schedule';
   return 'task';
 };
 
@@ -356,6 +364,20 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
       records: state.records.map((record) =>
         record.id === id ? { ...record, done: !record.done } : record
       ),
+    }));
+  },
+
+  // 删除工作记录
+  deleteRecord: (id) => {
+    persistSet((state) => ({
+      records: state.records.filter((r) => r.id !== id),
+    }));
+  },
+
+  // 删除备忘录
+  deleteMemo: (id) => {
+    persistSet((state) => ({
+      memos: state.memos.filter((m) => m.id !== id),
     }));
   },
 

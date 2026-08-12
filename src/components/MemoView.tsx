@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Calendar, CheckCircle2, RotateCcw, StickyNote, Mic, Square, BookOpen, Sparkles } from 'lucide-react';
+import { Plus, Calendar, CheckCircle2, RotateCcw, StickyNote, Mic, Square, BookOpen, Sparkles, X } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import { cn } from '@/lib/utils';
 
@@ -12,7 +12,7 @@ const mockVoiceTexts = [
 ];
 
 export default function MemoView() {
-  const { memos, memoKnowledge, addMemo, addMemoWithVoice, toggleMemoClosed, promoteMemoToSchedule } = useWorkbenchStore();
+  const { memos, memoKnowledge, addMemo, addMemoWithVoice, toggleMemoClosed, promoteMemoToSchedule, deleteMemo } = useWorkbenchStore();
   const [inputValue, setInputValue] = useState('');
   const [isRecording, setIsRecording] = useState(false);
 
@@ -177,6 +177,17 @@ export default function MemoView() {
                   >
                     <CheckCircle2 className="w-3 h-3" />
                     <span>闭环</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!confirm('确定删除该备忘吗？')) return;
+                      deleteMemo(memo.id);
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-alert bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                    title="删除"
+                  >
+                    <X className="w-3 h-3" />
+                    <span>删除</span>
                   </button>
                 </div>
               </div>

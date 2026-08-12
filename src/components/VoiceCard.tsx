@@ -8,21 +8,20 @@ const mockVoiceTexts = [
   '下周一上午10点和中航工业开项目进展会',
   '本周五下午2点跟进润和机械报价进展',
   '提醒我7月20日提交珠海航展准备资料',
+  '帮我完成这周的周报，总结本周项目进展',
+  '今天下午4点电话联系中国商飞了解项目需求',
 ];
 
 export default function VoiceCard() {
-  const { isRecording, setIsRecording, setInputText, addVoiceTask, clearInput, setActiveTab } = useWorkbenchStore();
+  const { isRecording, setIsRecording, setInputText, setActiveTab } = useWorkbenchStore();
 
   const handleClick = () => {
     if (isRecording) {
+      // 停止录音后，把模拟文本填入输入框并切到文本区供用户修改确认
       const mockText = mockVoiceTexts[Math.floor(Math.random() * mockVoiceTexts.length)];
       setInputText(mockText);
-      setTimeout(() => {
-        addVoiceTask(mockText);
-        clearInput();
-        setActiveTab('calendar');
-      }, 500);
       setIsRecording(false);
+      // 不自动跳转，让用户留在语音页，在下方文本输入框确认修改后提交
     } else {
       setIsRecording(true);
     }
@@ -69,7 +68,12 @@ export default function VoiceCard() {
             </h3>
           </div>
           <p className="text-cream-100 text-sm leading-relaxed">
-            比如：「明天早上8点交出差报告」或者「后天下午3点拜访中国航发」
+            比如：「明天早上8点交出差报告」或「帮我完成这周的周报」
+            {!isRecording && (
+              <span className="block mt-1 text-cream-100/80">
+                说完后在下方修改确认，避免识别错误直接生成
+              </span>
+            )}
           </p>
         </div>
       </div>

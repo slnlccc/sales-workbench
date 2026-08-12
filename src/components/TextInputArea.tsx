@@ -202,6 +202,16 @@ const detectTypes = (text: string): { types: string[]; labels: string[] } => {
   const types: string[] = [];
   const labels: string[] = [];
 
+  // 周报/日报/月报 → 待办 task，不要生成日程
+  if (t.includes('周报') || t.includes('日报') || t.includes('月报')
+      || t.includes('周报总结')
+      || (t.includes('总结') && (t.includes('工作') || t.includes('周'))
+         && !/(明天|后天|下周|今天|\d{1,2}[日号])/.test(t))) {
+    types.push('task');
+    labels.push('待办事项');
+    return { types, labels };
+  }
+
   // 检测具体业务类型
   if (t.includes('报价')) { types.push('quote'); labels.push('报价跟进'); }
   if (t.includes('订单') || t.includes('下单')) { types.push('order'); labels.push('订单'); }
@@ -210,11 +220,13 @@ const detectTypes = (text: string): { types: string[]; labels: string[] } => {
   if (t.includes('会议') || t.includes('开会')) { types.push('meeting'); labels.push('会议'); }
   if (t.includes('合同')) { types.push('contract'); labels.push('合同跟进'); }
   if (t.includes('备忘') || t.includes('记一下') || t.includes('记录') || t.includes('感受')) { types.push('memo'); labels.push('备忘录'); }
-  if (t.includes('报告') || t.includes('汇报') || t.includes('出差')) { types.push('report'); labels.push('报告汇报'); }
+  // 报告/汇报 → meeting（不要自动带日程，除非用户明确说了时间+提醒词）
+  if (t.includes('报告') || t.includes('汇报')) { types.push('meeting'); labels.push('报告汇报'); }
 
-  // 如果有时间关键词，自动加上日程提醒
-  const hasTimeKeyword = /(明天|后天|大后天|今天|下周|本周|周[一二三四五六日天]|星期[一二三四五六日天]|\d{1,2}[日号]|\d{1,2}[点时:：])/.test(text);
-  if (hasTimeKeyword && !types.includes('schedule')) {
+  // 日程提醒：只有明确的时间 + 提醒词组合时才标为 schedule
+  const hasTimeKeyword = /(明天|后天|大后天|今天|下周|本周|周[一二三四五六日天]|星期[一二三四五六日天]|\d{1,2}[日号])/.test(text);
+  const hasReminderWord = /(提醒|记得|交|提交|完成|跟进|开项目|开会|拜访|联系|致电|沟通|准备)/.test(text);
+  if (hasTimeKeyword && hasReminderWord && !types.includes('schedule')) {
     types.unshift('schedule');
     labels.unshift('日程提醒');
   }

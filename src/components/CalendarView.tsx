@@ -26,7 +26,7 @@ const recordDateStr = (record: WorkbenchRecord): string => {
 };
 
 export default function CalendarView() {
-  const { records, closeScheduleTask, addManualSchedule } = useWorkbenchStore();
+  const { records, closeScheduleTask, addManualSchedule, deleteRecord } = useWorkbenchStore();
   const today = new Date();
   const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const [viewDate, setViewDate] = useState(currentMonth);
@@ -216,29 +216,36 @@ export default function CalendarView() {
               const Icon = r.type === 'call' ? Phone : r.type === 'task' ? FileText : CalendarClock;
               const time = new Date(r.reminderAt || r.createdAt);
               const timeStr = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`;
+              const handleDelete = (e: React.MouseEvent) => {
+                e.stopPropagation();
+                if (confirm('确定删除该日程吗？')) deleteRecord(r.id);
+              };
               return (
                 <div
                   key={r.id}
-                  onClick={() => closeScheduleTask(r.id)}
                   className={cn(
-                    'flex items-center gap-3 p-3 rounded-2xl transition-all cursor-pointer select-none',
+                    'flex items-center gap-3 p-3 rounded-2xl transition-all select-none',
                     r.done
                       ? 'bg-emerald-50/60 hover:bg-emerald-100'
                       : 'bg-coffee-50/40 hover:bg-coffee-100 hover:shadow-sm'
                   )}
                 >
                   <div
+                    onClick={() => closeScheduleTask(r.id)}
                     className={cn(
-                      'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors flex-shrink-0',
+                      'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer',
                       r.done
                         ? 'bg-emerald-500 border-emerald-500'
-                        : 'border-coffee-300'
+                        : 'border-coffee-300 hover:border-coffee-500'
                     )}
                   >
                     {r.done && <Check className="w-3 h-3 text-white" />}
                   </div>
                   <Icon className={cn('w-4 h-4 flex-shrink-0', r.done ? 'text-emerald-500' : 'text-coffee-500')} />
-                  <div className="flex-1 min-w-0">
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => closeScheduleTask(r.id)}
+                  >
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-xs text-coffee-400 font-mono">{timeStr}</span>
                       {r.customer && (
@@ -258,14 +265,13 @@ export default function CalendarView() {
                   >
                     {sourceMarker(r)}
                   </span>
-                  <span className={cn(
-                    'text-xs px-2 py-1 rounded-lg',
-                    r.done
-                      ? 'bg-amber-50 text-amber-700'
-                      : 'bg-emerald-50 text-emerald-700'
-                  )}>
-                    {r.done ? '点击取消' : '点击完成'}
-                  </span>
+                  <button
+                    onClick={handleDelete}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-coffee-300 hover:text-alert hover:bg-red-50 transition-colors flex-shrink-0"
+                    title="删除日程"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               );
             })}
