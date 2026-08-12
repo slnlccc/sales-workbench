@@ -41,6 +41,9 @@ const getApiKey = () => {
 const chat = async (messages, options = {}) => {
   const apiKey = getApiKey()
 
+  // ernie-4.0-8k 最大输出 2048 tokens，限制上限避免 400 错误
+  const maxTokens = Math.min(options.maxTokens ?? 2048, 2048)
+
   const body = {
     model: options.model || BAIDU_MODEL,
     messages: messages.map(m => ({
@@ -48,7 +51,7 @@ const chat = async (messages, options = {}) => {
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
     })),
     temperature: options.temperature ?? 0.7,
-    max_tokens: options.maxTokens ?? 2048,
+    max_tokens: maxTokens,
     stream: false,
   }
 
@@ -85,6 +88,8 @@ const chat = async (messages, options = {}) => {
 const chatStream = async (messages, options = {}, onChunk) => {
   const apiKey = getApiKey()
 
+  const maxTokens = Math.min(options.maxTokens ?? 2048, 2048)
+
   const body = {
     model: options.model || BAIDU_MODEL,
     messages: messages.map(m => ({
@@ -92,7 +97,7 @@ const chatStream = async (messages, options = {}, onChunk) => {
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
     })),
     temperature: options.temperature ?? 0.7,
-    max_tokens: options.maxTokens ?? 2048,
+    max_tokens: maxTokens,
     stream: true,
   }
 
