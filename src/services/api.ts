@@ -140,6 +140,10 @@ export const aiApi = {
   memoKnowledge: (content: string) =>
     request('/ai/memo-knowledge', { method: 'POST', body: JSON.stringify({ content }) }),
 
+  // 语音文本锻造专业矫正
+  voiceCorrect: (text: string) =>
+    request('/ai/voice-correct', { method: 'POST', body: JSON.stringify({ text }) }),
+
   // AI 对话（流式）
   chat: async (messages: Array<{ role: string; content: string }>, onChunk: (text: string) => void) => {
     const token = getToken()
@@ -192,8 +196,11 @@ export const aiApi = {
 // 市场数据 API
 // ============================================================
 export const dataApi = {
-  // 市场数据概览
+  // 市场数据概览（含市情雷达各模块）
   marketOverview: () => request('/data/market-overview'),
+
+  // 竞争对手动态（手机端/电脑端实时拉取）
+  competitors: () => request('/data/competitors'),
 
   // 手动刷新
   refresh: () => request('/data/refresh', { method: 'POST' }),

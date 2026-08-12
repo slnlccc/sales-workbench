@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, CalendarClock, Sparkles, Phone, FileText, Check, X, Clock, User
 } from 'lucide-react';
@@ -26,11 +26,22 @@ const recordDateStr = (record: WorkbenchRecord): string => {
 };
 
 export default function CalendarView() {
-  const { records, closeScheduleTask, addManualSchedule, deleteRecord } = useWorkbenchStore();
+  const { records, closeScheduleTask, addManualSchedule, deleteRecord, checkExpiredSchedules, deleteExpiredRecords, requestNotificationPermission } = useWorkbenchStore();
   const today = new Date();
   const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const [viewDate, setViewDate] = useState(currentMonth);
   const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate());
+
+  // 定时检测过期日程（每分钟检测一次）
+  useEffect(() => {
+    checkExpiredSchedules();
+    const timer = setInterval(() => {
+      checkExpiredSchedules();
+    }, 60000);
+    // 页面加载时请求通知权限
+    requestNotificationPermission();
+    return () => clearInterval(timer);
+  }, [checkExpiredSchedules, requestNotificationPermission]);
 
   // 手动添加弹窗状态
   const [showAddModal, setShowAddModal] = useState(false);
@@ -188,13 +199,26 @@ export default function CalendarView() {
                 ? `${selectedDateStr} 的日程`
                 : '请选择日期查看日程'}
             </h4>
-            <button
-              onClick={openAddModal}
-              className="text-xs text-coffee-600 hover:text-coffee-800 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-coffee-50 transition-colors"
-            >
-              <Plus className="w-3 h-3" />
-              <span>添加日程</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {selectedRecords.some((r) => r.expired) && (
+                <button
+                  onClick={() => {
+                    if (confirm('确定删除所有过期日程吗？')) deleteExpiredRecords();
+                  }}
+                  className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                  <span>删除过期</span>
+                </button>
+              )}
+              <button
+                onClick={openAddModal}
+                className="text-xs text-coffee-600 hover:text-coffee-800 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-coffee-50 transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+                <span>添加日程</span>
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -216,6 +240,7 @@ export default function CalendarView() {
               const Icon = r.type === 'call' ? Phone : r.type === 'task' ? FileText : CalendarClock;
               const time = new Date(r.reminderAt || r.createdAt);
               const timeStr = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`;
+              const isExpired = r.expired && !r.done;
               const handleDelete = (e: React.MouseEvent) => {
                 e.stopPropagation();
                 if (confirm('确定删除该日程吗？')) deleteRecord(r.id);
@@ -227,7 +252,9 @@ export default function CalendarView() {
                     'flex items-center gap-3 p-3 rounded-2xl transition-all select-none',
                     r.done
                       ? 'bg-emerald-50/60 hover:bg-emerald-100'
-                      : 'bg-coffee-50/40 hover:bg-coffee-100 hover:shadow-sm'
+                      : isExpired
+                        ? 'bg-red-50/60 hover:bg-red-100 border border-red-200'
+                        : 'bg-coffee-50/40 hover:bg-coffee-100 hover:shadow-sm'
                   )}
                 >
                   <div
@@ -236,18 +263,24 @@ export default function CalendarView() {
                       'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer',
                       r.done
                         ? 'bg-emerald-500 border-emerald-500'
-                        : 'border-coffee-300 hover:border-coffee-500'
+                        : isExpired
+                          ? 'border-red-400 hover:border-red-600'
+                          : 'border-coffee-300 hover:border-coffee-500'
                     )}
                   >
                     {r.done && <Check className="w-3 h-3 text-white" />}
                   </div>
-                  <Icon className={cn('w-4 h-4 flex-shrink-0', r.done ? 'text-emerald-500' : 'text-coffee-500')} />
+                  <Icon className={cn('w-4 h-4 flex-shrink-0',
+                    r.done ? 'text-emerald-500' : isExpired ? 'text-red-500' : 'text-coffee-500')} />
                   <div
                     className="flex-1 min-w-0 cursor-pointer"
                     onClick={() => closeScheduleTask(r.id)}
                   >
-                    <div className="flex items-center gap-2 mb-0.5">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                       <span className="text-xs text-coffee-400 font-mono">{timeStr}</span>
+                      {isExpired && (
+                        <span className="text-xs px-1.5 py-0.5 bg-red-500 text-white rounded font-medium">已过期</span>
+                      )}
                       {r.customer && (
                         <span className="text-xs text-coffee-400 flex items-center gap-0.5">
                           <User className="w-3 h-3" />
@@ -255,7 +288,8 @@ export default function CalendarView() {
                         </span>
                       )}
                     </div>
-                    <span className={cn('text-sm block', r.done ? 'line-through text-emerald-700' : 'text-coffee-800')}>
+                    <span className={cn('text-sm block',
+                      r.done ? 'line-through text-emerald-700' : isExpired ? 'text-red-700' : 'text-coffee-800')}>
                       {r.content}
                     </span>
                   </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { MessageSquare, Mic, Sparkles, CalendarClock, User, Tag, Check, X, ArrowLeft, Plus, Pencil, Save } from 'lucide-react';
+import { MessageSquare, Mic, Sparkles, CalendarClock, User, Tag, Check, X, ArrowLeft, Plus, Pencil, Save, Wand2 } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
+import { aiApi } from '@/services/api';
 import { cn } from '@/lib/utils';
 
 interface ExtractedTask {
@@ -294,6 +295,22 @@ export default function TextInputArea() {
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
   const [editTypes, setEditTypes] = useState<string[]>([]);
+  const [correcting, setCorrecting] = useState(false);
+
+  const handleAICorrect = async () => {
+    if (!inputText.trim()) return;
+    setCorrecting(true);
+    try {
+      const result = await aiApi.voiceCorrect(inputText);
+      const lines = (result.correctedText || '').split('\n').filter((l: string) => l.trim());
+      const correctedText = lines[0]?.replace(/【校正后标准锻造专业文本】/, '').trim() || inputText;
+      setInputText(correctedText);
+    } catch {
+      // 矫正失败时保留原文
+    } finally {
+      setCorrecting(false);
+    }
+  };
 
   const handleAnalyze = () => {
     if (!inputText.trim()) return;
@@ -447,6 +464,28 @@ export default function TextInputArea() {
               className="px-4 py-2 text-sm text-coffee-500 hover:text-coffee-700 hover:bg-coffee-50 rounded-xl transition-colors"
             >
               清除
+            </button>
+            <button
+              onClick={handleAICorrect}
+              disabled={!inputText.trim() || correcting}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl transition-all',
+                inputText.trim() && !correcting
+                  ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              )}
+            >
+              {correcting ? (
+                <>
+                  <Sparkles className="w-4 h-4 animate-spin" />
+                  <span>矫正中...</span>
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-4 h-4" />
+                  <span>AI锻造矫正</span>
+                </>
+              )}
             </button>
             <button
               onClick={handleAnalyze}

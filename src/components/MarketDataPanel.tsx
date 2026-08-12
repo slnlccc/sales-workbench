@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, TrendingDown, Minus, RefreshCw, Newspaper, Calendar, AlertCircle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, RefreshCw, Newspaper, Calendar, AlertCircle, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { dataApi } from '@/services/api';
 
@@ -18,6 +18,7 @@ interface IndustryNews {
   summary: string;
   category: string;
   source: string;
+  sourceUrl?: string;
   date: string;
 }
 
@@ -27,6 +28,7 @@ interface Exhibition {
   location: string;
   description: string;
   category: string;
+  sourceUrl?: string;
 }
 
 interface MarketData {
@@ -195,7 +197,26 @@ export default function MarketDataPanel() {
                   </span>
                 </div>
                 <p className="text-xs text-coffee-500 leading-relaxed">{news.summary}</p>
-                <p className="text-xs text-coffee-400 mt-1">{news.source} · {news.date}</p>
+                <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-coffee-400 mt-1">
+                  <span>{news.source}</span>
+                  <span>·</span>
+                  <span>{news.date}</span>
+                  {news.sourceUrl && (
+                    <>
+                      <span>·</span>
+                      <a
+                        href={news.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-0.5 text-coffee-600 hover:text-coffee-900 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>核实来源</span>
+                      </a>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -219,11 +240,23 @@ export default function MarketDataPanel() {
                   </span>
                 </div>
                 <p className="text-xs text-coffee-500 leading-relaxed mb-1">{ex.description}</p>
-                <div className="flex items-center gap-3 text-xs text-coffee-400">
+                <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs text-coffee-400">
                   <span>{ex.date}</span>
                   <span>·</span>
                   <span>{ex.location}</span>
                 </div>
+                {ex.sourceUrl && (
+                  <a
+                    href={ex.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5 text-xs text-coffee-600 hover:text-coffee-900 hover:underline mt-1.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>展会官网/核实来源</span>
+                  </a>
+                )}
               </div>
             ))}
           </div>

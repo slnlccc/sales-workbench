@@ -1,3 +1,6 @@
+// 后端服务地址（Railway 部署的公网域名，用于实时拉取竞争对手动态）
+const API_BASE = 'https://sales-workbench-production.up.railway.app/api'
+
 Page({
   data: {
     news: [
@@ -64,10 +67,58 @@ Page({
       '智能制造转型是锻件企业提升竞争力的关键'
     ],
     selectedCategory: '全部',
-    categories: ['全部', '航天', '行业', '材料']
+    categories: ['全部', '航天', '行业', '材料'],
+    // 竞争对手动态（实时从后端拉取，每日更新）
+    competitors: [],
+    competitorsLoading: false,
+    competitorsLastUpdate: '',
   },
 
-  onLoad() {},
+  onLoad() {
+    // 进入页面立即拉取竞争对手动态
+    this.fetchCompetitors()
+  },
+
+  /**
+   * 拉取竞争对手动态（公开接口，无需登录）
+   */
+  fetchCompetitors() {
+    this.setData({ competitorsLoading: true })
+    wx.request({
+      url: `${API_BASE}/data/competitors`,
+      method: 'GET',
+      timeout: 10000,
+      success: (res) => {
+        if (res.statusCode === 200 && res.data) {
+          const competitors = res.data.competitors || []
+          const lastUpdate = res.data.lastUpdate
+            ? '上次更新 ' + this.formatDate(res.data.lastUpdate)
+            : ''
+          this.setData({
+            competitors,
+            competitorsLastUpdate: lastUpdate,
+            competitorsLoading: false,
+          })
+        } else {
+          this.setData({ competitorsLoading: false })
+        }
+      },
+      fail: () => {
+        this.setData({ competitorsLoading: false })
+        wx.showToast({ title: '网络异常，稍后重试', icon: 'none' })
+      },
+    })
+  },
+
+  formatDate(iso) {
+    if (!iso) return ''
+    const d = new Date(iso)
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  },
+
+  refreshCompetitors() {
+    this.fetchCompetitors()
+  },
 
   filterNews(e) {
     const { idx } = e.currentTarget.dataset
@@ -86,6 +137,35 @@ Page({
       title: news.title,
       content: news.summary + '\n\n来源：' + news.source + '\n日期：' + news.date,
       showCancel: false
+    })
+  },
+
+  goCompetitorDetail(e) {
+    const { id } = e.currentTarget.dataset
+    const comp = this.data.competitors.find(c => c.id === id)
+    if (!comp) return
+    const content = comp.summary +
+      '\n\n竞争对手：' + comp.competitorName +
+      '\n渠道：' + comp.channel +
+      '\n类型：' + comp.category +
+      '\n来源：' + comp.sourceName +
+      '\n日期：' + comp.publishedAt +
+      (comp.impactOnUs ? '\n\n对派克新材影响：' + comp.impactOnUs : '') +
+      (comp.sourceUrl ? '\n\n原文链接：' + comp.sourceUrl : '')
+    wx.showModal({
+      title: comp.title,
+      content,
+      showCancel: comp.sourceUrl ? true : false,
+      cancelText: '关闭',
+      confirmText: comp.sourceUrl ? '查看原文' : '确定',
+      success: (res) => {
+        if (res.confirm && comp.sourceUrl) {
+          wx.setClipboardData({
+            data: comp.sourceUrl,
+            success: () => wx.showToast({ title: '链接已复制，可在浏览器打开', icon: 'none' }),
+          })
+        }
+      },
     })
   }
 })

@@ -56,6 +56,9 @@ interface WorkbenchState {
   setJoinDate: (dateStr: string) => void;
   closeScheduleTask: (id: string) => void;
   deleteRecord: (id: string) => void;
+  deleteExpiredRecords: () => void;
+  checkExpiredSchedules: () => void;
+  requestNotificationPermission: () => void;
   deleteMemo: (id: string) => void;
   clearInput: () => void;
   // 云同步：导出/导入前端数据
@@ -371,6 +374,59 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
   deleteRecord: (id) => {
     persistSet((state) => ({
       records: state.records.filter((r) => r.id !== id),
+    }));
+  },
+
+  // 检测并标记过期日程 + 触发浏览器通知
+  checkExpiredSchedules: () => {
+    const state = get();
+    const now = Date.now();
+    let changed = false;
+    let expiredCount = 0;
+    const newRecords = state.records.map((r) => {
+      if ((r.type === 'schedule' || r.type === 'task') && !r.done && r.reminderAt) {
+        const reminderTime = new Date(r.reminderAt).getTime();
+        // 过期：提醒时间已过（超过 1 分钟）且未完成
+        if (!r.expired && reminderTime < now - 60000) {
+          changed = true;
+          expiredCount++;
+          return { ...r, expired: true };
+        }
+      }
+      return r;
+    });
+    if (changed) {
+      persistSet(() => ({ records: newRecords }));
+      // 触发浏览器通知
+      if (expiredCount > 0 && 'Notification' in window) {
+        try {
+          if (Notification.permission === 'granted') {
+            new Notification('销售工作台 · 日程提醒', {
+              body: `有 ${expiredCount} 条日程已过期，请及时处理`,
+              tag: 'schedule-expired',
+            });
+          } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission();
+          }
+        } catch {
+          // 通知失败静默忽略
+        }
+      }
+    }
+  },
+
+  // 请求通知权限
+  requestNotificationPermission: () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  },
+
+  // 快速删除过期日程
+  deleteExpiredRecords: () => {
+    const state = get();
+    persistSet((s) => ({
+      records: s.records.filter((r) => !(r.expired && (r.type === 'schedule' || r.type === 'task'))),
     }));
   },
 

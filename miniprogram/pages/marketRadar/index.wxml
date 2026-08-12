@@ -60,4 +60,32 @@
       <text class="text-xs text-coffee-600">• {{item}}</text>
     </view>
   </view>
+
+  <view class="card mb-3">
+    <view class="flex justify-between items-center mb-2">
+      <text class="text-sm font-medium text-coffee-800">竞争对手动态</text>
+      <view class="flex items-center" bindtap="refreshCompetitors">
+        <text class="text-xs text-coffee-400" style="margin-right:8rpx;">{{competitorsLoading ? '刷新中...' : '刷新'}}</text>
+        <text class="text-xs text-coffee-400">{{competitorsLastUpdate}}</text>
+      </view>
+    </view>
+    <view wx:if="{{competitors.length === 0}}" class="news-item">
+      <text class="text-xs text-coffee-400">{{competitorsLoading ? '正在拉取最新动态...' : '暂无竞争对手动态，点击右上角刷新'}}</text>
+    </view>
+    <view wx:for="{{competitors}}" wx:key="id" class="news-item" bindtap="goCompetitorDetail" data-id="{{item.id}}">
+      <view class="flex justify-between items-start">
+        <view class="flex-1">
+          <view class="flex items-center" style="margin-bottom:4rpx;">
+            <text class="tag tag-red" style="margin-right:8rpx;">{{item.competitorName}}</text>
+            <text class="tag" style="background:#A78BFA;color:#fff;margin-right:8rpx;">{{item.channel}}</text>
+            <text class="text-xs text-coffee-400">{{item.category}}</text>
+          </view>
+          <text class="text-sm font-medium">{{item.title}}</text>
+          <text class="text-xs text-coffee-400" style="display:block;margin-top:4rpx;">{{item.sourceName}} · {{item.publishedAt}}</text>
+        </view>
+      </view>
+      <text class="text-xs text-coffee-500" style="display:block;margin-top:8rpx;">{{item.summary}}</text>
+      <text class="text-xs text-blue-500" style="display:block;margin-top:8rpx;">核实来源 ›</text>
+    </view>
+  </view>
 </view>

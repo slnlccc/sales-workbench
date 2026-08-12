@@ -24,6 +24,8 @@ export interface WorkbenchRecord {
   reminderAt?: string;
   done?: boolean;
   closed?: boolean;
+  expired?: boolean;
+  notified?: boolean;
   source?: RecordSource;
 }
 
@@ -66,6 +68,7 @@ export interface NewsItem {
   insights?: string;          // 新增：见解点评
   businessValue?: string;     // 新增：商业价值思考
   relatedCustomers?: string[];// 新增：关联客户
+  sourceUrl?: string;         // 新增：原文链接（可点击核实）
 }
 
 export interface MaterialItem {
@@ -109,6 +112,21 @@ export interface PolicyItem {
   summary: string;
   aiAnalysis?: string;   // 新增：AI分析政策对销售影响
   salesImpact?: string;  // 新增：对销售的具体影响
+  sourceUrl?: string;    // 新增：政策原文链接（可点击核实）
+}
+
+// 竞争对手动态（派克新材竞品扒取公众号/官网/招投标）
+export interface CompetitorItem {
+  id: string;
+  competitorName: string;        // 竞争对手名称
+  channel: '公众号' | '官网' | '招投标' | '新闻'; // 信息来源渠道
+  title: string;                 // 动态标题
+  summary: string;               // 内容摘要
+  publishedAt: string;           // 发布日期
+  sourceUrl: string;             // 信息来源网址（可点击核实）
+  sourceName: string;            // 来源名称
+  category: string;              // 动态类型：产品发布/中标/产能扩张/技术突破/合作动态
+  impactOnUs?: string;           // 对我方影响分析
 }
 
 export interface ExhibitionItem {
