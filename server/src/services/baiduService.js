@@ -9,20 +9,23 @@
  */
 
 const QIANFAN_API_URL = 'https://qianfan.baidubce.com/v2/chat/completions'
-const BAIDU_MODEL = process.env.BAIDU_MODEL || 'ernie-speed-128k'
+
+// 加载密钥配置（优先环境变量，回退到配置文件）
+const { BAIDU_API_KEY: _defaultKey, BAIDU_MODEL: _defaultModel } = require('../config/aiKeys')
+const BAIDU_MODEL = process.env.BAIDU_MODEL || _defaultModel || 'ernie-4.0-8k-latest'
 
 /**
  * 检查 API Key 是否配置
  */
 const isConfigured = () => {
-  return !!process.env.BAIDU_API_KEY
+  return !!(process.env.BAIDU_API_KEY || _defaultKey)
 }
 
 /**
  * 获取 API Key
  */
 const getApiKey = () => {
-  const key = process.env.BAIDU_API_KEY
+  const key = process.env.BAIDU_API_KEY || _defaultKey
   if (!key) {
     throw new Error('BAIDU_API_KEY 未配置，AI 功能不可用')
   }

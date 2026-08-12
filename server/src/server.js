@@ -54,19 +54,6 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// AI 配置诊断端点（临时，用于排查环境变量问题）
-app.get('/api/ai-debug', (req, res) => {
-  res.json({
-    BAIDU_API_KEY_exists: !!process.env.BAIDU_API_KEY,
-    BAIDU_API_KEY_prefix: process.env.BAIDU_API_KEY ? process.env.BAIDU_API_KEY.substring(0, 15) + '...' : 'NOT SET',
-    BAIDU_SECRET_KEY_exists: !!process.env.BAIDU_SECRET_KEY,
-    BAIDU_MODEL: process.env.BAIDU_MODEL || 'NOT SET (default: ernie-speed-128k)',
-    DASHSCOPE_API_KEY_exists: !!process.env.DASHSCOPE_API_KEY,
-    DEEPSEEK_API_KEY_exists: !!process.env.DEEPSEEK_API_KEY,
-    allEnvKeys: Object.keys(process.env).filter(k => !k.startsWith('npm_') && !k.startsWith('PATH') && !k.startsWith('RAILWAY') && !k.startsWith('DYNO')),
-  })
-})
-
 app.use('/api/users', require('./routes/userRoutes'))
 app.use('/api/projects', require('./routes/projectRoutes'))
 app.use('/api/contracts', require('./routes/contractRoutes'))
