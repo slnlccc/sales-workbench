@@ -49,6 +49,11 @@ const initDB = async () => {
 
 app.use(express.static(path.join(__dirname, '../../dist')))
 
+// 公开健康检查端点（Railway 健康检查用，不需要认证）
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
 app.use('/api/users', require('./routes/userRoutes'))
 app.use('/api/projects', require('./routes/projectRoutes'))
 app.use('/api/contracts', require('./routes/contractRoutes'))
