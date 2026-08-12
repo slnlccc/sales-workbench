@@ -4,11 +4,12 @@ import {
   ArrowRight, ArrowLeft, FileText, ChevronRight, Users, RefreshCw, Sparkles,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
+import MarketDataPanel from '@/components/MarketDataPanel';
 import { newsItems, biddingItems, policyItems, exhibitionItems } from '@/data/news';
 import type { NewsItem, BiddingItem, PolicyItem, ExhibitionItem } from '@/types';
 import { cn } from '@/lib/utils';
 
-type Category = 'industry' | 'materials' | 'bidding' | 'policy' | 'exhibition';
+type Category = 'industry' | 'materials' | 'bidding' | 'policy' | 'exhibition' | 'ai-market';
 
 const categoryConfig: Record<Category, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   industry: { label: '行业动态', icon: Newspaper },
@@ -16,6 +17,7 @@ const categoryConfig: Record<Category, { label: string; icon: React.ComponentTyp
   bidding: { label: '招投标', icon: Briefcase },
   policy: { label: '政策法规', icon: Scale },
   exhibition: { label: '行业展会', icon: Calendar },
+  'ai-market': { label: 'AI市场数据', icon: Sparkles },
 };
 
 const industries = ['全部', '航空航天', '能源电力', '新能源', '船舶', '石化', '机械'];
@@ -310,6 +312,12 @@ export default function MarketRadar() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {category === 'ai-market' && (
+            <div className="animate-fade-in">
+              <MarketDataPanel />
             </div>
           )}
 

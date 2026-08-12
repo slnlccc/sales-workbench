@@ -23,15 +23,15 @@ const request = async (url: string, options: RequestInit = {}) => {
 }
 
 export const authApi = {
-  login: (data: { username: string; password: string }) => 
+  login: (data: { username: string; password: string }) =>
     request('/users/login', { method: 'POST', body: JSON.stringify(data) }),
-  
-  register: (data: { username: string; email: string; password: string; name?: string }) => 
+
+  register: (data: { username: string; email: string; password: string; name?: string }) =>
     request('/users/register', { method: 'POST', body: JSON.stringify(data) }),
-  
+
   getProfile: () => request('/users/profile'),
-  
-  updateProfile: (data: { name?: string; email?: string }) => 
+
+  updateProfile: (data: { name?: string; email?: string }) =>
     request('/users/profile', { method: 'PUT', body: JSON.stringify(data) })
 }
 
@@ -40,14 +40,14 @@ export const projectApi = {
     const query = new URLSearchParams(params).toString()
     return request(`/projects${query ? '?' + query : ''}`)
   },
-  
+
   get: (id: string) => request(`/projects/${id}`),
-  
+
   create: (data: any) => request('/projects', { method: 'POST', body: JSON.stringify(data) }),
-  
-  update: (id: string, data: any) => 
+
+  update: (id: string, data: any) =>
     request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  
+
   delete: (id: string) => request(`/projects/${id}`, { method: 'DELETE' })
 }
 
@@ -56,16 +56,16 @@ export const contractApi = {
     const query = new URLSearchParams(params).toString()
     return request(`/contracts${query ? '?' + query : ''}`)
   },
-  
+
   get: (id: string) => request(`/contracts/${id}`),
-  
+
   create: (data: any) => request('/contracts', { method: 'POST', body: JSON.stringify(data) }),
-  
-  update: (id: string, data: any) => 
+
+  update: (id: string, data: any) =>
     request(`/contracts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  
+
   delete: (id: string) => request(`/contracts/${id}`, { method: 'DELETE' }),
-  
+
   getLinkedProjects: (id: string) => request(`/contracts/${id}/projects`)
 }
 
@@ -74,38 +74,38 @@ export const scheduleApi = {
     const query = new URLSearchParams(params).toString()
     return request(`/schedules${query ? '?' + query : ''}`)
   },
-  
+
   get: (id: string) => request(`/schedules/${id}`),
-  
+
   create: (data: any) => request('/schedules', { method: 'POST', body: JSON.stringify(data) }),
-  
-  update: (id: string, data: any) => 
+
+  update: (id: string, data: any) =>
     request(`/schedules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  
+
   delete: (id: string) => request(`/schedules/${id}`, { method: 'DELETE' }),
-  
+
   toggleClosed: (id: string) => request(`/schedules/${id}/toggle`, { method: 'POST' })
 }
 
 export const customerApi = {
   list: () => request('/customers'),
-  
+
   get: (id: string) => request(`/customers/${id}`),
-  
+
   create: (data: any) => request('/customers', { method: 'POST', body: JSON.stringify(data) }),
-  
-  update: (id: string, data: any) => 
+
+  update: (id: string, data: any) =>
     request(`/customers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  
+
   delete: (id: string) => request(`/customers/${id}`, { method: 'DELETE' }),
-  
-  addProject: (id: string, project: any) => 
+
+  addProject: (id: string, project: any) =>
     request(`/customers/${id}/projects`, { method: 'POST', body: JSON.stringify({ project }) }),
-  
-  updateProject: (id: string, project: any) => 
+
+  updateProject: (id: string, project: any) =>
     request(`/customers/${id}/projects`, { method: 'PUT', body: JSON.stringify({ project }) }),
-  
-  deleteProject: (id: string, projectId: string) => 
+
+  deleteProject: (id: string, projectId: string) =>
     request(`/customers/${id}/projects/${projectId}`, { method: 'DELETE' })
 }
 
@@ -114,4 +114,87 @@ export const syncApi = {
   pull: () => request('/sync/pull', { method: 'POST' }),
   status: () => request('/sync/status'),
   config: () => request('/sync/config'),
+}
+
+// ============================================================
+// AI API
+// ============================================================
+export const aiApi = {
+  // 语音助手 — 解析销售指令
+  voiceAssistant: (text: string) =>
+    request('/ai/voice-assistant', { method: 'POST', body: JSON.stringify({ text }) }),
+
+  // 客户分析
+  customerAnalysis: (data: { customerName: string; customerInfo?: any; records?: any[]; projects?: any[] }) =>
+    request('/ai/customer-analysis', { method: 'POST', body: JSON.stringify(data) }),
+
+  // 报告生成
+  reportGeneration: (data: { reportType: string; records?: any[]; dateRange?: string; extraInfo?: string }) =>
+    request('/ai/report-generation', { method: 'POST', body: JSON.stringify(data) }),
+
+  // 行业洞察
+  industryInsight: (data: { topic?: string; articles?: string }) =>
+    request('/ai/industry-insight', { method: 'POST', body: JSON.stringify(data) }),
+
+  // 备忘录知识沉淀
+  memoKnowledge: (content: string) =>
+    request('/ai/memo-knowledge', { method: 'POST', body: JSON.stringify({ content }) }),
+
+  // AI 对话（流式）
+  chat: async (messages: Array<{ role: string; content: string }>, onChunk: (text: string) => void) => {
+    const token = getToken()
+    const headers: HeadersInit = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const response = await fetch(`${API_BASE}/ai/chat`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ messages }),
+    })
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}))
+      throw new Error(errData.message || 'AI 对话失败')
+    }
+
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data: ')) continue
+
+        const jsonStr = trimmed.slice(6)
+        if (jsonStr === '[DONE]') continue
+
+        try {
+          const parsed = JSON.parse(jsonStr)
+          if (parsed.content) onChunk(parsed.content)
+          if (parsed.error) throw new Error(parsed.error)
+        } catch {
+          // 跳过无法解析的行
+        }
+      }
+    }
+  },
+}
+
+// ============================================================
+// 市场数据 API
+// ============================================================
+export const dataApi = {
+  // 市场数据概览
+  marketOverview: () => request('/data/market-overview'),
+
+  // 手动刷新
+  refresh: () => request('/data/refresh', { method: 'POST' }),
 }

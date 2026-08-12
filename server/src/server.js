@@ -4,6 +4,7 @@ const cors = require('cors')
 const path = require('path')
 const connectDB = require('./config/db')
 const User = require('./models/User')
+const { startDailyUpdate } = require('./services/dailyUpdateService')
 
 const app = express()
 
@@ -54,6 +55,8 @@ app.use('/api/contracts', require('./routes/contractRoutes'))
 app.use('/api/schedules', require('./routes/scheduleRoutes'))
 app.use('/api/customers', require('./routes/customerRoutes'))
 app.use('/api/sync', require('./routes/syncRoutes'))
+app.use('/api/ai', require('./routes/aiRoutes'))
+app.use('/api/data', require('./routes/dataRoutes'))
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../../dist', 'index.html'))
@@ -67,6 +70,9 @@ initDB().then(() => {
     console.log(`服务器运行在 ${HOST}:${PORT}`)
     console.log(`网络访问模式: 公网开放模式（支持HTTP/HTTPS、公网IP、动态IP、云端域名）`)
     console.log(`安全策略: JWT鉴权已启用，IP白名单已关闭`)
+
+    // 启动每日数据自动更新（每天 8:00）
+    startDailyUpdate()
   })
 }).catch(err => {
   console.error('服务器启动失败:', err)

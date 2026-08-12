@@ -1,4 +1,4 @@
-# Railway 构建配置 - 销售工作台原版
+# Railway 构建配置 - 销售工作台
 # 构建阶段：安装根目录前端依赖 + server目录后端依赖 + 构建前端
 [phases.install]
 cmds = [

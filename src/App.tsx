@@ -10,6 +10,7 @@ import ProjectManagerPage from "@/pages/ProjectManagerPage";
 import PlaceholderPage from "@/pages/PlaceholderPage";
 import LoginPage from "@/pages/LoginPage";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import FloatingMic from "@/components/FloatingMic";
 
 export default function App() {
   return (
@@ -17,72 +18,73 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<Navigate to="/voice-workbench" replace />} />
-        <Route 
-          path="/voice-workbench" 
+        <Route
+          path="/voice-workbench"
           element={
             <ProtectedRoute>
               <VoiceWorkbench />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/market-radar" 
+        <Route
+          path="/market-radar"
           element={
             <ProtectedRoute>
               <MarketRadar />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/meeting-library" 
+        <Route
+          path="/meeting-library"
           element={
             <ProtectedRoute>
               <MeetingLibrary />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/proposal" 
+        <Route
+          path="/proposal"
           element={
             <ProtectedRoute>
               <ProposalPage />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/customer-manager" 
+        <Route
+          path="/customer-manager"
           element={
             <ProtectedRoute>
               <CustomerManager />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/performance-review" 
+        <Route
+          path="/performance-review"
           element={
             <ProtectedRoute>
               <PerformanceReview />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/reports" 
+        <Route
+          path="/reports"
           element={
             <ProtectedRoute>
               <ReportPage />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/project-manager" 
+        <Route
+          path="/project-manager"
           element={
             <ProtectedRoute>
               <ProjectManagerPage />
             </ProtectedRoute>
-          } 
+          }
         />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      <FloatingMic />
     </Router>
   );
 }
