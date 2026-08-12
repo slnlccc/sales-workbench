@@ -33,16 +33,24 @@ export default function CloudSyncPanel({ compact = false }: { compact?: boolean 
         <div className="flex items-center gap-2 text-xs px-3">
           {configured ? (
             <Cloud className="w-4 h-4 text-green-500" />
+          ) : error ? (
+            <AlertCircle className="w-4 h-4 text-amber-500" />
           ) : (
             <CloudOff className="w-4 h-4 text-cream-400" />
           )}
           <span className="text-cream-600">
-            {configured ? '云端同步' : '云端未配置'}
+            {configured ? '云端同步' : error ? '同步异常' : '云端未配置'}
           </span>
           {configured && lastSync && (
             <span className="text-cream-400 ml-auto">{lastSync}</span>
           )}
         </div>
+        {!configured && error && (
+          <div className="px-3 text-xs text-amber-600 flex items-start gap-1">
+            <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
         {configured && (
           <div className="flex gap-1.5 px-2">
             <button

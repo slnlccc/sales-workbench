@@ -51,7 +51,14 @@ app.use(express.static(path.join(__dirname, '../../dist')))
 
 // 公开健康检查端点（Railway 健康检查用，不需要认证）
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+  const cloudSync = require('./services/cloudSyncService')
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    cloudSyncConfigured: cloudSync.isConfigured(),
+    cosRegion: process.env.TENCENT_COS_REGION || '',
+    cosBucket: process.env.TENCENT_COS_BUCKET ? 'set' : 'unset',
+  })
 })
 
 app.use('/api/users', require('./routes/userRoutes'))

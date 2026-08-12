@@ -34,8 +34,14 @@ export function useCloudSync() {
       const res = await syncApi.status()
       setStatus(res)
       setError(null)
-    } catch {
-      // 后端未启动时静默处理
+    } catch (err: any) {
+      // 请求失败（如401未授权、网络错误）—— 不等于"未配置"，需区分
+      const msg = err?.message || ''
+      if (msg.includes('未授权') || msg.includes('401') || msg.includes('令牌')) {
+        setError('登录已过期，请重新登录后查看同步状态')
+      } else {
+        setError('无法连接同步服务：' + (msg || '网络错误'))
+      }
     }
   }, [])
 
