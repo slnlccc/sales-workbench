@@ -8,5 +8,5 @@ const _k = ['bce-v3/ALTAK-9dHe8z', 'YK14CoVzCycFwYk/', '2960abf5adac80652c55', '
 
 module.exports = {
   BAIDU_API_KEY: _k.join(''),
-  BAIDU_MODEL: 'ernie-4.0-8k-latest',
+  BAIDU_MODEL: 'ernie-4.0-turbo-8k',
 }

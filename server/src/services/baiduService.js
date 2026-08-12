@@ -1,18 +1,20 @@
 /**
- * 百度千帆 AI 服务模块（新版 Bearer Token 方式）
+ * 百度千帆 AI 服务模块（V1 RPC 方式）
  * 使用文心大模型（ERNIE），支持普通调用、流式调用和结构化输出
- * API 文档：https://cloud.baidu.com/doc/WENXINWORKSHOP/index.html
  *
- * 环境变量：
+ * 当前模型：ernie-4.0-turbo（免费可用，endpoint=ernie-4.0-turbo-8k）
+ *
+ * 环境变量（可选，覆盖内置默认值）：
  *   BAIDU_API_KEY - 百度千帆 API Key（格式：bce-v3/ALTAK-xxx/xxx）
- *   BAIDU_MODEL   - 模型名称（默认 ernie-speed-128k，免费）
+ *   BAIDU_MODEL   - 模型端点路径（默认 ernie-4.0-turbo-8k）
  */
 
-const QIANFAN_API_URL = 'https://qianfan.baidubce.com/v2/chat/completions'
+const QIANFAN_BASE_URL = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat'
 
 // 加载密钥配置（优先环境变量，回退到配置文件）
 const { BAIDU_API_KEY: _defaultKey, BAIDU_MODEL: _defaultModel } = require('../config/aiKeys')
-const BAIDU_MODEL = process.env.BAIDU_MODEL || _defaultModel || 'ernie-4.0-8k-latest'
+
+const BAIDU_MODEL = process.env.BAIDU_MODEL || _defaultModel || 'ernie-4.0-turbo-8k'
 
 /**
  * 检查 API Key 是否配置
@@ -33,29 +35,27 @@ const getApiKey = () => {
 }
 
 /**
- * 普通调用（非流式）— OpenAI 兼容格式
+ * 普通调用（非流式）
  * @param {Array<{role: string, content: string}>} messages - 消息数组
  * @param {Object} options - 调用选项
  * @returns {Promise<string>} AI 返回的文本
  */
 const chat = async (messages, options = {}) => {
   const apiKey = getApiKey()
-
-  // ernie-4.0-8k 最大输出 2048 tokens，限制上限避免 400 错误
+  const endpoint = options.model || BAIDU_MODEL
   const maxTokens = Math.min(options.maxTokens ?? 2048, 2048)
 
   const body = {
-    model: options.model || BAIDU_MODEL,
     messages: messages.map(m => ({
       role: m.role,
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
     })),
     temperature: options.temperature ?? 0.7,
-    max_tokens: maxTokens,
+    max_output_tokens: maxTokens,
     stream: false,
   }
 
-  const response = await fetch(QIANFAN_API_URL, {
+  const response = await fetch(`${QIANFAN_BASE_URL}/${endpoint}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -71,11 +71,11 @@ const chat = async (messages, options = {}) => {
 
   const data = await response.json()
 
-  if (data.error) {
-    throw new Error(`百度千帆 API 错误: ${data.error.message || JSON.stringify(data.error)}`)
+  if (data.error_code) {
+    throw new Error(`百度千帆 API 错误 (${data.error_code}): ${data.error_msg}`)
   }
 
-  return data.choices?.[0]?.message?.content || ''
+  return data.result || ''
 }
 
 /**
@@ -87,21 +87,20 @@ const chat = async (messages, options = {}) => {
  */
 const chatStream = async (messages, options = {}, onChunk) => {
   const apiKey = getApiKey()
-
+  const endpoint = options.model || BAIDU_MODEL
   const maxTokens = Math.min(options.maxTokens ?? 2048, 2048)
 
   const body = {
-    model: options.model || BAIDU_MODEL,
     messages: messages.map(m => ({
       role: m.role,
       content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
     })),
     temperature: options.temperature ?? 0.7,
-    max_tokens: maxTokens,
+    max_output_tokens: maxTokens,
     stream: true,
   }
 
-  const response = await fetch(QIANFAN_API_URL, {
+  const response = await fetch(`${QIANFAN_BASE_URL}/${endpoint}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -130,14 +129,14 @@ const chatStream = async (messages, options = {}, onChunk) => {
 
     for (const line of lines) {
       const trimmed = line.trim()
-      if (!trimmed || !trimmed.startsWith('data:')) continue
+      if (!trimmed.startsWith('data:')) continue
 
       const jsonStr = trimmed.slice(5).trim()
       if (!jsonStr || jsonStr === '[DONE]') continue
 
       try {
         const parsed = JSON.parse(jsonStr)
-        const content = parsed.choices?.[0]?.delta?.content || ''
+        const content = parsed.result || ''
         if (content) {
           fullText += content
           if (onChunk) onChunk(content)
@@ -158,7 +157,6 @@ const chatStream = async (messages, options = {}, onChunk) => {
  * @returns {Promise<Object>} 解析后的 JSON 对象
  */
 const chatJSON = async (messages, options = {}) => {
-  // 在 system 消息中追加 JSON 格式要求
   const enhancedMessages = messages.map(m => {
     if (m.role === 'system') {
       return {
