@@ -11,9 +11,11 @@ import PlaceholderPage from "@/pages/PlaceholderPage";
 import LoginPage from "@/pages/LoginPage";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import FloatingMic from "@/components/FloatingMic";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <Router>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
@@ -86,5 +88,6 @@ export default function App() {
       </Routes>
       <FloatingMic />
     </Router>
+    </ErrorBoundary>
   );
 }
