@@ -1,3 +1,5 @@
+const { projects, contracts, auth } = require('../../utils/api.js')
+
 Page({
   data: {
     projects: [],
@@ -36,11 +38,17 @@ Page({
   },
 
   onLoad() {
+    if (!auth.isLoggedIn()) {
+      wx.showToast({ title: '请先登录', icon: 'none' })
+      setTimeout(() => wx.reLaunch({ url: '/pages/index/index' }), 800)
+      return
+    }
     this.loadProjects()
     this.loadContracts()
   },
 
   onShow() {
+    if (!auth.isLoggedIn()) return
     this.loadProjects()
     this.loadContracts()
   },
@@ -53,45 +61,32 @@ Page({
     if (d.deliveryStatusIndex > 0) filter.deliveryStatus = d.deliveryStatusOptions[d.deliveryStatusIndex]
     if (d.dateFrom) filter.dateFrom = d.dateFrom
     if (d.dateTo) filter.dateTo = d.dateTo
-    return Object.keys(filter).length > 0 ? filter : null
+    return filter
   },
 
-  loadProjects() {
+  async loadProjects() {
     wx.showLoading({ title: '加载中' })
-    wx.cloud.callFunction({
-      name: 'projects',
-      data: { action: 'list', filter: this.buildFilter() },
-      success: res => {
-        wx.hideLoading()
-        if (res.result && res.result.success) {
-          const list = res.result.data || []
-          this.setData({ projects: list, total: list.length, page: 1 })
-          this.calcStats(list)
-          this.updatePagedData()
-        } else {
-          wx.showToast({ title: res.result?.message || '加载失败', icon: 'none' })
-        }
-      },
-      fail: err => {
-        wx.hideLoading()
-        wx.showToast({ title: '网络错误', icon: 'none' })
-        console.error(err)
-      }
-    })
+    try {
+      const res = await projects.list(this.buildFilter())
+      const list = res.data || res.projects || []
+      // 兼容两种ID：_id / id
+      const normalized = list.map(p => ({ ...p, _id: p._id || p.id }))
+      this.setData({ projects: normalized, total: normalized.length, page: 1 })
+      this.calcStats(normalized)
+      this.updatePagedData()
+      wx.hideLoading()
+    } catch (e) {
+      wx.hideLoading()
+    }
   },
 
-  loadContracts() {
-    wx.cloud.callFunction({
-      name: 'contracts',
-      data: { action: 'list' },
-      success: res => {
-        if (res.result && res.result.success) {
-          const list = res.result.data || []
-          const options = ['—', ...list.map(c => c.clientContractNo)]
-          this.setData({ contracts: list, contractOptions: options })
-        }
-      }
-    })
+  async loadContracts() {
+    try {
+      const res = await contracts.list()
+      const list = res.data || res.contracts || []
+      const options = ['—', ...list.map(c => c.clientContractNo)]
+      this.setData({ contracts: list, contractOptions: options })
+    } catch (e) {}
   },
 
   calcStats(list) {
@@ -231,7 +226,7 @@ Page({
     this.setData({ newContractNo: e.detail.value })
   },
 
-  saveProject() {
+  async saveProject() {
     const { editingItem, newContractNo } = this.data
     if (!editingItem.customer || !editingItem.productionNo) {
       wx.showToast({ title: '请填写客户和生产编号', icon: 'none' })
@@ -239,91 +234,70 @@ Page({
     }
 
     if (newContractNo.trim()) {
-      const nc = {
-        clientContractNo: newContractNo.trim(),
-        customer: editingItem.customer || '未指定客户',
-        linkedProjects: 1,
-        totalAmount: editingItem.totalPrice || 0,
-        paymentStatus: '未回款',
-        invoiceDate: '未开票',
-        paymentDate: '—',
-        partialAmount: 0,
-        contractPaymentMethod: '—',
-        actualPaymentMethod: '—',
-        risk: '正常'
+      wx.showLoading({ title: '创建合同中' })
+      try {
+        const nc = {
+          clientContractNo: newContractNo.trim(),
+          customer: editingItem.customer || '未指定客户',
+          linkedProjects: 1,
+          totalAmount: editingItem.totalPrice || 0,
+          paymentStatus: '未回款',
+          invoiceDate: '未开票',
+          paymentDate: '—',
+          partialAmount: 0,
+          contractPaymentMethod: '—',
+          actualPaymentMethod: '—',
+          risk: '正常'
+        }
+        await contracts.create(nc)
+        wx.hideLoading()
+        const item = { ...editingItem, clientContractNo: newContractNo.trim(), hasContract: true }
+        await this.doSave(item)
+      } catch (e) {
+        wx.hideLoading()
       }
-      wx.cloud.callFunction({
-        name: 'contracts',
-        data: { action: 'add', data: nc },
-        success: res => {
-          if (res.result && res.result.success) {
-            const item = { ...editingItem, clientContractNo: newContractNo.trim(), hasContract: true }
-            this.doSave(item)
-          } else {
-            wx.showToast({ title: '创建合同失败', icon: 'none' })
-          }
-        },
-        fail: () => wx.showToast({ title: '创建合同失败', icon: 'none' })
-      })
       return
     }
 
-    this.doSave(editingItem)
+    await this.doSave(editingItem)
   },
 
-  doSave(item) {
+  async doSave(item) {
     wx.showLoading({ title: '保存中' })
-    const isNew = !item._id
-    const payload = isNew
-      ? { action: 'add', data: item }
-      : { action: 'update', id: item._id, data: item }
-
-    wx.cloud.callFunction({
-      name: 'projects',
-      data: payload,
-      success: res => {
-        wx.hideLoading()
-        if (res.result && res.result.success) {
-          wx.showToast({ title: '保存成功', icon: 'success' })
-          this.closeModal()
-          this.loadProjects()
-          this.loadContracts()
-        } else {
-          wx.showToast({ title: res.result?.message || '保存失败', icon: 'none' })
-        }
-      },
-      fail: err => {
-        wx.hideLoading()
-        wx.showToast({ title: '保存失败', icon: 'none' })
-        console.error(err)
+    try {
+      const isNew = !item._id
+      // 去掉_id和空值，交给后端处理
+      const payload = { ...item }
+      delete payload._id
+      if (isNew) {
+        await projects.create(payload)
+      } else {
+        await projects.update(item._id, payload)
       }
-    })
+      wx.hideLoading()
+      wx.showToast({ title: '保存成功', icon: 'success' })
+      this.closeModal()
+      this.loadProjects()
+      this.loadContracts()
+    } catch (e) {
+      wx.hideLoading()
+    }
   },
 
-  confirmDelete() {
+  async confirmDelete() {
     const { deletingId } = this.data
     if (!deletingId) return
     wx.showLoading({ title: '删除中' })
-    wx.cloud.callFunction({
-      name: 'projects',
-      data: { action: 'delete', id: deletingId },
-      success: res => {
-        wx.hideLoading()
-        if (res.result && res.result.success) {
-          wx.showToast({ title: '删除成功', icon: 'success' })
-          this.closeModal()
-          this.loadProjects()
-          this.loadContracts()
-        } else {
-          wx.showToast({ title: res.result?.message || '删除失败', icon: 'none' })
-        }
-      },
-      fail: err => {
-        wx.hideLoading()
-        wx.showToast({ title: '删除失败', icon: 'none' })
-        console.error(err)
-      }
-    })
+    try {
+      await projects.del(deletingId)
+      wx.hideLoading()
+      wx.showToast({ title: '删除成功', icon: 'success' })
+      this.closeModal()
+      this.loadProjects()
+      this.loadContracts()
+    } catch (e) {
+      wx.hideLoading()
+    }
   },
 
   goContractManager() {

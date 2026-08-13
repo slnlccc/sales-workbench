@@ -1,26 +1,77 @@
 <view class="container">
   <view class="header mb-3">
-    <text class="text-xl font-bold text-coffee-900">销售工作台</text>
-    <text class="text-sm text-coffee-500 mt-1" style="display:block;">数字化销售全流程管理</text>
-  </view>
-
-  <view class="grid">
-    <view 
-      class="module-card" 
-      wx:for="{{modules}}" 
-      wx:key="index"
-      data-page="{{item.page}}"
-      bindtap="goPage"
-    >
-      <view class="module-icon" style="background: {{item.color}}20; color: {{item.color}};">
-        <text style="font-size: 48rpx;">{{item.icon}}</text>
+    <view class="header-row">
+      <view>
+        <text class="text-xl font-bold text-coffee-900">销售工作台</text>
+        <text class="text-sm text-coffee-500 mt-1" style="display:block;">数字化销售全流程管理</text>
       </view>
-      <text class="module-title">{{item.title}}</text>
-      <text class="module-desc">{{item.desc}}</text>
+      <view wx:if="{{userInfo}}" class="user-area" bindtap="onLogout">
+        <view class="avatar">{{userInfo.name[0] || userInfo.username[0]}}</view>
+        <text class="username">{{userInfo.name || userInfo.username}}</text>
+      </view>
     </view>
   </view>
 
+  <!-- 登录表单 -->
+  <view wx:if="{{showLogin}}" class="card-panel auth-card">
+    <text class="panel-title">登录</text>
+    <text class="panel-hint">与电脑端使用同一账号密码</text>
+    <view class="form-group">
+      <text class="form-label">用户名</text>
+      <input class="form-input" placeholder="请输入用户名" value="{{username}}" bindinput="onUsernameInput" />
+    </view>
+    <view class="form-group">
+      <text class="form-label">密码</text>
+      <input class="form-input" placeholder="请输入密码" password value="{{password}}" bindinput="onPasswordInput" />
+    </view>
+    <button class="btn btn-primary" bindtap="onLogin">登录</button>
+    <view class="auth-switch" bindtap="openRegister">
+      <text>还没有账号？<text class="link">去注册</text></text>
+    </view>
+  </view>
+
+  <!-- 注册表单 -->
+  <view wx:if="{{showRegister}}" class="card-panel auth-card">
+    <text class="panel-title">注册新账号</text>
+    <text class="panel-hint">注册后可与电脑端共享全部数据</text>
+    <view class="form-group">
+      <text class="form-label">姓名</text>
+      <input class="form-input" placeholder="可空" value="{{regName}}" bindinput="onRegNameInput" />
+    </view>
+    <view class="form-group">
+      <text class="form-label">用户名</text>
+      <input class="form-input" placeholder="请输入登录用户名" value="{{regUsername}}" bindinput="onRegUserInput" />
+    </view>
+    <view class="form-group">
+      <text class="form-label">密码</text>
+      <input class="form-input" placeholder="请输入密码" password value="{{regPassword}}" bindinput="onRegPwdInput" />
+    </view>
+    <button class="btn btn-primary" bindtap="onRegister">注册</button>
+    <view class="auth-switch" bindtap="openLogin">
+      <text>已有账号？<text class="link">去登录</text></text>
+    </view>
+  </view>
+
+  <!-- 模块入口（仅登录后可点） -->
+  <block wx:if="{{userInfo}}">
+    <view class="grid">
+      <view 
+        class="module-card" 
+        wx:for="{{modules}}" 
+        wx:key="index"
+        data-page="{{item.page}}"
+        bindtap="goPage"
+      >
+        <view class="module-icon" style="background: {{item.color}}20; color: {{item.color}};">
+          <text style="font-size: 48rpx;">{{item.icon}}</text>
+        </view>
+        <text class="module-title">{{item.title}}</text>
+        <text class="module-desc">{{item.desc}}</text>
+      </view>
+    </view>
+  </block>
+
   <view class="footer text-center mt-2">
-    <text class="text-xs text-coffee-400">小程序版 v1.0 · 微信云开发</text>
+    <text class="text-xs text-coffee-400">小程序版 v2.0 · 与电脑端数据互通</text>
   </view>
 </view>

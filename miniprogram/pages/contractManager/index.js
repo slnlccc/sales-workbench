@@ -1,3 +1,5 @@
+const { contracts, projects, auth } = require('../../utils/api.js')
+
 Page({
   data: {
     contracts: [],
@@ -7,6 +9,9 @@ Page({
     search: '',
     paymentStatusIndex: 0,
     paymentStatusOptions: ['全部回款状态', '未回款', '部分回款', '已回款'],
+
+    editPaymentStatusIndex: 0,
+    editPaymentStatusOptions: ['未回款', '部分回款', '已回款'],
 
     page: 1,
     pageSize: 10,
@@ -27,11 +32,17 @@ Page({
   },
 
   onLoad() {
+    if (!auth.isLoggedIn()) {
+      wx.showToast({ title: '请先登录', icon: 'none' })
+      setTimeout(() => wx.reLaunch({ url: '/pages/index/index' }), 800)
+      return
+    }
     this.loadContracts()
     this.loadProjects()
   },
 
   onShow() {
+    if (!auth.isLoggedIn()) return
     this.loadContracts()
     this.loadProjects()
   },
@@ -44,48 +55,35 @@ Page({
     return Object.keys(filter).length > 0 ? filter : null
   },
 
-  loadContracts() {
+  async loadContracts() {
     wx.showLoading({ title: '加载中' })
-    wx.cloud.callFunction({
-      name: 'contracts',
-      data: { action: 'list', filter: this.buildFilter() },
-      success: res => {
-        wx.hideLoading()
-        if (res.result && res.result.success) {
-          const list = res.result.data || []
-          this.setData({ contracts: list, total: list.length, page: 1 })
-          this.calcStats(list)
-          this.updatePagedData()
-        } else {
-          wx.showToast({ title: res.result?.message || '加载失败', icon: 'none' })
-        }
-      },
-      fail: err => {
-        wx.hideLoading()
-        wx.showToast({ title: '网络错误', icon: 'none' })
-        console.error(err)
-      }
-    })
+    try {
+      const res = await contracts.list(this.buildFilter())
+      const list = res.data || res.contracts || []
+      const normalized = list.map(c => ({ ...c, _id: c._id || c.id }))
+      this.setData({ contracts: normalized, total: normalized.length, page: 1 })
+      this.calcStats(normalized)
+      this.updatePagedData()
+      wx.hideLoading()
+    } catch (e) {
+      wx.hideLoading()
+    }
   },
 
-  loadProjects() {
-    wx.cloud.callFunction({
-      name: 'projects',
-      data: { action: 'list' },
-      success: res => {
-        if (res.result && res.result.success) {
-          this.setData({ projects: res.result.data || [] })
-        }
-      }
-    })
+  async loadProjects() {
+    try {
+      const res = await projects.list()
+      const list = res.data || res.projects || []
+      this.setData({ projects: list })
+    } catch (e) {}
   },
 
   calcStats(list) {
     const total = list.length
-    const totalAmount = list.reduce((s, c) => s + (c.totalAmount || 0), 0)
-    const received = list.filter(c => c.paymentStatus === '已回款').reduce((s, c) => s + (c.partialAmount || 0), 0)
-    const partial = list.filter(c => c.paymentStatus === '部分回款').reduce((s, c) => s + (c.partialAmount || 0), 0)
-    const pending = list.filter(c => c.paymentStatus === '未回款').reduce((s, c) => s + (c.totalAmount || 0), 0)
+    const totalAmount = list.reduce((s, c) => s + (Number(c.totalAmount) || 0), 0)
+    const received = list.filter(c => c.paymentStatus === '已回款').reduce((s, c) => s + (Number(c.totalAmount) || 0), 0)
+    const partial = list.filter(c => c.paymentStatus === '部分回款').reduce((s, c) => s + (Number(c.partialAmount) || 0), 0)
+    const pending = list.filter(c => c.paymentStatus === '未回款').reduce((s, c) => s + (Number(c.totalAmount) || 0), 0)
     this.setData({ stats: { total, totalAmount, received, partial, pending } })
   },
 
@@ -127,7 +125,12 @@ Page({
       partialAmount: 0, contractPaymentMethod: '', actualPaymentMethod: '—',
       risk: '正常'
     }
-    this.setData({ showEditModal: true, editingItem: emptyItem, riskIndex: 0 })
+    this.setData({
+      showEditModal: true,
+      editingItem: emptyItem,
+      riskIndex: 0,
+      editPaymentStatusIndex: 0
+    })
   },
 
   openEditModal(e) {
@@ -135,9 +138,11 @@ Page({
     const item = this.data.contracts.find(c => c._id === id)
     if (!item) return
     const riskIndex = this.data.riskOptions.indexOf(item.risk)
+    const editPaymentStatusIndex = Math.max(0, this.data.editPaymentStatusOptions.indexOf(item.paymentStatus))
     this.setData({
       showEditModal: true, editingItem: { ...item },
-      riskIndex: riskIndex >= 0 ? riskIndex : 0
+      riskIndex: riskIndex >= 0 ? riskIndex : 0,
+      editPaymentStatusIndex
     })
   },
 
@@ -181,66 +186,54 @@ Page({
   onPaymentStatusSelect(e) {
     const idx = parseInt(e.detail.value)
     const item = { ...this.data.editingItem }
-    item.paymentStatus = this.data.paymentStatusOptions[idx]
-    this.setData({ paymentStatusIndex: idx, editingItem: item })
+    item.paymentStatus = this.data.editPaymentStatusOptions[idx]
+    this.setData({ editPaymentStatusIndex: idx, editingItem: item })
   },
 
-  saveContract() {
+  async saveContract() {
     const { editingItem } = this.data
     if (!editingItem.clientContractNo || !editingItem.customer) {
       wx.showToast({ title: '请填写合同号和客户', icon: 'none' })
       return
     }
     wx.showLoading({ title: '保存中' })
-    const isNew = !editingItem._id
-    const payload = isNew
-      ? { action: 'add', data: editingItem }
-      : { action: 'update', id: editingItem._id, data: editingItem }
-
-    wx.cloud.callFunction({
-      name: 'contracts',
-      data: payload,
-      success: res => {
-        wx.hideLoading()
-        if (res.result && res.result.success) {
-          wx.showToast({ title: '保存成功', icon: 'success' })
-          this.closeModal()
-          this.loadContracts()
-        } else {
-          wx.showToast({ title: res.result?.message || '保存失败', icon: 'none' })
-        }
-      },
-      fail: err => {
-        wx.hideLoading()
-        wx.showToast({ title: '保存失败', icon: 'none' })
-        console.error(err)
+    try {
+      const isNew = !editingItem._id
+      const payload = { ...editingItem }
+      delete payload._id
+      if (isNew) {
+        await contracts.create(payload)
+      } else {
+        await contracts.update(editingItem._id, payload)
       }
-    })
+      wx.hideLoading()
+      wx.showToast({ title: '保存成功，已同步到云端', icon: 'success' })
+      this.closeModal()
+      this.loadContracts()
+    } catch (e) {
+      wx.hideLoading()
+      const msg = e?.message || e?.data?.message || '保存失败，请检查网络或重试'
+      console.error('[contractManager] saveContract error', e)
+      wx.showToast({ title: msg, icon: 'none' })
+    }
   },
 
-  confirmDelete() {
+  async confirmDelete() {
     const { deletingId } = this.data
     if (!deletingId) return
     wx.showLoading({ title: '删除中' })
-    wx.cloud.callFunction({
-      name: 'contracts',
-      data: { action: 'delete', id: deletingId },
-      success: res => {
-        wx.hideLoading()
-        if (res.result && res.result.success) {
-          wx.showToast({ title: '删除成功', icon: 'success' })
-          this.closeModal()
-          this.loadContracts()
-        } else {
-          wx.showToast({ title: res.result?.message || '删除失败', icon: 'none' })
-        }
-      },
-      fail: err => {
-        wx.hideLoading()
-        wx.showToast({ title: '删除失败', icon: 'none' })
-        console.error(err)
-      }
-    })
+    try {
+      await contracts.del(deletingId)
+      wx.hideLoading()
+      wx.showToast({ title: '删除成功，已同步到云端', icon: 'success' })
+      this.closeModal()
+      this.loadContracts()
+    } catch (e) {
+      wx.hideLoading()
+      const msg = e?.message || e?.data?.message || '删除失败，请检查网络或重试'
+      console.error('[contractManager] confirmDelete error', e)
+      wx.showToast({ title: msg, icon: 'none' })
+    }
   },
 
   goProjectManager() {

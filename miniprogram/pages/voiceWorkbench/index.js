@@ -1,3 +1,5 @@
+const { ai, schedules, auth } = require('../../utils/api.js')
+
 Page({
   data: {
     isRecording: false,
@@ -24,7 +26,13 @@ Page({
     ]
   },
 
-  onLoad() {},
+  onLoad() {
+    if (!auth.isLoggedIn()) {
+      wx.showToast({ title: '请先登录', icon: 'none' })
+      setTimeout(() => wx.reLaunch({ url: '/pages/index/index' }), 800)
+      return
+    }
+  },
 
   startRecording() {
     this.setData({ isRecording: true, recordingSeconds: 0 })
@@ -46,7 +54,7 @@ Page({
     wx.hideToast()
 
     const randomText = this.data.simulatedTexts[Math.floor(Math.random() * this.data.simulatedTexts.length)]
-    this.setData({ 
+    this.setData({
       recordedText: randomText,
       messages: [...this.data.messages, { type: 'user', text: randomText, time: this.formatTime() }]
     })
@@ -54,16 +62,43 @@ Page({
     this.analyzeText(randomText)
   },
 
-  analyzeText(text) {
+  async analyzeText(text) {
     wx.showLoading({ title: 'AI分析中...' })
-    setTimeout(() => {
+    try {
+      const res = await ai.voiceAssistant({ text })
+      // res: { summary, items: [{ date, time, title, type, category, customer }]}
+      const items = (res.items || res.data?.items || []).map((it, idx) => ({
+        id: idx + 1,
+        checked: true,
+        date: it.date || '',
+        time: it.time || '',
+        title: it.title || text,
+        type: it.type || '待办',
+      }))
+      const summary = res.summary || res.data?.summary || `已识别到 ${items.length} 个事项`
       wx.hideLoading()
+      this.setData({
+        analysisResult: {
+          summary,
+          items: items.length > 0 ? items : [{
+            id: 1, checked: true,
+            date: this.getDateStr(1),
+            time: '09:00',
+            title: text,
+            type: '待办'
+          }],
+        },
+        messages: [...this.data.messages, { type: 'ai', text: summary, time: this.formatTime() }]
+      })
+    } catch (e) {
+      wx.hideLoading()
+      // AI 失败时本地兜底解析
       const result = this.parseText(text)
-      this.setData({ 
+      this.setData({
         analysisResult: result,
         messages: [...this.data.messages, { type: 'ai', text: result.summary, time: this.formatTime() }]
       })
-    }, 1500)
+    }
   },
 
   parseText(text) {
@@ -85,7 +120,7 @@ Page({
     else if (text.includes('周六')) date = this.getDateStr(this.getDaysToSaturday())
     else if (text.includes('周日')) date = this.getDateStr(this.getDaysToSunday())
 
-    const timeMatch = text.match(/(\d{1,2}):(\d{0,2})/)
+    const timeMatch = text.match(/(\d{1,2})[:点](\d{0,2})/)
     if (timeMatch) {
       time = timeMatch[1] + ':' + (timeMatch[2] || '00')
     }
@@ -195,39 +230,26 @@ Page({
     this.setData({ selectedItems: checkedItems, showAddScheduleModal: true })
   },
 
-  confirmAdd() {
-    let count = 0
-    const total = this.data.selectedItems.length
-
-    this.data.selectedItems.forEach(item => {
-      wx.cloud.callFunction({
-        name: 'schedules',
-        data: {
-          action: 'add',
-          data: {
-            date: item.date,
-            time: item.time,
-            title: item.title,
-            type: item.type,
-            closed: false
-          }
-        },
-        success: () => {
-          count++
-          if (count === total) {
-            wx.showToast({ title: `已添加 ${count} 个日程`, icon: 'success' })
-            this.setData({ showAddScheduleModal: false, analysisResult: null })
-          }
-        },
-        fail: () => {
-          count++
-          if (count === total) {
-            wx.showToast({ title: '部分添加成功', icon: 'none' })
-            this.setData({ showAddScheduleModal: false })
-          }
-        }
-      })
-    })
+  async confirmAdd() {
+    const items = this.data.selectedItems
+    if (items.length === 0) return
+    wx.showLoading({ title: '添加中...' })
+    let ok = 0
+    for (const item of items) {
+      try {
+        await schedules.create({
+          date: item.date,
+          time: item.time,
+          title: item.title,
+          type: item.type,
+          closed: false,
+        })
+        ok++
+      } catch (e) {}
+    }
+    wx.hideLoading()
+    wx.showToast({ title: ok > 0 ? `已添加 ${ok} 个日程` : '添加失败', icon: ok > 0 ? 'success' : 'none' })
+    this.setData({ showAddScheduleModal: false, analysisResult: null })
   },
 
   closeModal() {

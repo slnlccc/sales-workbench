@@ -1,71 +1,44 @@
+const { customers, auth } = require('../../utils/api.js')
+
 Page({
   data: {
-    customers: [
-      {
-        id: 1,
-        name: '上海航天设备有限公司',
-        contact: '张经理',
-        phone: '138****1234',
-        email: 'zhang@shht.com',
-        level: 'A',
-        projects: [
-          { id: 1, name: '长征十号乙环件', status: '生产中', progress: 75 },
-          { id: 2, name: '发动机连接座', status: '待下料', progress: 10 }
-        ],
-        tags: ['航天', '重点客户'],
-        remark: '长期合作客户，需求稳定'
-      },
-      {
-        id: 2,
-        name: '北京航空精密机械研究所',
-        contact: '李主任',
-        phone: '139****5678',
-        email: 'li@bjaero.com',
-        level: 'A',
-        projects: [
-          { id: 3, name: '高温合金叶片', status: '已发货', progress: 100 }
-        ],
-        tags: ['航空', '军工'],
-        remark: '技术要求高，回款及时'
-      },
-      {
-        id: 3,
-        name: '江苏锻造集团有限公司',
-        contact: '王总',
-        phone: '137****9012',
-        email: 'wang@jsdz.com',
-        level: 'B',
-        projects: [
-          { id: 4, name: '大型锻件毛坯', status: '加工中', progress: 45 }
-        ],
-        tags: ['锻造', '批量'],
-        remark: '价格敏感，注重交期'
-      },
-      {
-        id: 4,
-        name: '西安航空发动机集团',
-        contact: '赵部长',
-        phone: '136****3456',
-        email: 'zhao@xaec.com',
-        level: 'A',
-        projects: [
-          { id: 5, name: '涡轮盘锻件', status: '质检中', progress: 90 }
-        ],
-        tags: ['航空', '核心客户'],
-        remark: '战略合作伙伴'
-      }
-    ],
+    customers: [],
     showCustomerModal: false,
     editingCustomer: null,
     showProjectModal: false,
     editingProject: null,
     customerIndex: -1,
+    projectIndex: -1,
 
     levelOptions: ['A', 'B', 'C'],
     statusOptions: ['待下料', '生产中', '加工中', '质检中', '已发货']
   },
 
-  onLoad() {},
+  onLoad() {
+    if (!auth.isLoggedIn()) {
+      wx.showToast({ title: '请先登录', icon: 'none' })
+      setTimeout(() => wx.reLaunch({ url: '/pages/index/index' }), 800)
+      return
+    }
+    this.loadCustomers()
+  },
+
+  onShow() {
+    if (!auth.isLoggedIn()) return
+    this.loadCustomers()
+  },
+
+  async loadCustomers() {
+    wx.showLoading({ title: '加载中' })
+    try {
+      const list = await customers.list()
+      const normalized = (Array.isArray(list) ? list : (list.data || [])).map(c => ({ ...c, _id: c._id || c.id }))
+      this.setData({ customers: normalized })
+      wx.hideLoading()
+    } catch (e) {
+      wx.hideLoading()
+    }
+  },
 
   openCustomerModal(e) {
     const { idx } = e.currentTarget.dataset
@@ -137,70 +110,89 @@ Page({
     this.setData({ editingProject })
   },
 
-  saveCustomer() {
+  async saveCustomer() {
     const { editingCustomer, customerIndex } = this.data
     if (!editingCustomer.name.trim()) {
       wx.showToast({ title: '请输入客户名称', icon: 'none' })
       return
     }
-    const customers = [...this.data.customers]
-    if (customerIndex >= 0) {
-      customers[customerIndex] = editingCustomer
-    } else {
-      editingCustomer.id = Date.now()
-      customers.push(editingCustomer)
+    wx.showLoading({ title: '保存中' })
+    try {
+      const payload = { ...editingCustomer }
+      delete payload._id
+      if (customerIndex >= 0) {
+        await customers.update(editingCustomer._id, payload)
+      } else {
+        await customers.create(payload)
+      }
+      wx.hideLoading()
+      wx.showToast({ title: '保存成功', icon: 'success' })
+      this.closeModal()
+      this.loadCustomers()
+    } catch (e) {
+      wx.hideLoading()
     }
-    this.setData({ customers })
-    wx.showToast({ title: '保存成功', icon: 'success' })
-    this.closeModal()
   },
 
-  saveProject() {
+  async saveProject() {
     const { editingProject, customerIndex, projectIndex } = this.data
     if (!editingProject.name.trim()) {
       wx.showToast({ title: '请输入项目名称', icon: 'none' })
       return
     }
-    const customers = [...this.data.customers]
-    const projects = [...customers[customerIndex].projects]
-    if (projectIndex >= 0) {
-      projects[projectIndex] = editingProject
-    } else {
-      editingProject.id = Date.now()
-      projects.push(editingProject)
+    const customer = this.data.customers[customerIndex]
+    if (!customer) return
+    wx.showLoading({ title: '保存中' })
+    try {
+      if (projectIndex >= 0) {
+        await customers.updateProject(customer._id, { project: editingProject })
+      } else {
+        await customers.addProject(customer._id, { project: editingProject })
+      }
+      wx.hideLoading()
+      wx.showToast({ title: '保存成功', icon: 'success' })
+      this.closeModal()
+      this.loadCustomers()
+    } catch (e) {
+      wx.hideLoading()
     }
-    customers[customerIndex].projects = projects
-    this.setData({ customers })
-    wx.showToast({ title: '保存成功', icon: 'success' })
-    this.closeModal()
   },
 
-  deleteCustomer(e) {
+  async deleteCustomer(e) {
     const { idx } = e.currentTarget.dataset
+    const customer = this.data.customers[idx]
+    if (!customer) return
     wx.showModal({
       title: '确认删除',
       content: '删除后不可恢复',
-      success: (res) => {
+      success: async (res) => {
         if (res.confirm) {
-          const customers = this.data.customers.filter((_, i) => i !== idx)
-          this.setData({ customers })
-          wx.showToast({ title: '删除成功', icon: 'success' })
+          try {
+            await customers.del(customer._id)
+            wx.showToast({ title: '删除成功', icon: 'success' })
+            this.loadCustomers()
+          } catch (e) {}
         }
       }
     })
   },
 
-  deleteProject(e) {
+  async deleteProject(e) {
     const { cidx, pidx } = e.currentTarget.dataset
+    const customer = this.data.customers[cidx]
+    if (!customer) return
+    const project = customer.projects[pidx]
+    if (!project) return
     wx.showModal({
       title: '确认删除',
       content: '删除后不可恢复',
-      success: (res) => {
+      success: async (res) => {
         if (res.confirm) {
-          const customers = [...this.data.customers]
-          customers[cidx].projects = customers[cidx].projects.filter((_, i) => i !== pidx)
-          this.setData({ customers })
-          wx.showToast({ title: '删除成功', icon: 'success' })
+          try {
+            await customers.delProject(customer._id, project.id || project._id)
+            wx.showToast({ title: '删除成功', icon: 'success' })
+            this.loadCustomers()
+          } catch (e) {}
         }
       }
     })

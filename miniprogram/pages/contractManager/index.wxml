@@ -115,7 +115,7 @@
         </view>
         <view class="form-item">
           <text class="form-label">回款状态</text>
-          <picker mode="selector" range="{{paymentStatusOptions}}" value="{{paymentStatusOptions.indexOf(editingItem.paymentStatus)}}" bindchange="onPaymentStatusSelect">
+          <picker mode="selector" range="{{editPaymentStatusOptions}}" value="{{editPaymentStatusIndex}}" bindchange="onPaymentStatusSelect">
             <view class="picker">{{editingItem.paymentStatus}}</view>
           </picker>
         </view>

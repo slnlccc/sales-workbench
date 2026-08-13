@@ -1,3 +1,5 @@
+const { schedules, auth } = require('../../utils/api.js')
+
 Page({
   data: {
     currentYear: 2026,
@@ -18,6 +20,11 @@ Page({
   },
 
   onLoad() {
+    if (!auth.isLoggedIn()) {
+      wx.showToast({ title: '请先登录', icon: 'none' })
+      setTimeout(() => wx.reLaunch({ url: '/pages/index/index' }), 800)
+      return
+    }
     const now = new Date()
     this.setData({
       currentYear: now.getFullYear(),
@@ -30,6 +37,7 @@ Page({
   },
 
   onShow() {
+    if (!auth.isLoggedIn()) return
     this.loadSchedules()
   },
 
@@ -74,18 +82,15 @@ Page({
     this.setData({ calendarDays: updatedDays })
   },
 
-  loadSchedules() {
-    wx.cloud.callFunction({
-      name: 'schedules',
-      data: { action: 'list' },
-      success: res => {
-        if (res.result && res.result.success) {
-          this.setData({ schedules: res.result.data || [] })
-          this.updateScheduleMarks()
-          this.loadDaySchedules()
-        }
-      }
-    })
+  async loadSchedules() {
+    try {
+      const res = await schedules.list()
+      const list = res.data || res.schedules || []
+      const normalized = list.map(s => ({ ...s, _id: s._id || s.id }))
+      this.setData({ schedules: normalized })
+      this.updateScheduleMarks()
+      this.loadDaySchedules()
+    } catch (e) {}
   },
 
   loadDaySchedules() {
@@ -184,74 +189,89 @@ Page({
     this.setData({ typeIndex: idx, editingSchedule })
   },
 
-  saveSchedule() {
+  async saveSchedule() {
     const { newSchedule } = this.data
     if (!newSchedule.title.trim()) {
       wx.showToast({ title: '请输入标题', icon: 'none' })
       return
     }
-    wx.cloud.callFunction({
-      name: 'schedules',
-      data: { action: 'add', data: { ...newSchedule, closed: false } },
-      success: res => {
-        if (res.result && res.result.success) {
-          wx.showToast({ title: '添加成功', icon: 'success' })
-          this.closeModal()
-          this.loadSchedules()
-        }
-      }
-    })
+    if (!newSchedule.date) {
+      wx.showToast({ title: '请选择日期', icon: 'none' })
+      return
+    }
+    wx.showLoading({ title: '保存中' })
+    try {
+      await schedules.create({ ...newSchedule, closed: false })
+      wx.hideLoading()
+      wx.showToast({ title: '已同步到云端', icon: 'success' })
+      this.closeModal()
+      this.loadSchedules()
+    } catch (e) {
+      wx.hideLoading()
+      const msg = e?.message || e?.data?.message || '保存失败，请检查网络或重试'
+      console.error('[calendar] saveSchedule error', e)
+      wx.showToast({ title: msg, icon: 'none' })
+    }
   },
 
-  updateSchedule() {
+  async updateSchedule() {
     const { editingSchedule } = this.data
     if (!editingSchedule.title.trim()) {
       wx.showToast({ title: '请输入标题', icon: 'none' })
       return
     }
-    wx.cloud.callFunction({
-      name: 'schedules',
-      data: { action: 'update', id: editingSchedule._id, data: editingSchedule },
-      success: res => {
-        if (res.result && res.result.success) {
-          wx.showToast({ title: '修改成功', icon: 'success' })
-          this.closeModal()
-          this.loadSchedules()
-        }
-      }
-    })
+    if (!editingSchedule.date) {
+      wx.showToast({ title: '请选择日期', icon: 'none' })
+      return
+    }
+    wx.showLoading({ title: '保存中' })
+    try {
+      const payload = { ...editingSchedule }
+      delete payload._id
+      await schedules.update(editingSchedule._id, payload)
+      wx.hideLoading()
+      wx.showToast({ title: '修改成功，已同步', icon: 'success' })
+      this.closeModal()
+      this.loadSchedules()
+    } catch (e) {
+      wx.hideLoading()
+      const msg = e?.message || e?.data?.message || '修改失败，请检查网络或重试'
+      console.error('[calendar] updateSchedule error', e)
+      wx.showToast({ title: msg, icon: 'none' })
+    }
   },
 
-  toggleClosed(e) {
+  async toggleClosed(e) {
     const { id } = e.currentTarget.dataset
-    wx.cloud.callFunction({
-      name: 'schedules',
-      data: { action: 'toggleClosed', id },
-      success: res => {
-        if (res.result && res.result.success) {
-          this.loadSchedules()
-        }
-      }
-    })
+    try {
+      await schedules.toggle(id)
+      this.loadSchedules()
+    } catch (e) {
+      const msg = e?.message || e?.data?.message || '切换失败'
+      console.error('[calendar] toggleClosed error', e)
+      wx.showToast({ title: msg, icon: 'none' })
+    }
   },
 
-  deleteSchedule(e) {
+  async deleteSchedule(e) {
     const { id } = e.currentTarget.dataset
     wx.showModal({
       title: '确认删除',
       content: '删除后不可恢复',
-      success: (res) => {
+      success: async (res) => {
         if (res.confirm) {
-          wx.cloud.callFunction({
-            name: 'schedules',
-            data: { action: 'delete', id },
-            success: res => {
-              if (res.result && res.result.success) {
-                wx.showToast({ title: '删除成功', icon: 'success' })
-                this.loadSchedules()
-              }
-            }
-          })
+          wx.showLoading({ title: '删除中' })
+          try {
+            await schedules.del(id)
+            wx.hideLoading()
+            wx.showToast({ title: '删除成功，已同步', icon: 'success' })
+            this.loadSchedules()
+          } catch (e) {
+            wx.hideLoading()
+            const msg = e?.message || e?.data?.message || '删除失败，请检查网络或重试'
+            console.error('[calendar] deleteSchedule error', e)
+            wx.showToast({ title: msg, icon: 'none' })
+          }
         }
       }
     })

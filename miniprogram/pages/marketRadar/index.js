@@ -1,5 +1,5 @@
-// 后端服务地址（Railway 部署的公网域名，用于实时拉取竞争对手动态）
-const API_BASE = 'https://sales-workbench-production.up.railway.app/api'
+// 统一从 utils/api.js 调用 Railway REST API，与电脑端共享后端
+const { market, auth } = require('../../utils/api.js')
 
 Page({
   data: {
@@ -83,41 +83,84 @@ Page({
   },
 
   onLoad() {
-    // 进入页面立即拉取竞争对手动态
-    this.fetchCompetitors()
+    // 登录后也可以拉取完整市场数据（含各模块）
+    if (auth.isLoggedIn()) {
+      this.fetchOverview()
+    } else {
+      // 未登录时只拉取公开的竞争对手数据
+      this.fetchCompetitors()
+    }
   },
 
   /**
    * 拉取竞争对手动态（公开接口，无需登录）
    */
-  fetchCompetitors() {
+  async fetchCompetitors() {
     this.setData({ competitorsLoading: true })
-    wx.request({
-      url: `${API_BASE}/data/competitors`,
-      method: 'GET',
-      timeout: 10000,
-      success: (res) => {
-        if (res.statusCode === 200 && res.data) {
-          const competitors = res.data.competitors || []
-          const lastUpdate = res.data.lastUpdate
-            ? '上次更新 ' + this.formatDate(res.data.lastUpdate)
-            : ''
-          this.setData({
-            competitors,
-            competitorsLastUpdate: lastUpdate,
-            competitorsLoading: false,
-          }, () => {
-            this.applyCompetitorFilter()
-          })
-        } else {
-          this.setData({ competitorsLoading: false })
-        }
-      },
-      fail: () => {
-        this.setData({ competitorsLoading: false })
-        wx.showToast({ title: '网络异常，稍后重试', icon: 'none' })
-      },
-    })
+    try {
+      const res = await market.competitors()
+      const competitors = res.competitors || []
+      const lastUpdate = res.lastUpdate
+        ? '上次更新 ' + this.formatDate(res.lastUpdate)
+        : ''
+      this.setData({
+        competitors,
+        competitorsLastUpdate: lastUpdate,
+        competitorsLoading: false,
+      }, () => {
+        this.applyCompetitorFilter()
+      })
+    } catch (e) {
+      this.setData({ competitorsLoading: false })
+      wx.showToast({ title: '网络异常，稍后重试', icon: 'none' })
+    }
+  },
+
+  /**
+   * 已登录时拉取完整市情雷达数据（含行业动态、原材料、竞争对手）
+   */
+  async fetchOverview() {
+    wx.showLoading({ title: '加载中' })
+    try {
+      const data = await market.overview()
+      const competitors = data.competitors || []
+      const lastUpdate = data.radarLastUpdate
+        ? '上次更新 ' + this.formatDate(data.radarLastUpdate)
+        : ''
+      const radarNews = (data.radarNews || []).slice(0, 5).map((n, i) => ({
+        id: i + 1,
+        title: n.title,
+        source: n.source || '行业资讯',
+        date: n.publishedAt || n.date || new Date().toISOString().slice(0, 10),
+        tag: i < 2 ? '新' : '',
+        category: n.category || '行业',
+        summary: n.summary || '',
+      }))
+      const radarMaterials = (data.radarMaterials || []).slice(0, 8).map(m => ({
+        name: m.name,
+        price: m.price,
+        unit: m.unit || '元/吨',
+        change: (m.change > 0 ? '+' : '') + (m.change || 0),
+        trend: m.trend === 'down' ? 'down' : (m.trend === 'up' ? 'up' : 'stable'),
+      }))
+      const extra = {
+        news: radarNews.length > 0 ? radarNews : this.data.news,
+        materials: radarMaterials.length > 0 ? radarMaterials : this.data.materials,
+      }
+      this.setData({
+        ...extra,
+        competitors,
+        competitorsLastUpdate: lastUpdate,
+        competitorsLoading: false,
+      }, () => {
+        this.applyCompetitorFilter()
+      })
+      wx.hideLoading()
+    } catch (e) {
+      wx.hideLoading()
+      // 失败则回退到公开接口
+      this.fetchCompetitors()
+    }
   },
 
   formatDate(iso) {
