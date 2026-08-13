@@ -70,7 +70,7 @@ exports.deleteContract = async (req, res) => {
       { hasContract: false, clientContractNo: '—' }
     )
 
-    await contract.remove()
+    await contract.deleteOne()
     res.json({ message: '合同已删除' })
   } catch (err) {
     res.status(500).json({ message: err.message })

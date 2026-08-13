@@ -58,7 +58,7 @@ exports.deleteSchedule = async (req, res) => {
     const schedule = await Schedule.findById(req.params.id)
     if (!schedule) return res.status(404).json({ message: '日程不存在' })
 
-    await schedule.remove()
+    await schedule.deleteOne()
     res.json({ message: '日程已删除' })
   } catch (err) {
     res.status(500).json({ message: err.message })

@@ -123,7 +123,7 @@ exports.deleteProject = async (req, res) => {
       }
     }
 
-    await project.remove()
+    await project.deleteOne()
     res.json({ message: '项目已删除' })
   } catch (err) {
     res.status(500).json({ message: err.message })

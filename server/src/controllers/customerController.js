@@ -48,7 +48,7 @@ exports.deleteCustomer = async (req, res) => {
     const customer = await Customer.findById(req.params.id)
     if (!customer) return res.status(404).json({ message: '客户不存在' })
 
-    await customer.remove()
+    await customer.deleteOne()
     res.json({ message: '客户已删除' })
   } catch (err) {
     res.status(500).json({ message: err.message })
