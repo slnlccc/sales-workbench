@@ -324,7 +324,25 @@ export default function MarketRadar() {
   }, []);
 
   const allExhibitions = useMemo(() => {
-    const merged = [...radarExhibitions, ...exhibitionItems];
+    // 后端/AI 返回的展会数据可能缺少嵌套字段（keyCustomers/expectedRevenue/relatedBids 等），
+    // 渲染时 ex.keyCustomers.slice 会因 undefined 崩溃，这里做防御性补全。
+    const normalizeEx = (e: any): ExhibitionItem => ({
+      id: e.id,
+      title: e.title || '',
+      location: e.location || '',
+      description: e.description || '',
+      importance: e.importance === '重点' ? '重点' : '一般',
+      month: e.month || '',
+      frequency: e.frequency || '',
+      keyCustomers: Array.isArray(e.keyCustomers) ? e.keyCustomers : [],
+      expectedRevenue: e.expectedRevenue ?? { estimateCount: '-', estimateValue: '-' },
+      expectedLeads: e.expectedLeads,
+      relatedBids: Array.isArray(e.relatedBids) ? e.relatedBids : [],
+      competitors: Array.isArray(e.competitors) ? e.competitors : [],
+      opportunityAssessment: Array.isArray(e.opportunityAssessment) ? e.opportunityAssessment : [],
+      strategy: e.strategy ?? { preShow: [], duringShow: [], afterShow: [] },
+    });
+    const merged = [...radarExhibitions.map(normalizeEx), ...exhibitionItems];
     const seen = new Set<string>();
     return merged.filter((e) => {
       if (seen.has(e.id)) return false;

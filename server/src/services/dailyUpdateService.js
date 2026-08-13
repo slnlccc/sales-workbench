@@ -589,10 +589,50 @@ const FALLBACK_RADAR_POLICIES = [
  * 兜底数据 - 行业展会
  */
 const FALLBACK_RADAR_EXHIBITIONS = [
-  { id: 'radar-exh-1', title: '2026中国国际航空航天博览会', month: '11月', location: '广东珠海', description: '两年一届的中国航展，展示航空航天装备最新成果，多家航空发动机和锻件供应商参展，专业观众超10万人次。', importance: '重点', frequency: '两年一届', sourceUrl: 'https://www.airshow.com.cn' },
-  { id: 'radar-exh-2', title: '2026德国汉诺威工业博览会', month: '4月', location: '德国汉诺威', description: '全球最大工业博览会，展示高端装备、智能制造、金属加工等领域最新技术，是了解国际竞争对手动向的重要窗口。', importance: '重点', frequency: '一年一届', sourceUrl: 'https://www.hanovermesse.de' },
-  { id: 'radar-exh-3', title: '2026中国国际锻件冶金展', month: '10月', location: '江苏苏州', description: '聚焦锻件、冶金、热处理领域的专业展会，展示最新锻造工艺、装备和检测技术，国内外300+企业参展。', importance: '一般', frequency: '一年一届', sourceUrl: 'https://www.forging-expo.com' },
-  { id: 'radar-exh-4', title: '2027年亚洲动力展', month: '3月', location: '新加坡', description: '聚焦航空发动机、燃气轮机动力系统的亚洲顶级展会，汇集全球主要动力设备制造商和供应商。', importance: '重点', frequency: '两年一届', sourceUrl: 'https://www.power-asia.com' },
+  {
+    id: 'radar-exh-1', title: '2026中国国际航空航天博览会', month: '11月', location: '广东珠海',
+    description: '两年一届的中国航展，展示航空航天装备最新成果，多家航空发动机和锻件供应商参展，专业观众超10万人次。',
+    importance: '重点', frequency: '两年一届', sourceUrl: 'https://www.airshow.com.cn',
+    keyCustomers: ['中国航发', '中航工业', '航天科技', '航天科工', '中国商飞'],
+    expectedRevenue: { estimateCount: '80+', estimateValue: '3-5亿' },
+    relatedBids: [{ title: '长江1000A发动机机匣锻件采购', customer: '中国航发', deadline: '2026-11-30', amount: 5000, status: '招标中' }],
+    competitors: [{ name: '中航重机', advantage: '航空锻件龙头', disadvantage: '价格偏高', products: ['涡轮盘', '大型模锻件'] }],
+    opportunityAssessment: [{ title: '中国航发商发发动机锻件项目', probability: '高', value: '2-3亿', suggestion: '提前预约商发采购团队' }],
+    strategy: { preShow: ['预约重点客户采购团队', '准备高温合金锻件样品'], duringShow: ['现场技术交流', '收集竞品资料'], afterShow: ['跟进意向客户', '发送报价方案'] },
+  },
+  {
+    id: 'radar-exh-2', title: '2026德国汉诺威工业博览会', month: '4月', location: '德国汉诺威',
+    description: '全球最大工业博览会，展示高端装备、智能制造、金属加工等领域最新技术，是了解国际竞争对手动向的重要窗口。',
+    importance: '重点', frequency: '一年一届', sourceUrl: 'https://www.hanovermesse.de',
+    keyCustomers: ['西门子', 'GE Aerospace', 'Rolls-Royce', 'MTU', 'Safran'],
+    expectedRevenue: { estimateCount: '30+', estimateValue: '1-2亿' },
+    relatedBids: [],
+    competitors: [{ name: '宝钢特钢', advantage: '原材料自给成本低', disadvantage: '高端锻件工艺不足', products: ['高温合金材料', '特种钢材'] }],
+    opportunityAssessment: [{ title: 'GE航空发动机锻件出口项目', probability: '中', value: '5000万-1亿', suggestion: '对接GE采购团队展示Inconel718锻件能力' }],
+    strategy: { preShow: ['联系国际客户预约会谈', '准备英文技术资料'], duringShow: ['拜访国际客户展位', '调研欧洲竞争对手'], afterShow: ['跟进国际客户询价', '制定出口方案'] },
+  },
+  {
+    id: 'radar-exh-3', title: '2026中国国际锻件冶金展', month: '10月', location: '江苏苏州',
+    description: '聚焦锻件、冶金、热处理领域的专业展会，展示最新锻造工艺、装备和检测技术，国内外300+企业参展。',
+    importance: '一般', frequency: '一年一届', sourceUrl: 'https://www.forging-expo.com',
+    keyCustomers: ['东方电气', '上海电气', '中国船舶', '中船重工'],
+    expectedRevenue: { estimateCount: '40+', estimateValue: '5000万-1亿' },
+    relatedBids: [],
+    competitors: [],
+    opportunityAssessment: [],
+    strategy: { preShow: ['准备锻件样品', '邀约国内客户'], duringShow: ['现场展示锻造工艺', '技术交流'], afterShow: ['跟进意向客户'] },
+  },
+  {
+    id: 'radar-exh-4', title: '2027年亚洲动力展', month: '3月', location: '新加坡',
+    description: '聚焦航空发动机、燃气轮机动力系统的亚洲顶级展会，汇集全球主要动力设备制造商和供应商。',
+    importance: '重点', frequency: '两年一届', sourceUrl: 'https://www.power-asia.com',
+    keyCustomers: ['Rolls-Royce', 'Siemens', 'Mitsubishi Heavy', 'Safran'],
+    expectedRevenue: { estimateCount: '20+', estimateValue: '1-2亿' },
+    relatedBids: [],
+    competitors: [],
+    opportunityAssessment: [{ title: '罗罗发动机锻件合作项目', probability: '中', value: '1亿', suggestion: '展示高温合金涡轮盘制造能力' }],
+    strategy: { preShow: ['预约国际客户', '准备英文资料'], duringShow: ['技术交流', '竞品调研'], afterShow: ['跟进国际客户'] },
+  },
 ]
 
 /**
