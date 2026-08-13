@@ -30,15 +30,24 @@
       bindinput="onInputText"
     />
     <view class="flex gap-2 mt-2">
-      <button 
-        class="btn-primary" 
-        style="flex:1;"
-        bindtap="startRecording"
-        disabled="{{isRecording}}"
-      >
-        <text wx:if="{{!isRecording}}">🎙️ 语音录入</text>
-        <text wx:else>⏹️ 录音中 {{recordingSeconds}}s</text>
-      </button>
+      <block wx:if="{{!isRecording}}">
+        <button 
+          class="btn-primary" 
+          style="flex:1;"
+          bindtap="startRecording"
+        >
+          🎙️ 语音录入
+        </button>
+      </block>
+      <block wx:else>
+        <button 
+          class="btn-primary" 
+          style="flex:1;background:#dc2626;border-color:#dc2626;"
+          bindtap="stopRecording"
+        >
+          ⏹️ 停止录音 {{recordingSeconds}}s
+        </button>
+      </block>
       <button class="btn-secondary" bindtap="manualAnalyze">分析提取</button>
     </view>
   </view>

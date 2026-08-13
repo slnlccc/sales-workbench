@@ -165,6 +165,8 @@ const market = {
 // ============================================================
 const ai = {
   voiceAssistant: (payload) => http.post('/ai/voice-assistant', payload), // {text}
+  voiceAsr: (payload) => http.post('/ai/voice-asr', payload), // { audioBase64, format: 'mp3', sampleRate: 16000, channels: 1 }
+  voiceCorrect: (payload) => http.post('/ai/voice-correct', payload), // {text}
   customerAnalysis: (payload) => http.post('/ai/customer-analysis', payload),
   reportGeneration: (payload) => http.post('/ai/report-generation', payload),
   industryInsight: (payload) => http.post('/ai/industry-insight', payload),

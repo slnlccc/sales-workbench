@@ -1,5 +1,15 @@
 const { ai, schedules, auth } = require('../../utils/api.js')
 
+const MAX_RECORD_SECONDS = 30 // 单次录音最长 30 秒，避免 ASR 超限
+const RECORDER_OPTS = {
+  duration: MAX_RECORD_SECONDS * 1000,
+  sampleRate: 16000,
+  numberOfChannels: 1,
+  encodeBitRate: 48000,
+  format: 'mp3', // 与后端 speechToText 默认 format 对齐
+  frameSize: 3,
+}
+
 Page({
   data: {
     isRecording: false,
@@ -7,24 +17,16 @@ Page({
     analysisResult: null,
     showAddScheduleModal: false,
     selectedItems: [],
-    recordingTimer: null,
     recordingSeconds: 0,
-
-    simulatedTexts: [
-      '明天下午三点和张三开会讨论项目进度',
-      '下周二去上海出差拜访客户',
-      '后天上午十点提交季度报告',
-      '本周六参加技术培训',
-      '明天早上九点生产会议',
-      '下周五下午去工厂考察',
-      '今天下午四点跟进合同审批',
-      '下周一上午十点客户回访'
-    ],
-
     messages: [
       { type: 'ai', text: '请点击下方按钮开始语音录入，我会帮你分析并提取事项。', time: '' }
     ]
   },
+
+  // 全局 recorder 实例 + 计时句柄，避免重复 init
+  _recorder: null,
+  _recordingTimer: null,
+  _maxTimer: null,
 
   onLoad() {
     if (!auth.isLoggedIn()) {
@@ -32,62 +34,224 @@ Page({
       setTimeout(() => wx.reLaunch({ url: '/pages/index/index' }), 800)
       return
     }
+    this._initRecorder()
   },
 
-  startRecording() {
-    this.setData({ isRecording: true, recordingSeconds: 0 })
-    wx.showToast({ title: '正在录音...', icon: 'none', duration: 10000 })
-
-    this.data.recordingTimer = setInterval(() => {
-      this.setData({ recordingSeconds: this.data.recordingSeconds + 1 })
-    }, 1000)
-
-    setTimeout(() => {
-      this.stopRecording()
-    }, 3000)
+  onUnload() {
+    this._clearTimers()
+    if (this.data.isRecording) {
+      try { this._recorder && this._recorder.stop() } catch (e) {}
+    }
   },
 
-  stopRecording() {
-    if (!this.data.isRecording) return
-    clearInterval(this.data.recordingTimer)
-    this.setData({ isRecording: false })
-    wx.hideToast()
+  _initRecorder() {
+    if (this._recorder) return
+    const rm = wx.getRecorderManager()
 
-    const randomText = this.data.simulatedTexts[Math.floor(Math.random() * this.data.simulatedTexts.length)]
-    this.setData({
-      recordedText: randomText,
-      messages: [...this.data.messages, { type: 'user', text: randomText, time: this.formatTime() }]
+    rm.onStart(() => {
+      console.log('[voiceWorkbench] recorder onStart')
+      this.setData({ isRecording: true, recordingSeconds: 0 })
+      this._clearTimers()
+      // 计时 + 到点强制停止
+      this._recordingTimer = setInterval(() => {
+        const next = this.data.recordingSeconds + 1
+        this.setData({ recordingSeconds: next })
+        if (next >= MAX_RECORD_SECONDS) {
+          this.stopRecording({ from: 'max' })
+        }
+      }, 1000)
     })
 
-    this.analyzeText(randomText)
+    rm.onStop((res) => {
+      console.log('[voiceWorkbench] recorder onStop', res && res.tempFilePath)
+      this.setData({ isRecording: false })
+      this._clearTimers()
+      const path = res && res.tempFilePath
+      if (!path) {
+        this._fallbackManual('录音未生成文件，请重试或手动输入')
+        return
+      }
+      this._uploadAndRecognize(path, res.fileSize)
+    })
+
+    rm.onError((err) => {
+      console.error('[voiceWorkbench] recorder onError', err)
+      this.setData({ isRecording: false })
+      this._clearTimers()
+      const msg = (err && (err.errMsg || err.message)) || '录音失败'
+      wx.showToast({ title: msg, icon: 'none', duration: 2500 })
+      // 权限被拒绝等情况需要兜底手动输入
+      this._fallbackManual(msg)
+    })
+
+    rm.onFrameRecorded(() => { /* 不做流式处理 */ })
+
+    this._recorder = rm
+  },
+
+  _clearTimers() {
+    if (this._recordingTimer) { clearInterval(this._recordingTimer); this._recordingTimer = null }
+    if (this._maxTimer) { clearTimeout(this._maxTimer); this._maxTimer = null }
+  },
+
+  /**
+   * 用户点击"语音录入"：申请麦克风权限 → start()
+   */
+  async startRecording() {
+    if (this.data.isRecording) return
+    this._initRecorder()
+
+    // 1. 显式申请录音权限（兼容首次/已拒绝两种情况）
+    try {
+      await wx.authorize({ scope: 'scope.record' })
+    } catch (e) {
+      console.warn('[voiceWorkbench] 授权被拒，引导打开设置', e)
+      wx.showModal({
+        title: '需要麦克风权限',
+        content: '请到设置中允许微信使用麦克风，才能录音。',
+        confirmText: '去设置',
+        success: (r) => {
+          if (r.confirm) wx.openSetting()
+        }
+      })
+      return
+    }
+
+    try {
+      wx.showToast({ title: '录音中，请说话...', icon: 'none', duration: MAX_RECORD_SECONDS * 1000 + 500 })
+      this._recorder.start(RECORDER_OPTS)
+    } catch (e) {
+      console.error('[voiceWorkbench] recorder.start error', e)
+      wx.hideToast()
+      wx.showToast({ title: '启动录音失败', icon: 'none' })
+      this._fallbackManual('启动录音失败')
+    }
+  },
+
+  /**
+   * 用户点击"停止录音"或达 30 秒上限
+   */
+  stopRecording(opts) {
+    if (!this.data.isRecording) return
+    console.log('[voiceWorkbench] stopRecording from=', (opts && opts.from) || 'user')
+    wx.hideToast()
+    try {
+      this._recorder && this._recorder.stop()
+    } catch (e) {
+      console.error('[voiceWorkbench] recorder.stop error', e)
+      // stop 抛异常时至少回滚状态，不让用户卡死
+      this.setData({ isRecording: false })
+      this._clearTimers()
+      this._fallbackManual('停止录音异常，请重试或手动输入')
+    }
+  },
+
+  async _uploadAndRecognize(tempFilePath, fileSize) {
+    wx.showLoading({ title: '语音识别中...', mask: true })
+    let base64
+    try {
+      const fs = wx.getFileSystemManager()
+      const arr = fs.readFileSync(tempFilePath, 'base64')
+      base64 = arr // wx.getFileSystemManager 返回的已经是 base64 字符串
+    } catch (e) {
+      wx.hideLoading()
+      console.error('[voiceWorkbench] 读取录音文件失败', e)
+      this._fallbackManual('读取录音文件失败')
+      return
+    }
+
+    console.log('[voiceWorkbench] ASR upload size(base64 len)=', base64 && base64.length)
+
+    let recognized = ''
+    try {
+      const res = await ai.voiceAsr({
+        audioBase64: base64,
+        format: RECORDER_OPTS.format,
+        sampleRate: RECORDER_OPTS.sampleRate,
+        channels: RECORDER_OPTS.numberOfChannels,
+      })
+      recognized = (res && res.text) || ''
+    } catch (e) {
+      wx.hideLoading()
+      console.warn('[voiceWorkbench] ASR 失败（可能未配置密钥）', e.message)
+      // ASR 未配置 / 失败 → 不填假文本，让用户直接看到"已录好，请手动输入/核对内容"
+      wx.showToast({
+        title: (e && e.message && e.message.length < 40 ? e.message : '识别失败，请手动输入'),
+        icon: 'none',
+        duration: 3000,
+      })
+      this.setData({
+        recordedText: '',
+        messages: [...this.data.messages, {
+          type: 'ai',
+          text: '语音识别未启用：请直接在文本框输入或修正内容，然后点击「分析提取」。',
+          time: this.formatTime()
+        }]
+      })
+      return
+    }
+
+    // ---- ASR 成功：如果后端提供了锻造行业矫正接口，做二次校正 ----
+    wx.hideLoading()
+    let finalText = recognized
+    try {
+      const corrected = await ai.voiceCorrect({ text: recognized })
+      if (corrected && corrected.correctedText) finalText = corrected.correctedText
+    } catch (e) {
+      console.info('[voiceWorkbench] voice-correct 未启用，跳过专业术语矫正')
+    }
+
+    this.setData({
+      recordedText: finalText,
+      messages: [
+        ...this.data.messages,
+        { type: 'user', text: finalText || '（未识别到有效内容，请手动输入）', time: this.formatTime() }
+      ]
+    })
+
+    if (finalText && finalText.trim()) {
+      this.analyzeText(finalText)
+    } else {
+      wx.showToast({ title: '未识别到内容，请手动输入', icon: 'none' })
+    }
+  },
+
+  _fallbackManual(message) {
+    this.setData({
+      messages: [...this.data.messages, {
+        type: 'ai',
+        text: `${message || '录音失败'}，请直接在文本框输入，然后点击「分析提取」。`,
+        time: this.formatTime()
+      }]
+    })
   },
 
   async analyzeText(text) {
     wx.showLoading({ title: 'AI分析中...' })
     try {
       const res = await ai.voiceAssistant({ text })
-      // res: { summary, items: [{ date, time, title, type, category, customer }]}
-      const items = (res.items || res.data?.items || []).map((it, idx) => ({
-        id: idx + 1,
-        checked: true,
-        date: it.date || '',
-        time: it.time || '',
-        title: it.title || text,
-        type: it.type || '待办',
-      }))
-      const summary = res.summary || res.data?.summary || `已识别到 ${items.length} 个事项`
+      const aiTasks = (res && Array.isArray(res.tasks)) ? res.tasks : []
+      const items = aiTasks.length > 0
+        ? aiTasks.map((t, idx) => ({
+            id: idx + 1,
+            checked: true,
+            date: t.date || '',
+            time: t.time || '',
+            title: t.content || text,
+            type: Array.isArray(t.typeLabels) && t.typeLabels[0] ? t.typeLabels[0] : '待办',
+          }))
+        : []
+      const summary = (res && res.summary) || (items.length > 0 ? `已识别到 ${items.length} 个事项` : `已为您准备好待办`)
       wx.hideLoading()
+      const finalItems = items.length > 0 ? items : [{
+        id: 1, checked: true,
+        date: this.getDateStr(1),
+        time: '09:00',
+        title: text,
+        type: '待办'
+      }]
       this.setData({
-        analysisResult: {
-          summary,
-          items: items.length > 0 ? items : [{
-            id: 1, checked: true,
-            date: this.getDateStr(1),
-            time: '09:00',
-            title: text,
-            type: '待办'
-          }],
-        },
+        analysisResult: { summary, items: finalItems },
         messages: [...this.data.messages, { type: 'ai', text: summary, time: this.formatTime() }]
       })
     } catch (e) {
@@ -141,7 +305,7 @@ Page({
     }
 
     return {
-      summary: `已识别到 ${items.length} 个事项，已帮你提取关键信息：`,
+      summary: `已识别到 ${items.length} 个事项（本地解析），请核对后添加：`,
       items: items.map((item, idx) => ({
         id: idx + 1,
         checked: true,
@@ -245,7 +409,9 @@ Page({
           closed: false,
         })
         ok++
-      } catch (e) {}
+      } catch (e) {
+        console.error('[voiceWorkbench] add schedule error:', e)
+      }
     }
     wx.hideLoading()
     wx.showToast({ title: ok > 0 ? `已添加 ${ok} 个日程` : '添加失败', icon: ok > 0 ? 'success' : 'none' })
@@ -255,6 +421,8 @@ Page({
   closeModal() {
     this.setData({ showAddScheduleModal: false })
   },
+
+  stopPropagation() {},
 
   onInputText(e) {
     this.setData({ recordedText: e.detail.value })

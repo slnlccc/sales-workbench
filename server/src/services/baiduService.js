@@ -17,10 +17,79 @@ const { BAIDU_API_KEY: _defaultKey, BAIDU_MODEL: _defaultModel } = require('../c
 const BAIDU_MODEL = process.env.BAIDU_MODEL || _defaultModel || 'ernie-4.0-turbo-8k'
 
 /**
- * 检查 API Key 是否配置
+ * 检查 API Key 是否配置（千帆大模型）
  */
 const isConfigured = () => {
   return !!(process.env.BAIDU_API_KEY || _defaultKey)
+}
+
+const { BAIDU_ASR_API_KEY, BAIDU_ASR_SECRET_KEY } = require('../config/aiKeys')
+
+const getAsrKeys = () => ({
+  apiKey: process.env.BAIDU_ASR_API_KEY || BAIDU_ASR_API_KEY || '',
+  secretKey: process.env.BAIDU_ASR_SECRET_KEY || BAIDU_ASR_SECRET_KEY || '',
+})
+
+/**
+ * 检查 ASR 语音识别密钥是否配置
+ */
+const isAsrConfigured = () => {
+  const { apiKey, secretKey } = getAsrKeys()
+  return !!(apiKey && secretKey)
+}
+
+let _asrTokenCache = null
+/**
+ * 获取 ASR 接口 access_token（百度OAuth 2.0 grant_type=client_credentials），25天缓存
+ */
+const getAsrAccessToken = async () => {
+  const { apiKey, secretKey } = getAsrKeys()
+  if (!apiKey || !secretKey) throw new Error('BAIDU_ASR_API_KEY / BAIDU_ASR_SECRET_KEY 未配置')
+  if (_asrTokenCache && _asrTokenCache.expireAt > Date.now() + 60000) return _asrTokenCache.token
+  const url = `https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${encodeURIComponent(apiKey)}&client_secret=${encodeURIComponent(secretKey)}`
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+  if (!res.ok) throw new Error(`ASR token 获取失败 HTTP ${res.status}`)
+  const data = await res.json()
+  if (!data.access_token) throw new Error('ASR token 获取失败: ' + JSON.stringify(data).substring(0, 200))
+  _asrTokenCache = { token: data.access_token, expireAt: Date.now() + (Number(data.expires_in) || 2592000) * 1000 }
+  return _asrTokenCache.token
+}
+
+/**
+ * 语音识别（ASR）—— 小程序录音格式通常是 mp3 16kHz 单声道
+ * @param {string} audioBase64 - 音频文件 base64（不含 data:audio/xxx;base64, 前缀）
+ * @param {Object} opts - { format:'mp3'|'wav'|'pcm'|'m4a', sampleRate: 16000|8000, channels: 1 }
+ * @returns {Promise<string>} 识别出的文本
+ */
+const speechToText = async (audioBase64, opts = {}) => {
+  if (!audioBase64) throw new Error('音频内容为空')
+  const format = (opts.format || 'mp3').toLowerCase()
+  const sampleRate = Number(opts.sampleRate) || 16000
+  const channels = Number(opts.channels) || 1
+  // 百度ASR对音频有限制（60秒以内/5MB以内），这里做个简单的 base64 长度校验（1MB base64≈1.36MB 原数据）
+  if (audioBase64.length > 5_000_000) throw new Error('音频过大，请控制在 60 秒以内')
+  const accessToken = await getAsrAccessToken()
+  const body = {
+    format,
+    rate: sampleRate,
+    channel: channels,
+    cuid: 'sales-workbench-' + Math.random().toString(36).slice(2, 10),
+    token: accessToken,
+    speech: audioBase64,
+    len: Buffer.byteLength(audioBase64, 'base64'),
+    dev_pid: 1537, // 1537 = 普通话（支持简单英文）16kHz 单声道
+  }
+  const response = await fetch('https://vop.baidu.com/server_api', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) throw new Error(`ASR HTTP ${response.status}`)
+  const data = await response.json()
+  if (data.err_no !== 0) {
+    throw new Error(`ASR 识别失败(${data.err_no})：${data.err_msg || '未知错误'}`)
+  }
+  return data.result && Array.isArray(data.result) ? (data.result[0] || '') : (data.result || '')
 }
 
 /**
@@ -190,8 +259,10 @@ const chatJSON = async (messages, options = {}) => {
 
 module.exports = {
   isConfigured,
+  isAsrConfigured,
   chat,
   chatStream,
   chatJSON,
+  speechToText,
   BAIDU_MODEL,
 }

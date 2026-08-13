@@ -6,7 +6,7 @@
 const express = require('express')
 const router = express.Router()
 const { protect } = require('../middleware/auth')
-const { isConfigured, chat, chatStream, chatJSON } = require('../services/baiduService')
+const { isConfigured, isAsrConfigured, chat, chatStream, chatJSON, speechToText } = require('../services/baiduService')
 
 // AI 未配置时的中间件
 const checkAIConfig = (req, res, next) => {
@@ -21,7 +21,30 @@ const checkAIConfig = (req, res, next) => {
 router.use(checkAIConfig)
 
 // ============================================================
-// 1. 语音助手 — 解析销售指令，自动提取任务信息
+// 1. 语音转文字（ASR）— 小程序 wx.getRecorderManager 录音上传 base64
+// ============================================================
+router.post('/voice-asr', protect, async (req, res) => {
+  try {
+    if (!isAsrConfigured()) {
+      return res.status(503).json({
+        message: '语音识别服务未配置：请在环境变量中设置 BAIDU_ASR_API_KEY / BAIDU_ASR_SECRET_KEY（百度智能云 语音技术 REST API 密钥，与千帆大模型不是同一组）。当前可手动输入文字后点击"分析提取"继续使用。',
+        configured: false,
+      })
+    }
+    const { audioBase64, format, sampleRate, channels } = req.body
+    if (!audioBase64) {
+      return res.status(400).json({ message: '请上传音频' })
+    }
+    const text = await speechToText(audioBase64, { format, sampleRate, channels })
+    res.json({ text, formattedBy: 'baidu-asr' })
+  } catch (err) {
+    console.error('ASR 错误:', err.message)
+    res.status(500).json({ message: '语音识别失败: ' + err.message, configured: isAsrConfigured() })
+  }
+})
+
+// ============================================================
+// 2. 语音助手 — 解析销售指令，自动提取任务信息
 // ============================================================
 router.post('/voice-assistant', protect, async (req, res) => {
   try {
