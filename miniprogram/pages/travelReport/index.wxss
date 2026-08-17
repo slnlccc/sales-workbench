@@ -228,3 +228,7 @@
   background: #F5F3F0;
   color: #6F4E37;
 }
+.btn-word {
+  background: linear-gradient(135deg, #1D4ED8, #3B82F6);
+  color: #fff;
+}

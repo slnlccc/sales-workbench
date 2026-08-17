@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sparkles, FileText, Copy, Download, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Sparkles, FileText, Copy, Download, FileDown, Loader2, AlertCircle } from 'lucide-react';
 import { aiApi } from '@/services/api';
 
 const PURPOSE_OPTIONS = [
@@ -190,6 +190,72 @@ export default function TravelReport() {
     }
   }, [generatedContent]);
 
+  const markdownToHtml = (md: string): string => {
+    const escapeHtml = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c] || c);
+    let lines = md.replace(/\r\n/g, '\n').split('\n');
+    const html: string[] = [];
+    let inList = false;
+    let inTable = false;
+    const closeList = () => { if (inList) { html.push('</ul>'); inList = false; } };
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+
+      // 表格检测
+      if (inTable) {
+        if (/^\s*\|.*\|\s*$/.test(line) && /---/.test(line)) continue;
+        if (/^\s*\|.*\|\s*$/.test(line)) {
+          const cells = line.split('|').slice(1, -1).map(c => c.trim());
+          html.push(`<tr>${cells.map(c => `<td style="border:1px solid #ccc;padding:6px 10px;">${escapeHtml(c)}</td>`).join('')}</tr>`);
+          continue;
+        } else {
+          html.push('</tbody></table>');
+          inTable = false;
+        }
+      }
+      if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /---/.test(lines[i + 1])) {
+        const header = line.split('|').slice(1, -1).map(c => c.trim());
+        html.push(`<table style="border-collapse:collapse;width:100%;margin:12px 0;"><thead><tr style="background:#f5f1ea;">${header.map(c => `<th style="border:1px solid #ccc;padding:6px 10px;text-align:left;">${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>`);
+        inTable = true;
+        continue;
+      }
+
+      // 标题
+      let m;
+      if ((m = line.match(/^######\s+(.*)$/))) { closeList(); html.push(`<h6 style="margin:14px 0 8px;color:#5c4a3a;">${escapeHtml(m[1])}</h6>`); continue; }
+      if ((m = line.match(/^#####\s+(.*)$/)))  { closeList(); html.push(`<h5 style="margin:14px 0 8px;color:#5c4a3a;">${escapeHtml(m[1])}</h5>`); continue; }
+      if ((m = line.match(/^####\s+(.*)$/)))   { closeList(); html.push(`<h4 style="margin:16px 0 8px;color:#6b5845;font-size:1.05em;">${escapeHtml(m[1])}</h4>`); continue; }
+      if ((m = line.match(/^###\s+(.*)$/)))    { closeList(); html.push(`<h3 style="margin:18px 0 10px;color:#5c4a3a;font-size:1.15em;">${escapeHtml(m[1])}</h3>`); continue; }
+      if ((m = line.match(/^##\s+(.*)$/)))     { closeList(); html.push(`<h2 style="margin:22px 0 12px;color:#5c4a3a;border-bottom:2px solid #e6dccb;padding-bottom:6px;font-size:1.3em;">${escapeHtml(m[1])}</h2>`); continue; }
+      if ((m = line.match(/^#\s+(.*)$/)))      { closeList(); html.push(`<h1 style="margin:24px 0 14px;color:#4a3a2a;border-bottom:3px solid #8c7153;padding-bottom:8px;font-size:1.6em;">${escapeHtml(m[1])}</h1>`); continue; }
+
+      // 无序列表
+      if ((m = line.match(/^(\s*)[-*]\s+(.*)$/))) {
+        if (!inList) { html.push('<ul style="margin:8px 0;padding-left:24px;line-height:1.8;">'); inList = true; }
+        let item = m[2];
+        // 粗体 **x** -> <strong>
+        item = item.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        html.push(`<li style="margin:4px 0;">${escapeHtml(item).replace(/&lt;strong&gt;([^&]+)&lt;\/strong&gt;/g, '<strong>$1</strong>')}</li>`);
+        continue;
+      }
+
+      // 分隔线
+      if (/^---+$/.test(line.trim())) { closeList(); html.push('<hr style="border:none;border-top:1px dashed #c9bfa3;margin:18px 0;">'); continue; }
+
+      // 空行
+      if (/^\s*$/.test(line)) { closeList(); if (html[html.length - 1] !== '<p></p>') html.push('<p style="margin:0;line-height:0.6;">&nbsp;</p>'); continue; }
+
+      // 普通段落
+      closeList();
+      let p = escapeHtml(line);
+      p = p.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      html.push(`<p style="margin:6px 0;line-height:1.8;text-indent:0;">${p}</p>`);
+    }
+    if (inList) html.push('</ul>');
+    if (inTable) html.push('</tbody></table>');
+    return html.join('\n');
+  };
+
   const handleDownload = useCallback(() => {
     if (generatedContent) {
       const blob = new Blob([generatedContent], { type: 'text/markdown' });
@@ -200,6 +266,42 @@ export default function TravelReport() {
       a.click();
       URL.revokeObjectURL(url);
     }
+  }, [generatedContent, form.travelDate]);
+
+  const handleDownloadWord = useCallback(() => {
+    if (!generatedContent) return;
+    const date = form.travelDate || new Date().toISOString().split('T')[0];
+    const html = markdownToHtml(generatedContent);
+    const wordHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+       xmlns:w="urn:schemas-microsoft-com:office:word"
+       xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8" />
+<title>出差报告_${date}</title>
+<!--[if gte mso 9]>
+<xml>
+  <w:WordDocument>
+    <w:View>Print</w:View>
+    <w:Zoom>100</w:Zoom>
+  </w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+@page { size: A4; margin: 2cm 2.2cm; }
+body { font-family: "SimSun","宋体","Microsoft YaHei",sans-serif; font-size: 12pt; color:#2b2b2b; line-height:1.7; }
+h1,h2,h3,h4,h5,h6 { font-family: "Microsoft YaHei","黑体",sans-serif; color:#4a3a2a; }
+strong { font-weight:bold; }
+</style>
+</head>
+<body>
+${html}
+</body></html>`;
+    const blob = new Blob(['\ufeff', wordHtml], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `出差报告_${date}.doc`;
+    a.click();
+    URL.revokeObjectURL(url);
   }, [generatedContent, form.travelDate]);
 
   const handleBack = useCallback(() => {
@@ -246,7 +348,7 @@ export default function TravelReport() {
             <h1 className="text-xl md:text-2xl font-bold text-coffee-900 font-display">出差报告</h1>
             <p className="text-xs text-coffee-500">填写出差信息，AI 一键生成专业报告 · 含关键影响/标准切换/竞品梯队等细分项</p>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
             {generatedContent && (
               <>
                 <button
@@ -258,10 +360,17 @@ export default function TravelReport() {
                 </button>
                 <button
                   onClick={handleDownload}
-                  className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-cream-700 to-cream-500 hover:opacity-90 rounded-lg transition-opacity flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-medium text-cream-700 bg-cream-50 border border-cream-300 hover:bg-cream-100 rounded-lg transition-colors flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  下载
+                  下载MD
+                </button>
+                <button
+                  onClick={handleDownloadWord}
+                  className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-700 to-blue-500 hover:opacity-90 rounded-lg transition-opacity flex items-center gap-2"
+                >
+                  <FileDown className="w-4 h-4" />
+                  下载Word
                 </button>
               </>
             )}

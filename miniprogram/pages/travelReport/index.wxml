@@ -195,7 +195,8 @@
     </scroll-view>
     <view class="modal-footer">
       <button class="btn-secondary btn-sm" bindtap="closeResult">关闭</button>
-      <button class="btn-secondary btn-sm" bindtap="downloadReport">下载</button>
+      <button class="btn-secondary btn-sm" bindtap="downloadReport">下载MD</button>
+      <button class="btn-word btn-sm" bindtap="downloadWord">下载Word</button>
       <button class="btn-primary btn-sm" bindtap="copyReport">复制</button>
     </view>
   </view>
