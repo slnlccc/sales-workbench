@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "main": "electron/main.js",
+  "main": "server/src/server.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
