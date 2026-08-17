@@ -47,14 +47,23 @@
   flex: 1;
 }
 
-/* 表单卡片 */
-.card {
-  background: #fff;
-  border-radius: 20rpx;
-  padding: 32rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 2rpx 12rpx rgba(111, 78, 55, 0.06);
+/* 子分组（关键影响4小点、板材竞品/切入路径等） */
+.sub-group {
+  background: #FDFBF8;
+  border: 2rpx solid #E5DDD3;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  margin-top: 12rpx;
 }
+.sub-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #6F4E37;
+  margin-bottom: 16rpx;
+  display: block;
+}
+
+
 .card-title {
   display: flex;
   align-items: center;

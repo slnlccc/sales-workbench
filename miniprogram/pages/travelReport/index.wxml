@@ -2,7 +2,7 @@
   <!-- 顶部标题 -->
   <view class="header-card">
     <text class="header-title">出差报告</text>
-    <text class="header-sub">填写出差信息，AI 一键生成专业报告</text>
+    <text class="header-sub">填写各细分项信息（关键影响/标杆/竞品/切入路径等），AI 一键生成</text>
   </view>
 
   <!-- 警告提示 -->
@@ -11,89 +11,170 @@
     <text class="warning-text">{{warningMsg}}</text>
   </view>
 
-  <!-- 基本信息卡片 -->
+  <!-- 一、基本信息 -->
   <view class="card">
-    <view class="card-title">
-      <view class="dot"></view>
-      <text>基本信息</text>
-    </view>
-
+    <view class="card-title"><view class="dot"></view><text>一、基本信息</text></view>
     <view class="form-item">
       <text class="form-label">出差人 *</text>
-      <input class="form-input" placeholder="例如：单璟僖/马奕泓" value="{{form.travelers}}" data-field="travelers" bindinput="onInput" />
+      <input class="form-input" placeholder="例如：单璟僖/马奕泓/赵涛" value="{{form.travelers}}" data-field="travelers" bindinput="onInput" />
     </view>
-
     <view class="form-item">
       <text class="form-label">出差日期</text>
       <picker mode="date" value="{{form.travelDate}}" bindchange="onDateChange">
         <view class="picker-value">{{form.travelDate || '选择日期'}}</view>
       </picker>
     </view>
-
     <view class="form-item">
       <text class="form-label">出差地点 *</text>
-      <input class="form-input" placeholder="例如：上海" value="{{form.location}}" data-field="location" bindinput="onInput" />
+      <input class="form-input" placeholder="例如：上海一机床厂（临港新片区倚天路185号）" value="{{form.location}}" data-field="location" bindinput="onInput" />
     </view>
-
     <view class="form-item">
       <text class="form-label">主要目的</text>
       <picker range="{{purposeOptions}}" value="{{purposeIndex}}" bindchange="onPurposeChange">
         <view class="picker-value">{{form.purpose || '请选择出差目的'}}</view>
       </picker>
     </view>
+  </view>
 
+  <!-- 二、出差对象 -->
+  <view class="card">
+    <view class="card-title"><view class="dot"></view><text>二、出差对象（多人可复制格式）</text></view>
     <view class="form-item">
-      <text class="form-label">客户信息</text>
-      <textarea class="form-textarea" style="height:80rpx;" placeholder="客户单位、姓名、职位等" value="{{form.clients}}" data-field="clients" bindinput="onInput" />
+      <text class="form-label">客户单位/姓名/职位</text>
+      <textarea class="form-textarea" style="height:120rpx;" placeholder="例如：上海一机床厂（于耀华-总经理）；上海辅机厂（杭建斌-采购部长）" value="{{form.clients}}" data-field="clients" bindinput="onInput" />
+    </view>
+    <view class="form-item">
+      <text class="form-label">客户背景（行业地位/主营业务）</text>
+      <textarea class="form-textarea" style="height:140rpx;" placeholder="例如：上海电气核电核心制造主体，堆内构件、控制棒驱动机构核心供应商" value="{{form.customerBackground}}" data-field="customerBackground" bindinput="onInput" />
+    </view>
+    <view class="form-item">
+      <text class="form-label">其它客户关系情况说明（关系层级/影响力/联系方式）</text>
+      <textarea class="form-textarea" style="height:100rpx;" placeholder="例如：关系层级-支持；客户影响力-决策评估者；联系方式-微信" value="{{form.customerRelations}}" data-field="customerRelations" bindinput="onInput" />
     </view>
   </view>
 
-  <!-- 详细情况卡片 -->
+  <!-- 三、计划事项达成 -->
   <view class="card">
-    <view class="card-title">
-      <view class="dot"></view>
-      <text>详细情况</text>
-    </view>
-
+    <view class="card-title"><view class="dot"></view><text>三、计划事项达成情况（总述）</text></view>
     <view class="form-item">
-      <text class="form-label">计划事项达成情况</text>
-      <textarea class="form-textarea" style="height:160rpx;" placeholder="客户沟通记录、项目进展、关键信息等..." value="{{form.planAchievement}}" data-field="planAchievement" bindinput="onInput" />
+      <textarea class="form-textarea" style="height:220rpx;" placeholder="客户沟通记录、项目进展等总述..." value="{{form.planAchievement}}" data-field="planAchievement" bindinput="onInput" />
     </view>
+  </view>
 
+  <!-- 四、行业核心变量 -->
+  <view class="card">
+    <view class="card-title"><view class="dot"></view><text>四、行业核心变量（关键影响 4 小点）</text></view>
     <view class="form-item">
-      <text class="form-label">行业/市场信息</text>
-      <textarea class="form-textarea" style="height:120rpx;" placeholder="行业动态、竞争对手情况等..." value="{{form.industryInfo}}" data-field="industryInfo" bindinput="onInput" />
+      <text class="form-label">行业核心变量主题</text>
+      <textarea class="form-textarea" style="height:100rpx;" placeholder="例如：中核+中广核华龙一号2.0融合" value="{{form.industryCore}}" data-field="industryCore" bindinput="onInput" />
     </view>
+    <view class="sub-group">
+      <text class="sub-title">⬇ 关键影响（4 小点）</text>
+      <view class="form-item">
+        <text class="form-label">① 标准切换（评定体系/资质/标准变更）</text>
+        <textarea class="form-textarea" style="height:120rpx;" placeholder="例如：评定体系由欧洲RCCM切换国产NB标准，所有供应商须重新完成全套材料评定" value="{{form.standardChange}}" data-field="standardChange" bindinput="onInput" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">② 时间节点（招标/开工/交付等）</text>
+        <textarea class="form-textarea" style="height:120rpx;" placeholder="例如：2.0机组材料交付锁定2030年，堆内构件核心制造开工2028年中，锻件预计2027年一季度启动" value="{{form.timeline}}" data-field="timeline" bindinput="onInput" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">③ 采购模式（招标方/渠道/双供方等）</text>
+        <textarea class="form-textarea" style="height:120rpx;" placeholder="例如：一机床板材统一通过上海国贸招标；业主强制推行双供方托底" value="{{form.procurementMode}}" data-field="procurementMode" bindinput="onInput" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">④ 远期增量（新材料/多机组叠加等）</text>
+        <textarea class="form-textarea" style="height:120rpx;" placeholder="例如：聚变辐照材料CN1515/CN1520单价接近黄金，多机组叠加后规模可观" value="{{form.longTermOpportunity}}" data-field="longTermOpportunity" bindinput="onInput" />
+      </view>
+    </view>
+  </view>
 
+  <!-- 五、锻件市场 -->
+  <view class="card">
+    <view class="card-title"><view class="dot"></view><text>五、锻件市场（标杆/准入/品类）</text></view>
+    <view class="form-item">
+      <text class="form-label">标杆落地（标杆项目/业绩/质量管控认可）</text>
+      <textarea class="form-textarea" style="height:160rpx;" placeholder="例如：华能武核华龙1.5机组堆内构件全套锻件备选托底供应商..." value="{{form.benchmark}}" data-field="benchmark" bindinput="onInput" />
+    </view>
+    <view class="form-item">
+      <text class="form-label">准入门槛（资质/鉴定/认证等）</text>
+      <textarea class="form-textarea" style="height:100rpx;" placeholder="例如：2.0以后面临是否要重新鉴定的问题" value="{{form.entryBarrier}}" data-field="entryBarrier" bindinput="onInput" />
+    </view>
+    <view class="form-item">
+      <text class="form-label">细分品类（各品类壁垒/竞争格局）</text>
+      <textarea class="form-textarea" style="height:160rpx;" placeholder="例如：贯穿件（2.0无一体式需求）、690合金套管（壁垒高）、304金属套管（竞争超10家）" value="{{form.segmentCategory}}" data-field="segmentCategory" bindinput="onInput" />
+    </view>
+  </view>
+
+  <!-- 六、板材市场 -->
+  <view class="card">
+    <view class="card-title"><view class="dot"></view><text>六、板材市场（标杆/竞品/切入路径）</text></view>
+    <view class="form-item">
+      <text class="form-label">行业标杆（核心供方/补产周期/工艺/价格策略）</text>
+      <textarea class="form-textarea" style="height:160rpx;" placeholder="例如：标杆太钢——核心板材供货方，报废后25天补产，50mm+厚板全电渣重熔" value="{{form.industryBenchmark}}" data-field="industryBenchmark" bindinput="onInput" />
+    </view>
+    <view class="sub-group">
+      <view class="form-item">
+        <text class="form-label">竞品梯队（分梯队列出）</text>
+        <textarea class="form-textarea" style="height:120rpx;" placeholder="宝武（第一）→ 舞洋/久立特钢（第二，备选）→ 酒钢（第三）" value="{{form.competitorTiers}}" data-field="competitorTiers" bindinput="onInput" />
+      </view>
+      <view class="form-item">
+        <text class="form-label">我方切入路径（步骤/优势/短板）</text>
+        <textarea class="form-textarea" style="height:160rpx;" placeholder="先签0元示范试制合同→全规格板材+NB标准验证达标→上海国贸批量供货价。短板：暂无完整华龙板材业绩" value="{{form.entryPath}}" data-field="entryPath" bindinput="onInput" />
+      </view>
+    </view>
+  </view>
+
+  <!-- 七、其他客户/业主 -->
+  <view class="card">
+    <view class="card-title"><view class="dot"></view><text>七、其他客户/业主交流记录</text></view>
+    <view class="form-item">
+      <text class="form-label">其他客户单位情况（合作/质量/交付/框架等）</text>
+      <textarea class="form-textarea" style="height:160rpx;" placeholder="例如：上海辅机厂已签框架协议，因质量和交付问题暂停下单，等在手订单恢复正常后恢复下单，同时准备明年的框架协议" value="{{form.otherClients}}" data-field="otherClients" bindinput="onInput" />
+    </view>
+    <view class="form-item">
+      <text class="form-label">大小业主交流记录（项目启动/资金/设计）</text>
+      <textarea class="form-textarea" style="height:100rpx;" value="{{form.ownerComm}}" data-field="ownerComm" bindinput="onInput" />
+    </view>
+    <view class="form-item">
+      <text class="form-label">其他人员交流记录</text>
+      <textarea class="form-textarea" style="height:100rpx;" value="{{form.otherComm}}" data-field="otherComm" bindinput="onInput" />
+    </view>
+  </view>
+
+  <!-- 八、收尾 -->
+  <view class="card">
+    <view class="card-title"><view class="dot"></view><text>八、其他收获 / 盈利格局 / 风险 / 求助 / 下一步</text></view>
     <view class="form-item">
       <text class="form-label">其他收获</text>
-      <textarea class="form-textarea" style="height:120rpx;" placeholder="其他有价值的信息..." value="{{form.otherHarvest}}" data-field="otherHarvest" bindinput="onInput" />
+      <textarea class="form-textarea" style="height:100rpx;" value="{{form.otherHarvest}}" data-field="otherHarvest" bindinput="onInput" />
     </view>
-
     <view class="form-item">
-      <text class="form-label">风险</text>
-      <textarea class="form-textarea" style="height:80rpx;" placeholder="业务风险、客户风险等..." value="{{form.risks}}" data-field="risks" bindinput="onInput" />
+      <text class="form-label">1. 行业盈利格局判断</text>
+      <textarea class="form-textarea" style="height:100rpx;" value="{{form.profitPattern}}" data-field="profitPattern" bindinput="onInput" />
     </view>
-
     <view class="form-item">
-      <text class="form-label">求助/需协调资源</text>
-      <textarea class="form-textarea" style="height:80rpx;" placeholder="需要总经理出面、技术支持等..." value="{{form.helpNeeded}}" data-field="helpNeeded" bindinput="onInput" />
+      <text class="form-label">风险（业务/客户/技术/交付/质量/竞争）</text>
+      <textarea class="form-textarea" style="height:120rpx;" value="{{form.risks}}" data-field="risks" bindinput="onInput" />
     </view>
-
     <view class="form-item">
-      <text class="form-label">下一步行动计划</text>
-      <textarea class="form-textarea" style="height:120rpx;" placeholder="明确具体事项和责任人，例如：1. 提交资料 - 赵涛" value="{{form.nextSteps}}" data-field="nextSteps" bindinput="onInput" />
+      <text class="form-label">求助（需要协调的资源：总经理出面/技术支持等）</text>
+      <textarea class="form-textarea" style="height:100rpx;" value="{{form.helpNeeded}}" data-field="helpNeeded" bindinput="onInput" />
+    </view>
+    <view class="form-item">
+      <text class="form-label">下一步行动计划（事项+责任人）</text>
+      <textarea class="form-textarea" style="height:200rpx;" placeholder="例如：
+1. 武核锻件发运后提交完整试制资料及检测数据 - 赵涛
+2. 提交华龙2.0 NB标准供方资质转证申请 - 赵涛
+3. 对接金七门、太平岭2.0示范项目锻件集采需求，策划工艺方案 - 赵涛
+4. 邀请一机床团队赴无锡厂区参观一体化产线 - 单总/马总" value="{{form.nextSteps}}" data-field="nextSteps" bindinput="onInput" />
     </view>
   </view>
 
   <!-- 生成按钮 -->
   <button class="btn-generate" bindtap="handleSubmit" disabled="{{loading}}">
-    <block wx:if="{{!loading}}">
-      <text>✨ 一键生成出差报告</text>
-    </block>
-    <block wx:else>
-      <text>AI 正在生成报告...</text>
-    </block>
+    <block wx:if="{{!loading}}"><text>✨ 一键生成出差报告</text></block>
+    <block wx:else><text>AI 正在生成报告...</text></block>
   </button>
 
   <view style="height:60rpx;"></view>

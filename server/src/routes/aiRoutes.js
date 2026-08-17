@@ -498,12 +498,7 @@ router.post('/voice-correct', protect, async (req, res) => {
 // ============================================================
 router.post('/travel-report', protect, async (req, res) => {
   try {
-    const { 
-      travelers, travelDate, location, 
-      purpose, clients, 
-      planAchievement, industryInfo, marketInfo,
-      otherHarvest, risks, helpNeeded, nextSteps 
-    } = req.body
+    const d = req.body || {}
 
     const systemPrompt = `你是一个专业的出差报告撰写助手。请根据用户提供的出差信息，生成一份结构清晰、内容详实的出差报告。
 
@@ -513,74 +508,142 @@ router.post('/travel-report', protect, async (req, res) => {
 **日报时间**：[日期]
 
 ## 一、基本信息
-- **出差人**：[出差人姓名]
+- **出差人**：[出差人姓名，多人用/分隔]
 - **出差时间**：[出差日期]
-- **出差地点**：[出差地点]
+- **出差地点**：[出差地点，含具体地址]
 
 ## 二、出差计划和目标
-主要目的：[从 "获取商机、洽谈订单、维护关系、技术交流、收款、处理问题" 中选择]
+主要目的：[从"获取商机、洽谈订单、维护关系、技术交流、收款、处理问题"中选多个，用√/×或☑/☐]
 
-## 三、出差对象
+## 三、出差对象（多人可复制该格式）
 - **客户单位名称**：[客户单位]
-- **拜访客户姓名**：[客户姓名]
-- **客户职位**：[客户职位]
-- **联系方式**：[联系方式]
-- **关系层级**：[合作/支持/潜在]
-- **客户影响力**：[决策评估者/关键影响人/执行人]
+- **拜访客户姓名**：[客户姓名，多人用顿号分隔]
+- **客户职位**：[客户职位，多人对应说明]
+- **联系方式**：[联系方式，如微信/电话]
+- **关系层级**：[支持/合作/中性/竞争]
+- **客户影响力**：[决策评估者/关键影响人/执行人/采购人/技术把关人]
+- **客户背景**：[公司背景、行业地位、主营业务等]
+- **其它客户关系情况说明**：[关键联系人、历史合作情况等]
 
-## 四、出差日报总结
+## 四、出差日报总结（当天）
 
 ### （一）计划事项达成情况
-[详细描述计划事项的达成情况，包括客户沟通记录、项目进展等]
+[按客户单位分组说明，结构如下，如多家客户则复制该结构]
 
-### （二）其他收获
-[其他有价值的市场信息、行业动态等]
+#### 一、[客户单位1]出差报告
+**出差时间**：[具体时间]
+**出差地点**：[具体地址]
+**对接客户**：[客户背景与核心地位说明]
 
-### （三）风险
-[业务风险、客户风险、技术风险等]
+##### （一）行业核心变量：[如 中核+中广核华龙一号2.0融合 等]
+[两大集团/行业龙头技术整合说明]
+**关键影响：**
+- **标准切换**：[评定体系、资质、标准变更情况]
+- **时间节点**：[招标、开工、交付等关键时间节点]
+- **采购模式**：[招标方/渠道/统一采购/双供方等采购机制]
+- **远期增量**：[新材料、新订单、多机组叠加等远期机会]
 
-### （四）求助
-[需要协调的资源，如总经理出面、技术支持等]
+##### （二）锻件市场：[如 依托武核业绩打开市场]
+**标杆落地：**[标杆项目、业绩、质量管控认可情况]
+**准入门槛：**[资质/鉴定/认证等门槛]
+**细分品类：**[品类1（壁垒/竞争情况）、品类2（壁垒/竞争情况）…]
 
-### （五）下一步行动计划
-[明确接下来需要推进的具体事项，包括责任人]
+##### （三）板材市场：[如 全规格覆盖是硬性门槛，民企存在切入空间]
+**行业标杆：**[核心标杆供应商、报废后补产周期、核心工艺、价格策略]
+**准入门槛：**[全规格覆盖要求、厚度范围、头部供方情况]
+**竞品梯队：**[第一梯队（品牌+稳定性）→ 第二梯队（备选）→ 第三梯队（部分规格）]
+**我方切入路径：**[示范合同→全规格验证→正式批量供货；并说明优势与短板]
+
+#### 二、[客户单位2] [如 上海辅机厂]
+[该客户当前合作框架、质量问题、交付问题、暂停下单情况、恢复下单条件、明年框架准备情况]
+
+##### （四）大小业主交流记录
+[项目启动、资金到位、设计进展等]
+
+##### （五）其他人员交流记录
+[其他有价值的沟通内容]
+
+### （二）其他收获（其他有价值信息）
+1、**行业盈利格局判断**：[行业利润区间、价格趋势、成本结构]
+
+### （三）风险（业务风险、客户风险、技术风险等）
+[分类列出：业务风险 / 客户风险 / 技术风险 / 交付风险 / 质量风险 / 竞争风险]
+
+### （四）求助（需要协调的资源，如总经理出面、技术支持等）
+[明确需要什么人、什么时间、提供什么支持]
+
+### （五）下一步行动计划（明确接下来需要推进的具体事项，包括责任人）
+| 序号 | 事项 | 责任人 | 目标完成时间 |
+| --- | --- | --- | --- |
+| 1 | [具体事项1] | [责任人] | [时间] |
+| 2 | [具体事项2] | [责任人] | [时间] |
 
 ---
 
 写作要求：
-1. 语言专业、简洁、有数据支撑
-2. 基于用户提供的信息进行润色和组织，不要编造信息
-3. 如果某项信息为空，请在该位置标注 "/"
-4. 保留原始信息中的关键数据、名称和日期
+1. 语言专业、简洁、有数据支撑；不要编造信息
+2. 严格按照上述结构输出，缺少小标题也要保留标题骨架并标注"/"
+3. 保留原始信息中的关键数据、人名、公司名、日期
+4. 对于"关键影响、标准切换、时间节点、采购模式、远期增量、标杆落地、准入门槛、细分品类、行业标杆、竞品梯队、我方切入路径"等关键子标题，用户提供了对应信息就完整呈现，未提供就给出空占位符"-"
 5. 使用 Markdown 格式输出`
 
-    const userContent = `请根据以下出差信息生成报告：
+    const userContent = `请根据以下出差信息生成完整报告：
 
-出差人：${travelers || '未提供'}
-出差日期：${travelDate || new Date().toISOString().split('T')[0]}
-出差地点：${location || '未提供'}
-出差目的：${purpose || '未提供'}
-客户信息：${clients || '未提供'}
+出差人：${d.travelers || '未提供'}
+出差日期：${d.travelDate || new Date().toISOString().split('T')[0]}
+出差地点：${d.location || '未提供'}
+出差目的：${d.purpose || '未提供'}
+客户信息：${d.clients || '未提供'}
+客户背景：${d.customerBackground || '（无）'}
+客户关系说明：${d.customerRelations || '（无）'}
 
 计划事项达成情况：
-${planAchievement || '（无详细信息）'}
+${d.planAchievement || '（无详细信息）'}
 
-行业/市场信息：
-${industryInfo || marketInfo || '（无详细信息）'}
+行业核心变量：
+${d.industryCore || d.industryVariable || '（无详细信息）'}
+
+关键影响：
+- 标准切换：${d.standardChange || '（无）'}
+- 时间节点：${d.timeline || '（无）'}
+- 采购模式：${d.procurementMode || '（无）'}
+- 远期增量：${d.longTermOpportunity || '（无）'}
+
+锻件市场：
+- 标杆落地：${d.benchmark || '（无）'}
+- 准入门槛：${d.entryBarrier || '（无）'}
+- 细分品类：${d.segmentCategory || '（无）'}
+
+板材市场：
+- 行业标杆：${d.industryBenchmark || '（无）'}
+- 竞品梯队：${d.competitorTiers || '（无）'}
+- 我方切入路径：${d.entryPath || '（无）'}
+
+其他客户单位情况：
+${d.otherClients || '（无）'}
+
+大小业主交流记录：
+${d.ownerComm || '（无）'}
+其他人员交流记录：
+${d.otherComm || '（无）'}
+
+行业/市场信息（补充）：
+${d.industryInfo || d.marketInfo || '（无）'}
 
 其他收获：
-${otherHarvest || '（无）'}
+${d.otherHarvest || '（无）'}
+1. 行业盈利格局判断：${d.profitPattern || '（无）'}
 
 风险：
-${risks || '（无）'}
+${d.risks || '（无）'}
 
 求助/需要协调的资源：
-${helpNeeded || '（无）'}
+${d.helpNeeded || '（无）'}
 
 下一步行动计划：
-${nextSteps || '（待制定）'}
+${d.nextSteps || '（待制定）'}
 
-请生成一份完整的出差报告。`
+请严格按照模板结构生成完整报告。`
 
     try {
       const result = await chat(
@@ -588,17 +651,17 @@ ${nextSteps || '（待制定）'}
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
-        { temperature: 0.5, maxTokens: 4096 }
+        { temperature: 0.5, maxTokens: 8192 }
       )
       res.json({ content: result })
     } catch (aiErr) {
       console.warn('出差报告 AI 失败，使用本地模板:', aiErr.message)
-      const fallback = buildFallbackReport(req.body)
+      const fallback = buildFallbackReport(d)
       res.json({ content: fallback, fallback: true, warning: 'AI 服务暂不可用，已使用本地模板生成' })
     }
   } catch (err) {
     console.error('出差报告生成错误:', err.message)
-    const fallback = buildFallbackReport(req.body)
+    const fallback = buildFallbackReport(req.body || {})
     res.json({ content: fallback, fallback: true })
   }
 })
@@ -606,44 +669,69 @@ ${nextSteps || '（待制定）'}
 function buildFallbackReport(data) {
   const d = data || {}
   const date = d.travelDate || new Date().toISOString().split('T')[0]
-  const lines = [
-    '# 出差报告',
-    `**日报时间**：${date}`,
-    '',
-    '## 一、基本信息',
-    `- **出差人**：${d.travelers || '/'}`,
-    `- **出差时间**：${date}`,
-    `- **出差地点**：${d.location || '/'}`,
-    '',
-    '## 二、出差计划和目标',
-    `主要目的：${d.purpose || '/'}`,
-    '',
-    '## 三、出差对象',
-    `- **客户信息**：${d.clients || '/'}`,
-    '',
-    '## 四、出差日报总结',
-    '',
-    '### （一）计划事项达成情况',
-    d.planAchievement || '/',
-    '',
-    '### （二）其他收获',
-    d.otherHarvest || '/',
-    '',
-    '### （三）行业/市场信息',
-    d.industryInfo || d.marketInfo || '/',
-    '',
-    '### （四）风险',
-    d.risks || '/',
-    '',
-    '### （五）求助',
-    d.helpNeeded || '/',
-    '',
-    '### （六）下一步行动计划',
-    d.nextSteps || '/',
-    '',
-    '---',
-    '*本报告由系统模板自动生成*',
-  ]
+  const p = (v) => v && String(v).trim() ? v : '/'
+  const lines = []
+
+  lines.push('# 出差报告')
+  lines.push(`**日报时间**：${date}`)
+  lines.push('')
+  lines.push('## 一、基本信息')
+  lines.push(`- **出差人**：${p(d.travelers)}`)
+  lines.push(`- **出差时间**：${date}`)
+  lines.push(`- **出差地点**：${p(d.location)}`)
+  lines.push('')
+  lines.push('## 二、出差计划和目标')
+  lines.push(`主要目的：${p(d.purpose)}`)
+  lines.push('')
+  lines.push('## 三、出差对象')
+  lines.push(`- **客户单位名称**：${p(d.clients)}`)
+  lines.push(`- **客户背景**：${p(d.customerBackground)}`)
+  lines.push(`- **其它客户关系情况说明**：${p(d.customerRelations)}`)
+  lines.push('')
+  lines.push('## 四、出差日报总结')
+  lines.push('')
+  lines.push('### （一）计划事项达成情况')
+  lines.push(p(d.planAchievement))
+  lines.push('')
+  lines.push('#### 一、行业核心变量')
+  lines.push(p(d.industryCore || d.industryVariable))
+  lines.push('**关键影响：**')
+  lines.push(`- **标准切换**：${p(d.standardChange)}`)
+  lines.push(`- **时间节点**：${p(d.timeline)}`)
+  lines.push(`- **采购模式**：${p(d.procurementMode)}`)
+  lines.push(`- **远期增量**：${p(d.longTermOpportunity)}`)
+  lines.push('')
+  lines.push('#### 二、锻件市场')
+  lines.push(`- **标杆落地**：${p(d.benchmark)}`)
+  lines.push(`- **准入门槛**：${p(d.entryBarrier)}`)
+  lines.push(`- **细分品类**：${p(d.segmentCategory)}`)
+  lines.push('')
+  lines.push('#### 三、板材市场')
+  lines.push(`- **行业标杆**：${p(d.industryBenchmark)}`)
+  lines.push(`- **竞品梯队**：${p(d.competitorTiers)}`)
+  lines.push(`- **我方切入路径**：${p(d.entryPath)}`)
+  lines.push('')
+  lines.push('#### 四、其他客户单位情况')
+  lines.push(p(d.otherClients))
+  lines.push('')
+  lines.push(`##### 大小业主交流记录：${p(d.ownerComm)}`)
+  lines.push(`##### 其他人员交流记录：${p(d.otherComm)}`)
+  lines.push('')
+  lines.push('### （二）其他收获')
+  lines.push(p(d.otherHarvest))
+  lines.push(`1、**行业盈利格局判断**：${p(d.profitPattern)}`)
+  lines.push('')
+  lines.push('### （三）风险')
+  lines.push(p(d.risks))
+  lines.push('')
+  lines.push('### （四）求助')
+  lines.push(p(d.helpNeeded))
+  lines.push('')
+  lines.push('### （五）下一步行动计划')
+  lines.push(p(d.nextSteps))
+  lines.push('')
+  lines.push('---')
+  lines.push('*本报告由系统模板自动生成*')
   return lines.join('\n')
 }
 

@@ -2,47 +2,77 @@ const { ai, auth } = require('../../utils/api.js')
 
 const PURPOSE_OPTIONS = ['获取商机', '洽谈订单', '维护关系', '技术交流', '收款', '处理问题', '其他']
 
-// 本地模板生成报告（与Web端保持一致）
 function buildLocalReport(form) {
   const date = form.travelDate || ''
+  const p = (v) => (v && String(v).trim() ? v : '/')
   const lines = []
+
   lines.push('# 出差报告')
   lines.push(`**日报时间**：${date}`)
   lines.push('')
   lines.push('## 一、基本信息')
-  lines.push(`- **出差人**：${form.travelers || '/'}`)
+  lines.push(`- **出差人**：${p(form.travelers)}`)
   lines.push(`- **出差时间**：${date}`)
-  lines.push(`- **出差地点**：${form.location || '/'}`)
+  lines.push(`- **出差地点**：${p(form.location)}`)
   lines.push('')
   lines.push('## 二、出差计划和目标')
-  lines.push(`主要目的：${form.purpose || '/'}`)
+  lines.push(`主要目的：${p(form.purpose)}`)
   lines.push('')
   lines.push('## 三、出差对象')
-  lines.push(`- **客户信息**：${form.clients || '/'}`)
+  lines.push(`- **客户单位名称**：${p(form.clients)}`)
+  lines.push(`- **客户背景**：${p(form.customerBackground)}`)
+  lines.push(`- **其它客户关系情况说明**：${p(form.customerRelations)}`)
   lines.push('')
   lines.push('## 四、出差日报总结')
   lines.push('')
   lines.push('### （一）计划事项达成情况')
-  lines.push(form.planAchievement || '/')
+  lines.push(p(form.planAchievement))
+  lines.push('')
+  lines.push('#### 一、行业核心变量')
+  lines.push(p(form.industryCore || form.industryVariable))
+  lines.push('**关键影响：**')
+  lines.push(`- **标准切换**：${p(form.standardChange)}`)
+  lines.push(`- **时间节点**：${p(form.timeline)}`)
+  lines.push(`- **采购模式**：${p(form.procurementMode)}`)
+  lines.push(`- **远期增量**：${p(form.longTermOpportunity)}`)
+  lines.push('')
+  lines.push('#### 二、锻件市场')
+  lines.push(`- **标杆落地**：${p(form.benchmark)}`)
+  lines.push(`- **准入门槛**：${p(form.entryBarrier)}`)
+  lines.push(`- **细分品类**：${p(form.segmentCategory)}`)
+  lines.push('')
+  lines.push('#### 三、板材市场')
+  lines.push(`- **行业标杆**：${p(form.industryBenchmark)}`)
+  lines.push(`- **竞品梯队**：${p(form.competitorTiers)}`)
+  lines.push(`- **我方切入路径**：${p(form.entryPath)}`)
+  lines.push('')
+  lines.push('#### 四、其他客户单位情况')
+  lines.push(p(form.otherClients))
+  lines.push('')
+  lines.push(`##### 大小业主交流记录：${p(form.ownerComm)}`)
+  lines.push(`##### 其他人员交流记录：${p(form.otherComm)}`)
   lines.push('')
   lines.push('### （二）其他收获')
-  lines.push(form.otherHarvest || '/')
+  lines.push(p(form.otherHarvest))
+  lines.push(`1、**行业盈利格局判断**：${p(form.profitPattern)}`)
   lines.push('')
-  lines.push('### （三）行业/市场信息')
-  lines.push(form.industryInfo || form.marketInfo || '/')
+  lines.push('### （三）风险')
+  lines.push(p(form.risks))
   lines.push('')
-  lines.push('### （四）风险')
-  lines.push(form.risks || '/')
+  lines.push('### （四）求助')
+  lines.push(p(form.helpNeeded))
   lines.push('')
-  lines.push('### （五）求助')
-  lines.push(form.helpNeeded || '/')
-  lines.push('')
-  lines.push('### （六）下一步行动计划')
-  lines.push(form.nextSteps || '/')
+  lines.push('### （五）下一步行动计划')
+  lines.push(p(form.nextSteps))
   lines.push('')
   lines.push('---')
   lines.push('*本报告由系统根据您填写的信息自动整理生成*')
   return lines.join('\n')
+}
+
+const today = () => {
+  const t = new Date()
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
 }
 
 Page({
@@ -51,13 +81,31 @@ Page({
     purposeIndex: -1,
     form: {
       travelers: '',
-      travelDate: '',
+      travelDate: today(),
       location: '',
       purpose: '',
       clients: '',
+      customerBackground: '',
+      customerRelations: '',
       planAchievement: '',
+      industryCore: '',
+      standardChange: '',
+      timeline: '',
+      procurementMode: '',
+      longTermOpportunity: '',
+      benchmark: '',
+      entryBarrier: '',
+      segmentCategory: '',
+      industryBenchmark: '',
+      competitorTiers: '',
+      entryPath: '',
+      otherClients: '',
+      ownerComm: '',
+      otherComm: '',
       industryInfo: '',
+      marketInfo: '',
       otherHarvest: '',
+      profitPattern: '',
       risks: '',
       helpNeeded: '',
       nextSteps: '',
@@ -73,13 +121,7 @@ Page({
     if (!auth.isLoggedIn()) {
       wx.showToast({ title: '请先登录', icon: 'none' })
       setTimeout(() => wx.reLaunch({ url: '/pages/index/index' }), 800)
-      return
     }
-    const today = new Date()
-    const y = today.getFullYear()
-    const m = String(today.getMonth() + 1).padStart(2, '0')
-    const d = String(today.getDate()).padStart(2, '0')
-    this.setData({ 'form.travelDate': `${y}-${m}-${d}` })
   },
 
   onInput(e) {
@@ -92,7 +134,7 @@ Page({
   },
 
   onPurposeChange(e) {
-    const idx = e.detail.value
+    const idx = Number(e.detail.value)
     this.setData({
       purposeIndex: idx,
       'form.purpose': PURPOSE_OPTIONS[idx],
