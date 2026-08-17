@@ -169,6 +169,7 @@ const ai = {
   voiceCorrect: (payload) => http.post('/ai/voice-correct', payload), // {text}
   customerAnalysis: (payload) => http.post('/ai/customer-analysis', payload),
   reportGeneration: (payload) => http.post('/ai/report-generation', payload),
+  travelReport: (payload) => http.post('/ai/travel-report', payload), // 出差报告专用接口
   industryInsight: (payload) => http.post('/ai/industry-insight', payload),
   chat: (messages, opts) => http.post('/ai/chat', { messages, ...(opts || {}) }),
   memoKnowledge: (notes) => http.post('/ai/memo-knowledge', { notes }),

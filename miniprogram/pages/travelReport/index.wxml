@@ -1,0 +1,121 @@
+<view class="container">
+  <!-- 顶部标题 -->
+  <view class="header-card">
+    <text class="header-title">出差报告</text>
+    <text class="header-sub">填写出差信息，AI 一键生成专业报告</text>
+  </view>
+
+  <!-- 警告提示 -->
+  <view wx:if="{{warningMsg}}" class="warning-bar">
+    <text class="warning-icon">⚠️</text>
+    <text class="warning-text">{{warningMsg}}</text>
+  </view>
+
+  <!-- 基本信息卡片 -->
+  <view class="card">
+    <view class="card-title">
+      <view class="dot"></view>
+      <text>基本信息</text>
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">出差人 *</text>
+      <input class="form-input" placeholder="例如：单璟僖/马奕泓" value="{{form.travelers}}" data-field="travelers" bindinput="onInput" />
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">出差日期</text>
+      <picker mode="date" value="{{form.travelDate}}" bindchange="onDateChange">
+        <view class="picker-value">{{form.travelDate || '选择日期'}}</view>
+      </picker>
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">出差地点 *</text>
+      <input class="form-input" placeholder="例如：上海" value="{{form.location}}" data-field="location" bindinput="onInput" />
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">主要目的</text>
+      <picker range="{{purposeOptions}}" value="{{purposeIndex}}" bindchange="onPurposeChange">
+        <view class="picker-value">{{form.purpose || '请选择出差目的'}}</view>
+      </picker>
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">客户信息</text>
+      <textarea class="form-textarea" style="height:80rpx;" placeholder="客户单位、姓名、职位等" value="{{form.clients}}" data-field="clients" bindinput="onInput" />
+    </view>
+  </view>
+
+  <!-- 详细情况卡片 -->
+  <view class="card">
+    <view class="card-title">
+      <view class="dot"></view>
+      <text>详细情况</text>
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">计划事项达成情况</text>
+      <textarea class="form-textarea" style="height:160rpx;" placeholder="客户沟通记录、项目进展、关键信息等..." value="{{form.planAchievement}}" data-field="planAchievement" bindinput="onInput" />
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">行业/市场信息</text>
+      <textarea class="form-textarea" style="height:120rpx;" placeholder="行业动态、竞争对手情况等..." value="{{form.industryInfo}}" data-field="industryInfo" bindinput="onInput" />
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">其他收获</text>
+      <textarea class="form-textarea" style="height:120rpx;" placeholder="其他有价值的信息..." value="{{form.otherHarvest}}" data-field="otherHarvest" bindinput="onInput" />
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">风险</text>
+      <textarea class="form-textarea" style="height:80rpx;" placeholder="业务风险、客户风险等..." value="{{form.risks}}" data-field="risks" bindinput="onInput" />
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">求助/需协调资源</text>
+      <textarea class="form-textarea" style="height:80rpx;" placeholder="需要总经理出面、技术支持等..." value="{{form.helpNeeded}}" data-field="helpNeeded" bindinput="onInput" />
+    </view>
+
+    <view class="form-item">
+      <text class="form-label">下一步行动计划</text>
+      <textarea class="form-textarea" style="height:120rpx;" placeholder="明确具体事项和责任人，例如：1. 提交资料 - 赵涛" value="{{form.nextSteps}}" data-field="nextSteps" bindinput="onInput" />
+    </view>
+  </view>
+
+  <!-- 生成按钮 -->
+  <button class="btn-generate" bindtap="handleSubmit" disabled="{{loading}}">
+    <block wx:if="{{!loading}}">
+      <text>✨ 一键生成出差报告</text>
+    </block>
+    <block wx:else>
+      <text>AI 正在生成报告...</text>
+    </block>
+  </button>
+
+  <view style="height:60rpx;"></view>
+</view>
+
+<!-- 报告结果弹窗 -->
+<view wx:if="{{showResult}}" class="modal-mask" bindtap="closeResult">
+  <view class="modal-content" catchtap="stopPropagation">
+    <view class="modal-header">
+      <view class="modal-title-row">
+        <text class="modal-title">报告预览</text>
+        <text wx:if="{{isLocalFallback}}" class="badge-fallback">本地模板</text>
+      </view>
+      <text class="modal-close" bindtap="closeResult">✕</text>
+    </view>
+    <scroll-view scroll-y class="modal-body">
+      <text class="report-content">{{generatedContent}}</text>
+    </scroll-view>
+    <view class="modal-footer">
+      <button class="btn-secondary btn-sm" bindtap="closeResult">关闭</button>
+      <button class="btn-secondary btn-sm" bindtap="downloadReport">下载</button>
+      <button class="btn-primary btn-sm" bindtap="copyReport">复制</button>
+    </view>
+  </view>
+</view>

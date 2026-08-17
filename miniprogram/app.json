@@ -8,6 +8,7 @@
     "pages/marketRadar/index",
     "pages/customerManager/index",
     "pages/report/index",
+    "pages/travelReport/index",
     "pages/performanceReview/index"
   ],
   "window": {
