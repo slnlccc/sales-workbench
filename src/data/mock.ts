@@ -104,6 +104,13 @@ export const navGroups: NavGroup[] = [
         path: '/reports',
       },
       {
+        id: 'travel-report',
+        icon: 'FileText',
+        label: '出差报告',
+        subLabel: 'AI自动生成',
+        path: '/travel-report',
+      },
+      {
         id: 'meeting-library',
         icon: 'BookOpen',
         label: '会议知识库',

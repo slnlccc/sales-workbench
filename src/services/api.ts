@@ -128,9 +128,26 @@ export const aiApi = {
   customerAnalysis: (data: { customerName: string; customerInfo?: any; records?: any[]; projects?: any[] }) =>
     request('/ai/customer-analysis', { method: 'POST', body: JSON.stringify(data) }),
 
-  // 报告生成
+  // 报告生成（通用）
   reportGeneration: (data: { reportType: string; records?: any[]; dateRange?: string; extraInfo?: string }) =>
     request('/ai/report-generation', { method: 'POST', body: JSON.stringify(data) }),
+
+  // 出差报告生成
+  travelReport: (data: {
+    travelers?: string;
+    travelDate?: string;
+    location?: string;
+    purpose?: string;
+    clients?: string;
+    planAchievement?: string;
+    industryInfo?: string;
+    marketInfo?: string;
+    otherHarvest?: string;
+    risks?: string;
+    helpNeeded?: string;
+    nextSteps?: string;
+  }) =>
+    request('/ai/travel-report', { method: 'POST', body: JSON.stringify(data) }),
 
   // 行业洞察
   industryInsight: (data: { topic?: string; articles?: string }) =>

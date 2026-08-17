@@ -493,4 +493,108 @@ router.post('/voice-correct', protect, async (req, res) => {
   }
 })
 
+// ============================================================
+// 8. 出差报告生成
+// ============================================================
+router.post('/travel-report', protect, async (req, res) => {
+  try {
+    const { 
+      travelers, travelDate, location, 
+      purpose, clients, 
+      planAchievement, industryInfo, marketInfo,
+      otherHarvest, risks, helpNeeded, nextSteps 
+    } = req.body
+
+    const systemPrompt = `你是一个专业的出差报告撰写助手。请根据用户提供的出差信息，生成一份结构清晰、内容详实的出差报告。
+
+报告格式要求（严格按照以下模板生成，不要添加额外说明）：
+
+# 出差报告
+**日报时间**：[日期]
+
+## 一、基本信息
+- **出差人**：[出差人姓名]
+- **出差时间**：[出差日期]
+- **出差地点**：[出差地点]
+
+## 二、出差计划和目标
+主要目的：[从 "获取商机、洽谈订单、维护关系、技术交流、收款、处理问题" 中选择]
+
+## 三、出差对象
+- **客户单位名称**：[客户单位]
+- **拜访客户姓名**：[客户姓名]
+- **客户职位**：[客户职位]
+- **联系方式**：[联系方式]
+- **关系层级**：[合作/支持/潜在]
+- **客户影响力**：[决策评估者/关键影响人/执行人]
+
+## 四、出差日报总结
+
+### （一）计划事项达成情况
+[详细描述计划事项的达成情况，包括客户沟通记录、项目进展等]
+
+### （二）其他收获
+[其他有价值的市场信息、行业动态等]
+
+### （三）风险
+[业务风险、客户风险、技术风险等]
+
+### （四）求助
+[需要协调的资源，如总经理出面、技术支持等]
+
+### （五）下一步行动计划
+[明确接下来需要推进的具体事项，包括责任人]
+
+---
+
+写作要求：
+1. 语言专业、简洁、有数据支撑
+2. 基于用户提供的信息进行润色和组织，不要编造信息
+3. 如果某项信息为空，请在该位置标注 "/"
+4. 保留原始信息中的关键数据、名称和日期
+5. 使用 Markdown 格式输出`
+
+    const userContent = `请根据以下出差信息生成报告：
+
+出差人：${travelers || '未提供'}
+出差日期：${travelDate || new Date().toISOString().split('T')[0]}
+出差地点：${location || '未提供'}
+出差目的：${purpose || '未提供'}
+客户信息：${clients || '未提供'}
+
+计划事项达成情况：
+${planAchievement || '（无详细信息）'}
+
+行业/市场信息：
+${industryInfo || marketInfo || '（无详细信息）'}
+
+其他收获：
+${otherHarvest || '（无）'}
+
+风险：
+${risks || '（无）'}
+
+求助/需要协调的资源：
+${helpNeeded || '（无）'}
+
+下一步行动计划：
+${nextSteps || '（待制定）'}
+
+请生成一份完整的出差报告。`
+
+    const result = await chat(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent },
+      ],
+      { temperature: 0.5, maxTokens: 4096 }
+    )
+
+    res.json({ content: result })
+  } catch (err) {
+    console.error('出差报告生成 AI 错误:', err.message)
+    res.status(500).json({ message: '报告生成失败: ' + err.message })
+  }
+})
+
 module.exports = router

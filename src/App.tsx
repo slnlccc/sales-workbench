@@ -9,6 +9,7 @@ import ReportPage from "@/pages/ReportPage";
 import ProjectManagerPage from "@/pages/ProjectManagerPage";
 import PlaceholderPage from "@/pages/PlaceholderPage";
 import LoginPage from "@/pages/LoginPage";
+import TravelReport from "@/pages/TravelReport";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import FloatingMic from "@/components/FloatingMic";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -73,6 +74,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <ReportPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/travel-report"
+          element={
+            <ProtectedRoute>
+              <TravelReport />
             </ProtectedRoute>
           }
         />
