@@ -1,17 +1,63 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sparkles, FileText, Copy, Download, Loader2 } from 'lucide-react';
+import { ArrowLeft, Sparkles, FileText, Copy, Download, Loader2, AlertCircle } from 'lucide-react';
 import { aiApi } from '@/services/api';
 
 const PURPOSE_OPTIONS = [
   '获取商机', '洽谈订单', '维护关系', '技术交流', '收款', '处理问题', '其他'
 ];
 
+const buildLocalReport = (form: any) => {
+  const date = form.travelDate || new Date().toISOString().split('T')[0];
+  const lines: string[] = [];
+  
+  lines.push(`# 出差报告`);
+  lines.push(`**日报时间**：${date}`);
+  lines.push('');
+  lines.push(`## 一、基本信息`);
+  lines.push(`- **出差人**：${form.travelers || '/'}`);
+  lines.push(`- **出差时间**：${date}`);
+  lines.push(`- **出差地点**：${form.location || '/'}`);
+  lines.push('');
+  lines.push(`## 二、出差计划和目标`);
+  lines.push(`主要目的：${form.purpose || '/'}`);
+  lines.push('');
+  lines.push(`## 三、出差对象`);
+  lines.push(`- **客户信息**：${form.clients || '/'}`);
+  lines.push('');
+  lines.push(`## 四、出差日报总结`);
+  lines.push('');
+  lines.push(`### （一）计划事项达成情况`);
+  lines.push(form.planAchievement || '/');
+  lines.push('');
+  lines.push(`### （二）其他收获`);
+  lines.push(form.otherHarvest || '/');
+  lines.push('');
+  lines.push(`### （三）行业/市场信息`);
+  lines.push(form.industryInfo || form.marketInfo || '/');
+  lines.push('');
+  lines.push(`### （四）风险`);
+  lines.push(form.risks || '/');
+  lines.push('');
+  lines.push(`### （五）求助`);
+  lines.push(form.helpNeeded || '/');
+  lines.push('');
+  lines.push(`### （六）下一步行动计划`);
+  lines.push(form.nextSteps || '/');
+  lines.push('');
+  lines.push('---');
+  lines.push('*本报告由系统根据您填写的信息自动整理生成*');
+  
+  return lines.join('\n');
+};
+
 export default function TravelReport() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
   const [copied, setCopied] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isLocalFallback, setIsLocalFallback] = useState(false);
 
   const [form, setForm] = useState({
     travelers: '',
@@ -28,37 +74,48 @@ export default function TravelReport() {
     nextSteps: '',
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
-  };
+  }, []);
 
   const handleSubmit = async () => {
     if (!form.travelers.trim() || !form.location.trim()) {
-      alert('请填写出差人和出差地点');
+      setErrorMsg('请填写出差人和出差地点');
       return;
     }
+    setErrorMsg('');
     setLoading(true);
     setGeneratedContent('');
+    setIsLocalFallback(false);
+    
     try {
       const res = await aiApi.travelReport(form);
       setGeneratedContent(res.content || '生成失败，请重试');
+      if (res.fallback) {
+        setIsLocalFallback(true);
+        setErrorMsg(res.warning || 'AI 服务暂不可用，已使用本地模板生成报告。您可以在报告基础上修改完善。');
+      }
     } catch (err: any) {
-      alert(err.message || '报告生成失败');
+      console.warn('[TravelReport] AI 生成失败，使用本地模板:', err?.message);
+      const localReport = buildLocalReport(form);
+      setGeneratedContent(localReport);
+      setIsLocalFallback(true);
+      setErrorMsg('AI 服务暂时不可用，已使用本地模板生成报告。您可以在报告基础上修改完善。');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCopy = () => {
+  const handleCopy = useCallback(() => {
     if (generatedContent) {
       navigator.clipboard.writeText(generatedContent);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
-  };
+  }, [generatedContent]);
 
-  const handleDownload = () => {
+  const handleDownload = useCallback(() => {
     if (generatedContent) {
       const blob = new Blob([generatedContent], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
@@ -68,7 +125,11 @@ export default function TravelReport() {
       a.click();
       URL.revokeObjectURL(url);
     }
-  };
+  }, [generatedContent, form.travelDate]);
+
+  const handleBack = useCallback(() => {
+    navigate('/voice-workbench');
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-cream-50 to-cream-100">
@@ -76,7 +137,7 @@ export default function TravelReport() {
       <header className="bg-white border-b border-cream-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBack}
             className="p-2 hover:bg-cream-100 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-cream-600" />
@@ -109,6 +170,15 @@ export default function TravelReport() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {errorMsg && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800">
+              {errorMsg}
+            </div>
+          </div>
+        )}
+        
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Form Section */}
           <div className="lg:col-span-2 space-y-4">
@@ -268,7 +338,7 @@ export default function TravelReport() {
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  正在生成报告...
+                  AI 正在生成报告...
                 </>
               ) : (
                 <>
@@ -284,10 +354,17 @@ export default function TravelReport() {
             <div className="bg-white rounded-xl shadow-sm border border-cream-200 h-full min-h-[600px]">
               {generatedContent ? (
                 <div className="p-6">
-                  <h2 className="text-lg font-semibold text-coffee-900 mb-4 flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-cream-600" />
-                    报告预览
-                  </h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-coffee-900 flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-cream-600" />
+                      报告预览
+                      {isLocalFallback && (
+                        <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
+                          本地模板 · 可编辑
+                        </span>
+                      )}
+                    </h2>
+                  </div>
                   <div className="prose prose-sm max-w-none text-coffee-800 whitespace-pre-wrap leading-relaxed">
                     {generatedContent}
                   </div>
@@ -300,6 +377,8 @@ export default function TravelReport() {
                   <h3 className="text-lg font-medium text-coffee-700 mb-2">报告预览区</h3>
                   <p className="text-sm text-coffee-500 max-w-xs">
                     请在左侧填写出差信息，点击"一键生成出差报告"，AI 将在此处生成结构化的专业报告。
+                    <br /><br />
+                    <span className="text-coffee-400">即使 AI 服务暂不可用，也会使用本地模板生成报告，保证您随时能用。</span>
                   </p>
                 </div>
               )}

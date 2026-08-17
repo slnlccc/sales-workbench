@@ -582,19 +582,69 @@ ${nextSteps || '（待制定）'}
 
 请生成一份完整的出差报告。`
 
-    const result = await chat(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
-      ],
-      { temperature: 0.5, maxTokens: 4096 }
-    )
-
-    res.json({ content: result })
+    try {
+      const result = await chat(
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
+        { temperature: 0.5, maxTokens: 4096 }
+      )
+      res.json({ content: result })
+    } catch (aiErr) {
+      console.warn('出差报告 AI 失败，使用本地模板:', aiErr.message)
+      const fallback = buildFallbackReport(req.body)
+      res.json({ content: fallback, fallback: true, warning: 'AI 服务暂不可用，已使用本地模板生成' })
+    }
   } catch (err) {
-    console.error('出差报告生成 AI 错误:', err.message)
-    res.status(500).json({ message: '报告生成失败: ' + err.message })
+    console.error('出差报告生成错误:', err.message)
+    const fallback = buildFallbackReport(req.body)
+    res.json({ content: fallback, fallback: true })
   }
 })
+
+function buildFallbackReport(data) {
+  const d = data || {}
+  const date = d.travelDate || new Date().toISOString().split('T')[0]
+  const lines = [
+    '# 出差报告',
+    `**日报时间**：${date}`,
+    '',
+    '## 一、基本信息',
+    `- **出差人**：${d.travelers || '/'}`,
+    `- **出差时间**：${date}`,
+    `- **出差地点**：${d.location || '/'}`,
+    '',
+    '## 二、出差计划和目标',
+    `主要目的：${d.purpose || '/'}`,
+    '',
+    '## 三、出差对象',
+    `- **客户信息**：${d.clients || '/'}`,
+    '',
+    '## 四、出差日报总结',
+    '',
+    '### （一）计划事项达成情况',
+    d.planAchievement || '/',
+    '',
+    '### （二）其他收获',
+    d.otherHarvest || '/',
+    '',
+    '### （三）行业/市场信息',
+    d.industryInfo || d.marketInfo || '/',
+    '',
+    '### （四）风险',
+    d.risks || '/',
+    '',
+    '### （五）求助',
+    d.helpNeeded || '/',
+    '',
+    '### （六）下一步行动计划',
+    d.nextSteps || '/',
+    '',
+    '---',
+    '*本报告由系统模板自动生成*',
+  ]
+  return lines.join('\n')
+}
 
 module.exports = router
