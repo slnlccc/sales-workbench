@@ -232,3 +232,60 @@
   background: linear-gradient(135deg, #1D4ED8, #3B82F6);
   color: #fff;
 }
+
+/* 总输入框样式 */
+.raw-card { padding-top: 20rpx; }
+.raw-textarea {
+  width: 100%;
+  min-height: 520rpx;
+  padding: 20rpx;
+  border: 2rpx solid #E6DCCB;
+  border-radius: 16rpx;
+  background: #FFFDF9;
+  font-size: 28rpx;
+  line-height: 1.7;
+  color: #4a3a2a;
+  box-sizing: border-box;
+}
+.char-count {
+  margin-left: auto;
+  font-size: 22rpx;
+  color: #A89A88;
+}
+.text-green { color: #059669 !important; }
+.tip-row { margin-bottom: 16rpx; }
+.tip {
+  display: block;
+  font-size: 24rpx;
+  color: #6b5845;
+  background: #FBF7F0;
+  border-left: 6rpx solid #B8A48A;
+  padding: 12rpx 16rpx;
+  border-radius: 8rpx;
+  line-height: 1.6;
+}
+.action-row {
+  margin-top: 24rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-wrap: wrap;
+}
+.link-btn {
+  padding: 10rpx 20rpx;
+  font-size: 24rpx;
+  color: #6b5845;
+  background: #F5F1E8;
+  border-radius: 20rpx;
+}
+.link-btn.danger { color: #B91C1C; background: #FEF2F2; }
+.generate-btn {
+  margin-left: auto;
+  padding: 18rpx 28rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+  line-height: 1.2;
+  height: auto;
+}
+.generate-btn[disabled] { opacity: 0.6; }
