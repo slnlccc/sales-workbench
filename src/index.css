@@ -64,3 +64,107 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #B8A99A;
 }
+
+/* Markdown Preview Styles (used in 出差报告) */
+.markdown-preview {
+  color: #4a3a2a;
+  font-size: 14px;
+  line-height: 1.8;
+  word-break: break-word;
+}
+.markdown-preview h1 {
+  font-size: 1.6em;
+  font-weight: 700;
+  margin: 24px 0 14px;
+  color: #4a3a2a;
+  border-bottom: 3px solid #8c7153;
+  padding-bottom: 8px;
+  font-family: "Noto Serif SC", "Microsoft YaHei", serif;
+}
+.markdown-preview h2 {
+  font-size: 1.3em;
+  font-weight: 700;
+  margin: 22px 0 12px;
+  color: #5c4a3a;
+  border-bottom: 2px solid #e6dccb;
+  padding-bottom: 6px;
+  font-family: "Noto Serif SC", "Microsoft YaHei", serif;
+}
+.markdown-preview h3 {
+  font-size: 1.15em;
+  font-weight: 600;
+  margin: 18px 0 10px;
+  color: #5c4a3a;
+}
+.markdown-preview h4 {
+  font-size: 1.05em;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: #6b5845;
+}
+.markdown-preview h5,
+.markdown-preview h6 {
+  font-weight: 600;
+  margin: 14px 0 8px;
+  color: #5c4a3a;
+}
+.markdown-preview p {
+  margin: 6px 0;
+  line-height: 1.8;
+}
+.markdown-preview strong {
+  color: #6b4a30;
+  font-weight: 600;
+}
+.markdown-preview ul {
+  margin: 8px 0;
+  padding-left: 24px;
+  line-height: 1.8;
+  list-style: disc;
+}
+.markdown-preview ul li {
+  margin: 4px 0;
+}
+.markdown-preview ol {
+  margin: 8px 0;
+  padding-left: 24px;
+  line-height: 1.8;
+  list-style: decimal;
+}
+.markdown-preview ol li {
+  margin: 4px 0;
+}
+.markdown-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.markdown-preview table th {
+  border: 1px solid #e6dccb;
+  padding: 6px 10px;
+  background: #f5f1ea;
+  text-align: left;
+  font-weight: 600;
+  color: #5c4a3a;
+}
+.markdown-preview table td {
+  border: 1px solid #e6dccb;
+  padding: 6px 10px;
+}
+.markdown-preview hr {
+  border: none;
+  border-top: 1px dashed #c9bfa3;
+  margin: 18px 0;
+}
+.markdown-preview a {
+  color: #8B5E3C;
+  text-decoration: underline;
+}
+.markdown-preview code {
+  background: #f5f1ea;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: "Consolas", "Monaco", monospace;
+}

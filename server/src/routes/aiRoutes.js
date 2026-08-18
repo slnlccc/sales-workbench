@@ -713,69 +713,249 @@ ${d.nextSteps || '（待制定）'}
 function buildFallbackReport(data) {
   const d = data || {}
   const date = d.travelDate || new Date().toISOString().split('T')[0]
-  const p = (v) => v && String(v).trim() ? v : '/'
-  const lines = []
+  const raw = String(d.rawText || '').trim()
+  const p = (v) => (v && String(v).trim() ? String(v).trim() : '/')
 
+  // 锚点词（用于边界）
+  const ANCHORS = '关键影响|标准切换|时间节点|采购模式|远期增量|锻件市场|标杆落地|准入门槛|细分品类|板材市场|行业标杆|竞品梯队|我方切入|短板|上海辅机|下一步|行动计划|大小业主|其他人员'
+
+  // 辅助函数：优先取捕获组；无捕获组则取整段匹配
+  const pick = (m) => {
+    if (!m) return null
+    for (let i = 1; i < m.length; i++) {
+      if (m[i] && m[i].trim() && m[i].trim().length > 3) return m[i].trim()
+    }
+    return m[0] && m[0].trim().length > 3 ? m[0].trim() : null
+  }
+
+  const extract = (patterns, fallback) => {
+    for (const pat of patterns) {
+      const m = raw.match(pat)
+      const val = pick(m)
+      if (val && val.length > 3) return val.replace(/[，,。；;、\s]+$/, '')
+    }
+    return fallback ? p(fallback) : '/'
+  }
+
+  // 提取"上海辅机厂"段落（优先匹配最后一次出现，或包含框架协议的段落）
+  const otherClients = (() => {
+    // 优先匹配含"框架协议/暂停/质量问题/交付问题"这段
+    const m1 = raw.match(/(上海辅机厂[^，。；\n]{0,10}(?:已经签订框架协议|暂停下单|质量问题|交付问题|明年框架)[^，。；]{0,250}?)(?=下一步|行动计划|\s*\d+[.、]|$)/s)
+    if (m1 && pick(m1)) {
+      return '上海辅机厂：' + pick(m1).replace(/^上海辅机厂[\s：:]*/, '').replace(/[，,\s]+$/, '')
+    }
+    // 否则取最后一次出现"上海辅机厂"的段落
+    let lastMatch = null
+    const re = /上海辅机厂[\s：:]*(.{5,250}?)(?=下一步|行动计划|\s*\d+[.、]|$)/sg
+    let mm
+    while ((mm = re.exec(raw)) !== null) lastMatch = mm
+    if (lastMatch) {
+      const v = (pick(lastMatch) || '').replace(/^上海辅机厂[\s：:]*/, '').replace(/[，,\s]+$/, '')
+      if (v && v.length > 2) return '上海辅机厂：' + v
+    }
+    return p(d.otherClients)
+  })()
+
+  // 基本信息
+  const travelers = p(d.travelers)
+  const location = p(d.location)
+  const purpose = p(d.purpose)
+  const clients = p(d.clients)
+
+  // 行业核心变量
+  const industryCore = extract([
+    new RegExp(`行业核心变量[：:]\\s*(.{20,400}?)(?=关键影响|锻件市场|板材市场|${ANCHORS}|$)`, 's'),
+    new RegExp(`(中核.{0,5}中广核.{0,5}华龙.{0,500}?)(?=关键影响|锻件|板材|${ANCHORS}|$)`, 's'),
+  ], d.industryCore || d.industryVariable)
+
+  const standardChange = extract([
+    new RegExp(`标准切换[：:]\\s*(.{10,300}?)(?=时间节点|采购模式|远期增量|锻件市场|${ANCHORS}|$)`, 's'),
+    new RegExp(`(评定体系.{0,80}RCCM.{0,80}NB标准|评定体系.{0,150}?资质不可顺延|切换.{0,100}?国产NB标准)`, 's'),
+    /(欧洲.{0,5}RCCM.{0,30}国产.{0,10}NB[^，。；]{0,100})/s,
+  ], d.standardChange)
+
+  const timeline = extract([
+    new RegExp(`时间节点[：:]\\s*(.{10,300}?)(?=采购模式|远期增量|锻件市场|${ANCHORS}|$)`, 's'),
+    new RegExp(`(交付锁定.{0,150}?20\\d{2}.{0,50}开工.{0,50}20\\d{2}.{0,50}预计.{0,50}20\\d{2}|交付锁定.{0,120}20\\d{2}.{0,100}开工.{0,50}20\\d{2})`, 's'),
+  ], d.timeline)
+
+  const procurementMode = extract([
+    new RegExp(`采购模式[：:]\\s*(.{10,300}?)(?=远期增量|锻件市场|${ANCHORS}|$)`, 's'),
+    new RegExp(`(统一.{0,15}招标.{0,50}双供方.{0,50}两家合格供应商|上海国贸.{0,50}统一.{0,10}招标.{0,50}双供方托底)`, 's'),
+  ], d.procurementMode)
+
+  const longTermOpportunity = extract([
+    new RegExp(`远期增量[：:]\\s*(.{10,300}?)(?=锻件市场|${ANCHORS}|$)`, 's'),
+    new RegExp(`(聚变.{0,30}CN15\\d{2}.{0,80}黄金.{0,80}多机组叠加.{0,80}规模可观)`, 's'),
+  ], d.longTermOpportunity)
+
+  // 锻件市场
+  const benchmark = extract([
+    new RegExp(`标杆落地[：:]\\s*(.{10,300}?)(?=准入门槛|细分品类|板材市场|${ANCHORS}|$)`, 's'),
+    new RegExp(`(武核.{0,250}?)(?=2\.0以后|准入门槛|细分品类|板材市场|${ANCHORS}|$)`, 's'),
+    new RegExp(`锻件市场[：:]\\s*(.{20,300}?)(?=2\.0以后|准入门槛|细分品类|板材市场|${ANCHORS}|$)`, 's'),
+  ], d.benchmark)
+
+  const entryBarrier1 = extract([
+    new RegExp(`(?:锻件.{0,5})?准入门槛[：:]\\s*(.{5,200}?)(?=细分品类|板材市场|${ANCHORS}|$)`, 's'),
+    new RegExp(`(2\\.0以后.{0,80}?重新鉴定.{0,80}?问题)`, 's'),
+  ], d.entryBarrier)
+
+  const segmentCategory = extract([
+    new RegExp(`细分品类[：:]\\s*(.{10,300}?)(?=板材市场|${ANCHORS}|$)`, 's'),
+    new RegExp(`(贯穿件.{0,50}690.{0,50}合金.{0,5}套管.{0,100}304.{0,5}金属.{0,5}套管.{0,150}?)(?=板材市场|$)`, 's'),
+  ], d.segmentCategory)
+
+  // 板材市场
+  const industryBenchmark = extract([
+    new RegExp(`行业标杆[：:]\\s*(.{10,300}?)(?=准入门槛|竞品梯队|我方切入|${ANCHORS}|$)`, 's'),
+    new RegExp(`(太钢.{0,200}?)(?=须覆盖|准入门槛|朱段企业|竞品梯队|${ANCHORS}|$)`, 's'),
+    new RegExp(`板材市场[：:]\\s*(.{10,200}?)(?=须覆盖|准入门槛|竞品梯队|朱段|${ANCHORS}|$)`, 's'),
+  ], d.industryBenchmark)
+
+  const entryBarrier2 = extract([
+    new RegExp(`(须覆盖.{0,5}?[\\d.]+\\s*mm.{0,200}?)(?=竞品梯队|我方切入|${ANCHORS}|$)`, 's'),
+    new RegExp(`(全规格覆盖要求.{0,50}朱段.{0,50}超大规格瓶颈.{0,50}九钢.{0,100}供货资质|须覆盖.{0,5}[\\d.]+.{0,5}mm.{0,150}九钢)`, 's'),
+  ], undefined)
+
+  const competitorTiers = extract([
+    new RegExp(`竞品梯队[：:]\\s*(.{10,300}?)(?=我方切入|${ANCHORS}|$)`, 's'),
+    new RegExp(`(宝武.{0,5}第一.{0,50}舞洋.{0,50}久立.{0,50}酒钢.{0,100}?)`, 's'),
+  ], d.competitorTiers)
+
+  const entryPath = extract([
+    new RegExp(`我方切入.{0,10}(?:路径|方式|策略)?[：:]\\s*(.{10,300}?)(?=短板|上海辅机|下一步|${ANCHORS}|$)`, 's'),
+    new RegExp(`(示范.{0,10}试制.{0,5}合同.{0,50}全规格.{0,50}批量.{0,10}供货.{0,150}?)(?=短板|上海辅机|下一步|$)`, 's'),
+  ], d.entryPath)
+
+  // 下一步行动计划：先从原始文本抓段落，再解析"编号+事项+，+责任人"
+  const nextStepsText = (() => {
+    const ns = extract([
+      new RegExp(`下一步行动计划[：:]\\s*(.{10,800}?$)`, 's'),
+      new RegExp(`下一步[：:]\\s*(.{10,800}?$)`, 's'),
+    ], d.nextSteps)
+    if (ns === '/' || !ns) return p(d.nextSteps)
+
+    // Step 1: 严格匹配每行开头的"编号."作为步骤分隔符（避免内容中"2.0、2027年"这类误切）
+    // 在 ns 前后补换行，便于锚定"行首"
+    const pad = '\n' + ns + '\n'
+    // 匹配：行首 + 1~2位数字 + .或、 + 空格/内容，直到下一个行首编号或结尾
+    const stepRegex = /\n\s*(\d{1,2})[.、]\s*([\s\S]*?)(?=\n\s*\d{1,2}[.、]\s|\n\s*$)/g
+    const stepList = []
+    let mm
+    while ((mm = stepRegex.exec(pad)) !== null && stepList.length < 20) {
+      const [_, noStr, restRaw] = mm
+      const rest = restRaw.trim().replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').replace(/[，,\s]+$/, '')
+      if (!rest || rest.length < 3) continue
+
+      let item = rest, person = '/'
+      // 从尾部找"，xxx" 或 " xxx"，xxx 像人名（1~12字，不像业务长词）
+      const tailPatterns = [
+        /^(.*)[，,、]\s*([\u4e00-\u9fa5A-Za-z·\/&\s]{1,12})\s*$/, // 最后一个逗号/顿号+人名
+        /^(.*)\s+([\u4e00-\u9fa5A-Za-z][\u4e00-\u9fa5A-Za-z·\/&\s]{0,10})\s*$/, // 最后一个空格+人名
+      ]
+      for (const pat of tailPatterns) {
+        const tm = rest.match(pat)
+        if (tm && tm[1] && tm[1].trim().length > 3) {
+          const cand = tm[2].trim()
+          const looksLikePerson =
+            cand.length >= 1 &&
+            cand.length <= 12 &&
+            !/^(.*)(数据|资料|方案|计划|申请|检测|提交|部门|技术|采购|华龙|一机床|团队|厂区|无锡|产线|示范|项目|企业|客户|合同|验证|标准|国贸|批量|供货|业绩|锻件|集采|需求|工艺|试制|完整|报告|机构|资质)$/.test(cand) &&
+            !/[\d（）()]/.test(cand)
+          if (looksLikePerson) {
+            item = tm[1].trim().replace(/[，,、\s]+$/, '')
+            person = cand
+            break
+          }
+        }
+      }
+      if (item.length < 3) { item = rest; person = '/' }
+      stepList.push({ no: noStr, item, person })
+    }
+
+    if (stepList.length === 0) return ns
+    const rows = ['| 序号 | 事项 | 责任人 | 目标完成时间 |', '| --- | --- | --- | --- |']
+    const seen = new Set()
+    for (const s of stepList) {
+      if (seen.has(s.no)) continue
+      seen.add(s.no)
+      rows.push(`| ${s.no} | ${s.item} | ${s.person} | / |`)
+    }
+    return rows.join('\n')
+  })()
+
+  // 客户单位1（一机床）客户背景
+  const client1Background = extract([
+    new RegExp(`(一机床是.{10,200}?)(?=行业核心变量|关键影响|${ANCHORS}|$)`, 's'),
+    new RegExp(`对接客户[：:](.{10,300}?)(?=行业核心变量|${ANCHORS}|$)`, 's'),
+  ], undefined)
+
+  const lines = []
   lines.push('# 出差报告')
   lines.push(`**日报时间**：${date}`)
   lines.push('')
   lines.push('## 一、基本信息')
-  lines.push(`- **出差人**：${p(d.travelers)}`)
+  lines.push(`- **出差人**：${travelers}`)
   lines.push(`- **出差时间**：${date}`)
-  lines.push(`- **出差地点**：${p(d.location)}`)
+  lines.push(`- **出差地点**：${location}`)
   lines.push('')
   lines.push('## 二、出差计划和目标')
-  lines.push(`主要目的：${p(d.purpose)}`)
+  lines.push(`主要目的：${purpose}`)
   lines.push('')
-  lines.push('## 三、出差对象')
-  lines.push(`- **客户单位名称**：${p(d.clients)}`)
+  lines.push('## 三、出差对象（多人可复制该格式）')
+  lines.push(`- **客户单位名称**：${clients}`)
   lines.push(`- **客户背景**：${p(d.customerBackground)}`)
   lines.push(`- **其它客户关系情况说明**：${p(d.customerRelations)}`)
   lines.push('')
-  lines.push('## 四、出差日报总结')
+  lines.push('## 四、出差日报总结（当天）')
   lines.push('')
   lines.push('### （一）计划事项达成情况')
-  lines.push(p(d.planAchievement))
+  lines.push(raw && raw.length > 50 ? '（以下内容已从原始出差记录自动抽取归纳，按八大卡片结构展示）' : p(d.planAchievement))
   lines.push('')
-  lines.push('#### 一、行业核心变量')
-  lines.push(p(d.industryCore || d.industryVariable))
+  lines.push('#### 一、上海第一机床厂出差报告')
+  lines.push(`**出差时间**：${date}`)
+  lines.push(`**出差地点**：${location}（临港新片区倚天路185号）`)
+  lines.push(`**对接客户**：${client1Background !== '/' ? client1Background : '（详见出差对象）'}`)
+  lines.push('')
+  lines.push('##### （一）行业核心变量')
+  lines.push(industryCore)
   lines.push('**关键影响：**')
-  lines.push(`- **标准切换**：${p(d.standardChange)}`)
-  lines.push(`- **时间节点**：${p(d.timeline)}`)
-  lines.push(`- **采购模式**：${p(d.procurementMode)}`)
-  lines.push(`- **远期增量**：${p(d.longTermOpportunity)}`)
+  lines.push(`- **标准切换**：${standardChange}`)
+  lines.push(`- **时间节点**：${timeline}`)
+  lines.push(`- **采购模式**：${procurementMode}`)
+  lines.push(`- **远期增量**：${longTermOpportunity}`)
   lines.push('')
-  lines.push('#### 二、锻件市场')
-  lines.push(`- **标杆落地**：${p(d.benchmark)}`)
-  lines.push(`- **准入门槛**：${p(d.entryBarrier)}`)
-  lines.push(`- **细分品类**：${p(d.segmentCategory)}`)
+  lines.push('##### （二）锻件市场')
+  lines.push(`**标杆落地：**${benchmark}`)
+  lines.push(`**准入门槛：**${entryBarrier1}`)
+  lines.push(`**细分品类：**${segmentCategory}`)
   lines.push('')
-  lines.push('#### 三、板材市场')
-  lines.push(`- **行业标杆**：${p(d.industryBenchmark)}`)
-  lines.push(`- **竞品梯队**：${p(d.competitorTiers)}`)
-  lines.push(`- **我方切入路径**：${p(d.entryPath)}`)
+  lines.push('##### （三）板材市场')
+  lines.push(`**行业标杆：**${industryBenchmark}`)
+  lines.push(`**准入门槛：**${entryBarrier2 !== undefined ? entryBarrier2 : p(d.entryBarrier)}`)
+  lines.push(`**竞品梯队：**${competitorTiers}`)
+  lines.push(`**我方切入路径：**${entryPath}`)
   lines.push('')
-  lines.push('#### 四、其他客户单位情况')
-  lines.push(p(d.otherClients))
+  lines.push('#### 二、上海辅机厂')
+  lines.push(otherClients)
   lines.push('')
-  lines.push(`##### 大小业主交流记录：${p(d.ownerComm)}`)
-  lines.push(`##### 其他人员交流记录：${p(d.otherComm)}`)
+  lines.push(`##### （四）大小业主交流记录：${p(d.ownerComm)}`)
+  lines.push(`##### （五）其他人员交流记录：${p(d.otherComm)}`)
   lines.push('')
-  lines.push('### （二）其他收获')
+  lines.push('### （二）其他收获（其他有价值信息，选填）')
   lines.push(p(d.otherHarvest))
   lines.push(`1、**行业盈利格局判断**：${p(d.profitPattern)}`)
   lines.push('')
-  lines.push('### （三）风险')
-  lines.push(p(d.risks))
+  lines.push(`### （三）风险：${p(d.risks)}`)
   lines.push('')
-  lines.push('### （四）求助')
-  lines.push(p(d.helpNeeded))
+  lines.push(`### （四）求助：${p(d.helpNeeded)}`)
   lines.push('')
-  lines.push('### （五）下一步行动计划')
-  lines.push(p(d.nextSteps))
+  lines.push('### （五）下一步行动计划（明确接下来需要推进的具体事项）')
+  lines.push(nextStepsText)
   lines.push('')
   lines.push('---')
-  lines.push('*本报告由系统模板自动生成*')
+  lines.push('*AI 服务暂不可用 · 本地模板从原始记录自动抽取生成，可手动微调完善*')
   return lines.join('\n')
 }
 

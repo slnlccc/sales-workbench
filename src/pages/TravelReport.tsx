@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Sparkles, FileText, Copy, Download, FileDown,
@@ -454,15 +454,7 @@ ${html}
                   </div>
                 </div>
               ) : generatedContent ? (
-                <div className="prose prose-sm max-w-none
-                              prose-h1:text-coffee-900 prose-h1:border-b-3 prose-h1:border-cream-700
-                              prose-h2:text-coffee-800 prose-h2:border-b-2 prose-h2:border-cream-300
-                              prose-h3:text-coffee-800 prose-h4:text-coffee-700 prose-h5:text-coffee-700
-                              prose-strong:text-coffee-900
-                              prose-a:text-cream-700
-                              prose-ul:my-1 prose-li:my-0.5
-                              prose-p:my-1.5
-                              prose-table:border-collapse prose-th:bg-cream-100 prose-th:border prose-td:border">
+                <div className="markdown-preview">
                   <MarkdownPreview text={generatedContent} />
                 </div>
               ) : (
@@ -489,54 +481,203 @@ ${html}
   );
 }
 
-function MarkdownPreview({ text }: { text: string }) {
-  const html = useMemo(() => {
-    const escapeHtml = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c] || c);
-    const lines = text.replace(/\r\n/g, '\n').split('\n');
-    const out: string[] = [];
-    let inList = false, inTable = false;
-    const closeList = () => { if (inList) { out.push('</ul>'); inList = false; } };
-    for (let i = 0; i < lines.length; i++) {
-      let line = lines[i];
-      if (inTable) {
-        if (/^\s*\|.*\|\s*$/.test(line) && /---/.test(line)) continue;
-        if (/^\s*\|.*\|\s*$/.test(line)) {
-          const cells = line.split('|').slice(1, -1).map(c => c.trim());
-          out.push(`<tr>${cells.map(c => `<td style="border:1px solid #e6dccb;padding:6px 10px;">${escapeHtml(c)}</td>`).join('')}</tr>`);
-          continue;
-        } else {
-          out.push('</tbody></table>');
-          inTable = false;
-        }
-      }
-      if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /---/.test(lines[i + 1])) {
-        const header = line.split('|').slice(1, -1).map(c => c.trim());
-        out.push(`<table style="border-collapse:collapse;width:100%;margin:12px 0;"><thead><tr style="background:#f5f1ea;">${header.map(c => `<th style="border:1px solid #e6dccb;padding:6px 10px;text-align:left;">${escapeHtml(c)}</th>`).join('')}</tr></thead><tbody>`);
-        inTable = true;
-        continue;
-      }
-      let m;
-      if ((m = line.match(/^######\s+(.*)$/))) { closeList(); out.push(`<h6>${escapeHtml(m[1])}</h6>`); continue; }
-      if ((m = line.match(/^#####\s+(.*)$/)))  { closeList(); out.push(`<h5>${escapeHtml(m[1])}</h5>`); continue; }
-      if ((m = line.match(/^####\s+(.*)$/)))   { closeList(); out.push(`<h4>${escapeHtml(m[1])}</h4>`); continue; }
-      if ((m = line.match(/^###\s+(.*)$/)))    { closeList(); out.push(`<h3>${escapeHtml(m[1])}</h3>`); continue; }
-      if ((m = line.match(/^##\s+(.*)$/)))     { closeList(); out.push(`<h2>${escapeHtml(m[1])}</h2>`); continue; }
-      if ((m = line.match(/^#\s+(.*)$/)))      { closeList(); out.push(`<h1>${escapeHtml(m[1])}</h1>`); continue; }
-      if ((m = line.match(/^(\s*)[-*]\s+(.*)$/))) {
-        if (!inList) { out.push('<ul>'); inList = true; }
-        const item = m[2].replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-        out.push(`<li>${escapeHtml(item).replace(/&lt;strong&gt;([^&]+)&lt;\/strong&gt;/g, '<strong>$1</strong>')}</li>`);
-        continue;
-      }
-      if (/^---+$/.test(line.trim())) { closeList(); out.push('<hr/>'); continue; }
-      if (/^\s*$/.test(line)) { closeList(); out.push('<br/>'); continue; }
-      closeList();
-      const p = escapeHtml(line).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      out.push(`<p>${p}</p>`);
+// ============================================================
+// MarkdownPreview: 解析 Markdown → React 元素（零 dangerouslySetInnerHTML）
+// 语法子集：# 标题 | - 列表 | --- 分割线 | 表格 | **加粗** | 空行
+// ============================================================
+
+/** 解析单行内联格式：仅支持 **粗体**，纯文本安全，不允许 HTML */
+function InlineText({ text }: { text: string }) {
+  if (!text) return null;
+  // 按 **...** 切片
+  const parts: Array<{ strong: boolean; s: string }> = [];
+  let i = 0;
+  const src = String(text);
+  while (i < src.length) {
+    const start = src.indexOf('**', i);
+    if (start === -1) {
+      parts.push({ strong: false, s: src.slice(i) });
+      break;
     }
-    if (inList) out.push('</ul>');
-    if (inTable) out.push('</tbody></table>');
-    return out.join('\n');
-  }, [text]);
-  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+    if (start > i) parts.push({ strong: false, s: src.slice(i, start) });
+    const end = src.indexOf('**', start + 2);
+    if (end === -1) {
+      parts.push({ strong: false, s: src.slice(start) });
+      break;
+    }
+    parts.push({ strong: true, s: src.slice(start + 2, end) });
+    i = end + 2;
+  }
+  return (
+    <>
+      {parts.map((p, idx) =>
+        p.strong ? (
+          <strong key={idx}>{p.s}</strong>
+        ) : (
+          <Fragment key={idx}>{p.s}</Fragment>
+        )
+      )}
+    </>
+  );
+}
+
+type Block =
+  | { type: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; text: string; key: string }
+  | { type: 'list'; items: string[]; key: string }
+  | { type: 'table'; head: string[]; rows: string[][]; key: string }
+  | { type: 'hr'; key: string }
+  | { type: 'blank'; key: string }
+  | { type: 'paragraph'; text: string; key: string };
+
+function parseMarkdownBlocks(text: string): Block[] {
+  const raw = String(text || '').replace(/\r\n/g, '\n');
+  const lines = raw.split('\n');
+  const blocks: Block[] = [];
+  let k = 0;
+  let listBuf: string[] | null = null;
+  let inTable = false;
+  let tableHead: string[] = [];
+  let tableRows: string[][] = [];
+
+  const flushList = () => {
+    if (listBuf && listBuf.length) {
+      blocks.push({ type: 'list', items: [...listBuf], key: `list-${k++}` });
+    }
+    listBuf = null;
+  };
+  const flushTable = () => {
+    if (inTable) {
+      blocks.push({ type: 'table', head: tableHead, rows: tableRows, key: `tbl-${k++}` });
+    }
+    inTable = false;
+    tableHead = [];
+    tableRows = [];
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // 表格 continuation
+    if (inTable) {
+      // separator / header 的下一行已经跳过
+      if (/^\s*\|.*\|\s*$/.test(line) && !/^\s*\|?\s*:?-{3,}/.test(line.replace(/\s/g, ''))) {
+        const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+        tableRows.push(cells);
+        continue;
+      } else {
+        flushTable();
+      }
+    }
+
+    // 表格开始：当前行是 |..|，且下一行是分隔线
+    const tableStart =
+      /^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /---/.test(lines[i + 1]);
+    if (tableStart) {
+      flushList();
+      inTable = true;
+      tableHead = line.split('|').slice(1, -1).map((c) => c.trim());
+      tableRows = [];
+      i += 1; // skip separator line
+      continue;
+    }
+
+    let m: RegExpMatchArray | null;
+    // 标题
+    if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
+      flushList();
+      const level = m[1].length as 1 | 2 | 3 | 4 | 5 | 6;
+      blocks.push({ type: 'heading', level, text: m[2].trim(), key: `h-${level}-${k++}` });
+      continue;
+    }
+    // 列表
+    if ((m = line.match(/^\s*[-*]\s+(.*)$/))) {
+      if (listBuf === null) listBuf = [];
+      listBuf.push(m[1].trim());
+      continue;
+    } else {
+      flushList();
+    }
+    // 分割线
+    if (/^---+$/.test(line.trim())) {
+      blocks.push({ type: 'hr', key: `hr-${k++}` });
+      continue;
+    }
+    // 空行
+    if (/^\s*$/.test(line)) {
+      blocks.push({ type: 'blank', key: `b-${k++}` });
+      continue;
+    }
+    // 普通段落
+    blocks.push({ type: 'paragraph', text: line.trim(), key: `p-${k++}` });
+  }
+  flushList();
+  flushTable();
+  return blocks;
+}
+
+function MarkdownPreview({ text }: { text: string }) {
+  const blocks = useMemo(() => parseMarkdownBlocks(text), [text]);
+
+  return (
+    <div>
+      {blocks.map((b) => {
+        switch (b.type) {
+          case 'heading': {
+            const Tag = `h${b.level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+            return (
+              <Tag key={b.key}>
+                <InlineText text={b.text} />
+              </Tag>
+            );
+          }
+          case 'list':
+            return (
+              <ul key={b.key}>
+                {b.items.map((it, idx) => (
+                  <li key={idx}>
+                    <InlineText text={it} />
+                  </li>
+                ))}
+              </ul>
+            );
+          case 'table':
+            return (
+              <table key={b.key}>
+                <thead>
+                  <tr>
+                    {b.head.map((c, idx) => (
+                      <th key={idx}>
+                        <InlineText text={c} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {b.rows.map((r, i) => (
+                    <tr key={i}>
+                      {r.map((c, j) => (
+                        <td key={j}>
+                          <InlineText text={c} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            );
+          case 'hr':
+            return <hr key={b.key} />;
+          case 'blank':
+            return <p key={b.key} className="mp-blank">&nbsp;</p>;
+          case 'paragraph':
+          default:
+            return (
+              <p key={b.key}>
+                <InlineText text={(b as any).text || ''} />
+              </p>
+            );
+        }
+      })}
+    </div>
+  );
 }
