@@ -161,6 +161,10 @@ export const aiApi = {
   voiceCorrect: (text: string) =>
     request('/ai/voice-correct', { method: 'POST', body: JSON.stringify({ text }) }),
 
+  // 语音录音转文字（MediaRecorder 录音上传后端 ASR）
+  voiceAsr: (data: { audioBase64: string; format?: string; sampleRate?: number; channels?: number }) =>
+    request('/ai/voice-asr', { method: 'POST', body: JSON.stringify(data) }),
+
   // AI 对话（流式）
   chat: async (messages: Array<{ role: string; content: string }>, onChunk: (text: string) => void) => {
     const token = getToken()
