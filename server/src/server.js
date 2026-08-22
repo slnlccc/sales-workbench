@@ -163,6 +163,8 @@ app.get('/api/health', (req, res) => {
     cosRegion: cosCfg('TENCENT_COS_REGION'),
     cosBucket: cosCfg('TENCENT_COS_BUCKET') ? 'set' : 'unset',
     aiConfigured: baidu.isConfigured(),
+    asrConfigured: baidu.isAsrConfigured(),
+    baiduAsrKey: v('BAIDU_ASR_API_KEY'),
     staticDir: statDir,
     staticIndexExists: indexExists,
     assetsDir: assetsDir,

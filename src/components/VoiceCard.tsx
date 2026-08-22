@@ -248,36 +248,56 @@ export default function VoiceCard() {
       let sampleRate = 16000;
       let channels = 1;
 
+      const isWebM = /webm/i.test(mime || '');
+      const isMp4 = /mp4|m4a/i.test(mime || '');
+
       // 优先尝试用 AudioContext 重采样成 16kHz WAV（兼容性最好）
-      const conversionOk = await (async () => {
-        try {
-          if (typeof window === 'undefined' || !(window as any).AudioContext) return false;
-          const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext;
-          const ab = await blob.arrayBuffer();
-          const ac = new AC();
+      // 对 webm 尤其重要，因为百度 ASR 不支持 webm
+      if (isWebM || !isMp4) {
+        const conversionOk = await (async () => {
           try {
-            const audioBuf = await ac.decodeAudioData(ab.slice(0));
-            finalBlob = await blobToWav16k(audioBuf);
-            finalFormat = 'wav';
-            sampleRate = 16000;
-            channels = 1;
-            return true;
-          } finally {
-            try { ac.close?.(); } catch { /* noop */ }
+            if (typeof window === 'undefined' || !(window as any).AudioContext) return false;
+            const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext;
+            const ab = await blob.arrayBuffer();
+            const ac = new AC();
+            try {
+              const audioBuf = await ac.decodeAudioData(ab.slice(0));
+              finalBlob = await blobToWav16k(audioBuf);
+              finalFormat = 'wav';
+              sampleRate = 16000;
+              channels = 1;
+              return true;
+            } catch (decodeErr) {
+              console.warn('AudioContext decodeAudioData 失败:', decodeErr);
+              return false;
+            } finally {
+              try { ac.close?.(); } catch { /* noop */ }
+            }
+          } catch (err) {
+            console.warn('AudioContext 初始化失败:', err);
+            return false;
           }
-        } catch {
+        })();
+
+        if (!conversionOk && isWebM) {
+          // webm 转换失败，无法直接用于百度 ASR
+          console.warn('webm 音频转换失败，百度 ASR 不支持 webm 格式');
+          setCorrectInfo('⚠️ 手机浏览器录音格式不兼容，请尝试使用 iPhone Safari 或电脑 Chrome/Edge');
           return false;
         }
-      })();
 
-      if (!conversionOk) {
-        console.warn('音频重采样失败，使用原始格式上传:', finalFormat);
+        if (!conversionOk) {
+          console.warn('音频重采样失败，使用原始格式上传:', finalFormat);
+        }
+      } else {
+        // mp4/m4a 格式百度 ASR 支持，直接使用
+        finalFormat = 'm4a';
       }
 
       const base64 = await blobToBase64(finalBlob);
       if (sessionIdRef.current !== mySession) return false;
 
-      setCorrectInfo('语音上传识别中…（最长 60 秒）');
+      setCorrectInfo('语音识别中…');
       const result = await aiApi.voiceAsr({
         audioBase64: base64,
         format: finalFormat,
@@ -289,7 +309,7 @@ export default function VoiceCard() {
       if (text) {
         setLiveTranscript(text);
         setInputText(text);
-        setCorrectInfo('语音识别完成（后端ASR模式），可点击"AI分析提取"并调整分类');
+        setCorrectInfo('语音识别完成，可手动修改文本后点击"AI分析提取"');
         return true;
       }
       return false;
@@ -298,15 +318,15 @@ export default function VoiceCard() {
       const msg: string = err?.message || String(err) || '';
       console.warn('后端 ASR 失败:', msg);
       if (msg.includes('语音识别服务未配置') || msg.includes('BAIDU_ASR')) {
-        setCorrectInfo('⚠️ 语音识别服务未配置（需设置 BAIDU_ASR_API_KEY / SECRET），请联系管理员；当前可手动输入或使用示例文本');
+        setCorrectInfo('⚠️ 语音识别服务未配置，请联系管理员设置 ASR 密钥');
       } else if (/未授权|令牌|401|not auth/i.test(msg)) {
-        setCorrectInfo('登录已过期，请刷新页面重新登录后再试');
+        setCorrectInfo('⚠️ 登录已过期，请刷新页面重新登录');
       } else if (/音频过大|60秒|超时/i.test(msg)) {
-        setCorrectInfo('语音过长，请控制在 60 秒以内重试');
+        setCorrectInfo('⚠️ 语音过长，请控制在 60 秒以内重试');
       } else if (/不支持的音频格式|webm/i.test(msg)) {
-        setCorrectInfo('⚠️ 手机端录音格式不被识别，建议使用 iPhone Safari 或在电脑端使用 Chrome/Edge');
+        setCorrectInfo('⚠️ 当前手机浏览器录音格式不被语音识别服务支持。建议使用 iPhone Safari 或电脑 Chrome/Edge');
       } else {
-        setCorrectInfo('⚠️ 语音识别失败：' + (msg.length > 60 ? msg.slice(0, 60) + '…' : msg) + '。可重试或使用示例文本');
+        setCorrectInfo('⚠️ 语音识别失败：' + (msg.length > 60 ? msg.slice(0, 60) + '…' : msg));
       }
       return false;
     }
@@ -337,31 +357,31 @@ export default function VoiceCard() {
         setRecognizing(false);
         setIsRecording(false);
         stopMediaRecorderStream();
-        setTimeout(() => { if (sessionIdRef.current === mySession) useMockText(); }, 400);
       };
       mr.onstop = async () => {
         if (sessionIdRef.current !== mySession) return;
         stopMediaRecorderStream();
         const totalBlob = new Blob(mediaChunksRef.current, { type: actualMime || 'audio/webm' });
         if (!totalBlob || totalBlob.size < 1024) {
-          setCorrectInfo('录音过短（<1KB），未检测到有效语音，请重试或使用示例文本');
+          setCorrectInfo('⚠️ 录音时间太短，未检测到有效语音。请重试，说话时长需超过 1 秒');
           setRecognizing(false);
           setIsRecording(false);
-          setTimeout(() => { if (sessionIdRef.current === mySession) useMockText(); }, 400);
           return;
         }
-        setCorrectInfo('语音上传识别中…请稍候（最长 60 秒）');
+        setCorrectInfo('语音识别中…请稍候');
         const ok = await uploadToBackendAsr(totalBlob, actualMime, mySession);
         setRecognizing(false);
         setIsRecording(false);
-        if (!ok) setTimeout(() => { if (sessionIdRef.current === mySession) useMockText(); }, 400);
+        if (!ok) {
+          setCorrectInfo('⚠️ 语音识别失败，请重试或直接手动输入文字');
+        }
       };
       mediaRecorderRef.current = mr;
       mediaRecorderStartTimeRef.current = Date.now();
       mr.start(250);
       setRecognizing(true);
       setLiveTranscript('');
-      setCorrectInfo('正在录音，请说话…（最长 60 秒）');
+      setCorrectInfo('正在录音，请说话…（最长 60 秒，说完再次点击停止）');
       // 最大时长保护
       mediaRecorderTimerRef.current = window.setTimeout(() => {
         if (sessionIdRef.current !== mySession) return;
@@ -375,19 +395,18 @@ export default function VoiceCard() {
       const name: string = err?.name || '';
       const msg: string = err?.message || String(err) || '';
       if (name === 'NotAllowedError' || name === 'SecurityError' || /not-allowed|Permission|权限/.test(msg)) {
-        setCorrectInfo('⚠️ 麦克风权限被拒绝，请在浏览器右上角站点设置里允许麦克风访问');
+        setCorrectInfo('⚠️ 麦克风权限被拒绝，请在浏览器设置中允许麦克风访问后重试');
       } else if (name === 'NotFoundError' || name === 'OverconstrainedError' || /audio-capture|未检测到/.test(msg)) {
-        setCorrectInfo('未检测到可用麦克风设备，请检查系统设置');
+        setCorrectInfo('⚠️ 未检测到可用麦克风设备，请检查系统设置');
       } else if (!isSecureContext2()) {
-        setCorrectInfo('当前非 HTTPS 安全上下文，浏览器禁止访问麦克风，请用 HTTPS 打开或使用 localhost');
+        setCorrectInfo('⚠️ 当前非 HTTPS 安全上下文，浏览器禁止访问麦克风');
       } else {
-        setCorrectInfo('麦克风启动失败：' + (msg || err?.name || '未知错误'));
+        setCorrectInfo('⚠️ 麦克风启动失败：' + (msg.length > 50 ? msg.slice(0, 50) + '…' : msg));
       }
       setRecognizing(false);
       setIsRecording(false);
-      setTimeout(() => { if (sessionIdRef.current === mySession) useMockText(); }, 400);
     }
-  }, [setIsRecording, uploadToBackendAsr, useMockText]);
+  }, [setIsRecording, uploadToBackendAsr]);
 
   const handleStart = useCallback(() => {
     // 会话 ID，防止旧回调污染新会话
@@ -396,13 +415,10 @@ export default function VoiceCard() {
     isManualStopRef.current = false;
     finalTextRef.current = '';
 
-    // 安全上下文检查：非 HTTPS 且非 localhost 直接走 mock
+    // 安全上下文检查：非 HTTPS 且非 localhost 提示错误但不自动mock
     const secure = isSecureContext2();
     if (!secure) {
-      setCorrectInfo('当前非 HTTPS 且非 localhost，浏览器禁止麦克风访问；已使用示例文本。请切换到 HTTPS 以使用真实语音识别。');
-      setIsRecording(true);
-      setRecognizing(false);
-      setTimeout(() => { if (sessionIdRef.current === mySession) useMockText(); }, 1200);
+      setCorrectInfo('⚠️ 当前非 HTTPS，浏览器禁止麦克风访问。请使用 HTTPS 地址打开页面');
       return;
     }
 
@@ -412,17 +428,14 @@ export default function VoiceCard() {
     const useRecorder = mediaRecorderSupported;
 
     if (!useWebSpeech && !useRecorder) {
-      setCorrectInfo('当前浏览器不支持语音识别（建议使用 iPhone Safari / Android Chrome / 桌面 Chrome / Edge）');
-      setIsRecording(true);
-      setRecognizing(false);
-      setTimeout(() => { if (sessionIdRef.current === mySession) useMockText(); }, 1200);
+      setCorrectInfo('⚠️ 当前浏览器不支持语音录音功能。建议使用 iPhone Safari / Android Chrome / 桌面 Chrome/Edge');
       return;
     }
 
     // 手机端 或 不支持 Web Speech：MediaRecorder + 后端百度ASR
     if (!useWebSpeech || isMobile) {
       setLiveTranscript('');
-      setCorrectInfo(isMobile ? '手机端使用录音上传识别，请开始说话…' : '');
+      setCorrectInfo('点击按钮开始说话，再次点击停止识别…');
       setIsRecording(true);
       startMediaRecorder(mySession);
       return;
@@ -505,7 +518,7 @@ export default function VoiceCard() {
         setInputText(finalText);
         setCorrectInfo('语音识别完成，可手动修改文本后点击"AI分析提取"并手动调整分类');
       } else {
-        useMockText();
+        setCorrectInfo('⚠️ 未检测到语音内容，请重试');
       }
     };
 
@@ -527,24 +540,22 @@ export default function VoiceCard() {
           setCorrectInfo('在线语音服务响应超时，已切换为录音上传识别…');
           startMediaRecorder(mySession);
         } else {
-          setCorrectInfo('语音服务响应超时，请重试或使用示例文本');
+          setCorrectInfo('⚠️ 语音服务响应超时，请重试或手动输入');
           setRecognizing(false);
           setIsRecording(false);
-          setTimeout(() => { if (sessionIdRef.current === mySession) useMockText(); }, 500);
         }
       }, 5000);
     } catch (err) {
       console.error('语音识别启动失败:', err);
       // 启动失败降级：若 MediaRecorder 支持则走后端ASR
       if (mediaRecorderSupported) {
-        setCorrectInfo('Web Speech 启动失败，已切换为录音上传识别…');
+        setCorrectInfo('在线语音启动失败，已切换为录音上传识别…');
         startMediaRecorder(mySession);
         return;
       }
       setRecognizing(false);
       setIsRecording(false);
-      setCorrectInfo('语音识别启动失败，已使用示例文本');
-      useMockText();
+      setCorrectInfo('⚠️ 语音识别启动失败，请重试或手动输入');
     }
   }, [speechSupported, mediaRecorderSupported, isMobile, callAICorrect, setIsRecording, startMediaRecorder, useMockText]);
 
@@ -558,9 +569,9 @@ export default function VoiceCard() {
     if (recognitionRef.current && recognizing) {
       try { recognitionRef.current.stop(); } catch { /* noop */ }
     } else {
-      useMockText();
+      setCorrectInfo('⚠️ 当前没有正在进行的录音，请点击按钮开始说话');
     }
-  }, [recognizing, useMockText]);
+  }, [recognizing]);
 
   const handleClick = () => {
     if (correcting) return;
