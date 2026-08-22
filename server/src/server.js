@@ -41,18 +41,21 @@ const resolveStaticDir = () => {
     path.join(__dirname, '../../../dist'),
     path.join(process.cwd(), 'dist'),
     path.join(process.cwd(), 'server', 'dist'),
+    path.join(process.cwd(), '../dist'),
   ]
   for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, 'index.html'))) {
-      console.log(`[static] 找到前端构建产物: ${dir}`)
-      return dir
-    }
+    try {
+      if (fs.existsSync(path.join(dir, 'index.html'))) {
+        console.log(`[static] 找到前端构建产物: ${dir}`)
+        return dir
+      }
+    } catch { /* skip */ }
   }
-  console.error('[static] 未找到前端构建产物！')
+  console.error('[static] 未找到前端构建产物！尝试启动时再次检查')
   return candidates[0]
 }
 
-const STATIC_DIR = resolveStaticDir()
+let STATIC_DIR = resolveStaticDir()
 
 const staticMimeTypes = {
   '.js': 'application/javascript; charset=utf-8',
@@ -73,6 +76,36 @@ const staticMimeTypes = {
   '.map': 'application/json; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
 }
+
+const KNOWN_STATIC_PREFIXES = ['/assets/', '/favicon', '/manifest']
+
+const staticFileServer = (req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next()
+
+  const urlPath = decodeURIComponent(req.path)
+
+  const isStatic = KNOWN_STATIC_PREFIXES.some(p => urlPath.startsWith(p))
+  if (!isStatic) return next()
+
+  const dir = resolveStaticDir()
+  const safePath = path.join(dir, urlPath)
+
+  if (!safePath.startsWith(dir)) return next()
+
+  fs.stat(safePath, (err, stats) => {
+    if (err || !stats.isFile()) {
+      return next()
+    }
+    const ext = path.extname(safePath).toLowerCase()
+    const mime = staticMimeTypes[ext] || 'application/octet-stream'
+    res.setHeader('Content-Type', mime)
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    res.setHeader('Accept-Ranges', 'bytes')
+    fs.createReadStream(safePath).on('error', next).pipe(res)
+  })
+}
+
+app.use(staticFileServer)
 
 app.use(express.static(STATIC_DIR, {
   setHeaders: (res, filePath) => {
@@ -115,6 +148,8 @@ app.get('/api/health', (req, res) => {
     }
     return val
   }
+  const statDir = resolveStaticDir()
+  const indexExists = fs.existsSync(path.join(statDir, 'index.html'))
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -122,6 +157,8 @@ app.get('/api/health', (req, res) => {
     cosRegion: cosCfg('TENCENT_COS_REGION'),
     cosBucket: cosCfg('TENCENT_COS_BUCKET') ? 'set' : 'unset',
     aiConfigured: baidu.isConfigured(),
+    staticDir: statDir,
+    staticIndexExists: indexExists,
   })
 })
 
@@ -137,7 +174,15 @@ app.use('/api/data', require('./routes/dataRoutes'))
 app.get('*', (req, res, next) => {
   const accept = req.headers.accept || ''
   if (accept.includes('text/html') || accept === '*/*') {
-    res.sendFile(path.join(STATIC_DIR, 'index.html'))
+    const dir = resolveStaticDir()
+    const indexPath = path.join(dir, 'index.html')
+    if (fs.existsSync(indexPath)) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.sendFile(indexPath)
+    } else {
+      res.status(503).send(`<html><body><h2>前端构建产物未找到</h2><p>期望路径: ${dir}</p><p>请在 Railway 上重新部署并确保 npm run build 成功</p></body></html>`)
+    }
   } else {
     res.status(404).json({ message: 'Not found' })
   }

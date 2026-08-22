@@ -1,5 +1,4 @@
 # Railway 构建配置 - 销售工作台
-# 构建阶段：安装根目录前端依赖（含dev） + server目录后端依赖 + 构建前端
 [phases.install]
 cmds = [
   "npm install --include=dev",
@@ -9,9 +8,10 @@ cmds = [
 [phases.build]
 cmds = [
   "npm run build",
-  "cp -r dist server/dist"
+  "mkdir -p server/dist",
+  "cp -r dist/* server/dist/"
 ]
 
-# 启动阶段：从 server 目录启动后端，后端 serve dist 静态文件
+# 启动阶段：确保dist可用后启动后端
 [start]
-cmd = "cd server && npm start"
+cmd = "cd server && if [ ! -d dist ] || [ ! -f dist/index.html ]; then cd .. && npm run build && cp -r dist server/dist/ && cd server; fi && npm start"
