@@ -776,6 +776,113 @@ ${d.nextSteps || '（待制定）'}
   }
 })
 
+// 本地正则解析出差记录（AI 不可用时的降级方案）
+function parseTripTextLocal(text, fallback) {
+  if (!text || text.trim().length < 5) return null
+  const t = text.trim()
+
+  // 提取日期
+  const dateMatch = t.match(/(\d{1,2})月(\d{1,2})日/) || t.match(/(\d{4})-(\d{1,2})-(\d{1,2})/)
+  let reportDate = ''
+  let travelDate = fallback.travelDate || ''
+  if (dateMatch) {
+    if (dateMatch[0].includes('月')) {
+      const now = new Date()
+      reportDate = `${now.getFullYear()}-${String(dateMatch[1]).padStart(2, '0')}-${String(dateMatch[2]).padStart(2, '0')}`
+      travelDate = travelDate || dateMatch[0]
+    } else {
+      reportDate = dateMatch[0]
+      travelDate = travelDate || dateMatch[0]
+    }
+  }
+
+  // 提取地点（去...出差/到...出差/去...拜访）
+  const destMatch = t.match(/(?:去|到|前往)([\u4e00-\u9fa5]{2,6})(?:出差|拜访|访问)/)
+  const destination = destMatch ? destMatch[1] : (fallback.location || '')
+
+  // 提取客户（拜访...见...）
+  const customerMatches = []
+  const visitPattern = /(?:拜访|会见|见到|见|走访)([\u4e00-\u9fa5]{2,20}?)(?:的|，|,|。|\.|;|；|张总|李总|王总|刘总|陈总|赵总|总经理|主任|经理|总监|工|博士|先生|女士)/g
+  let m
+  while ((m = visitPattern.exec(t)) !== null) {
+    customerMatches.push(m[1].trim())
+  }
+  // 如果没匹配到，尝试"XX的XX总"模式
+  if (customerMatches.length === 0) {
+    const custPattern = /([\u4e00-\u9fa5]{2,15})(?:张总|李总|王总|刘总|陈总|赵总|总经理|主任|经理|总监)/g
+    while ((m = custPattern.exec(t)) !== null) {
+      customerMatches.push(m[1].trim())
+    }
+  }
+
+  // 提取联系人（XX总/XX工/XX经理）
+  const contactPattern = /([\u4e00-\u9fa5]{1,3}(?:总|工|经理|主任|总监|博士|先生|女士))/g
+  const contacts = []
+  while ((m = contactPattern.exec(t)) !== null) {
+    contacts.push(m[1])
+  }
+
+  // 构建客户数组
+  const customers = []
+  if (customerMatches.length > 0) {
+    customerMatches.forEach((cn, i) => {
+      customers.push({
+        customerName: cn,
+        contactName: contacts[i] || '',
+        contactTitle: '',
+        contactInfo: '',
+        relationLevel: '',
+        influence: '',
+        customerBackground: '',
+        otherRelation: '',
+      })
+    })
+  }
+
+  // 提取目的
+  const purposes = []
+  if (/商机|机会|新项目|潜在/.test(t)) purposes.push('获取商机')
+  if (/洽谈|谈判|合同|签单|报价|订单/.test(t)) purposes.push('洽谈订单')
+  if (/维护|关系|回访|拜访/.test(t)) purposes.push('维护关系')
+  if (/技术|方案|工艺|交流|讨论/.test(t)) purposes.push('技术交流')
+  if (/收款|回款|付款|账期/.test(t)) purposes.push('收款')
+  if (/问题|故障|售后|质量|处理/.test(t)) purposes.push('处理问题')
+
+  // 提取电话
+  const phoneMatch = t.match(/1[3-9]\d{9}/)
+  if (phoneMatch && customers.length > 0) {
+    customers[0].contactInfo = phoneMatch[0]
+  }
+
+  // 提取风险
+  const riskMatch = t.match(/(?:风险|问题|隐患|困难|挑战)([：:])?\s*([^\n。；]{5,100})/)
+  const risks = riskMatch ? riskMatch[2].trim() : ''
+
+  // 提取下一步
+  const nextMatch = t.match(/(?:下一步|接下来|下周|后续|计划)([：:])?\s*([^\n。；]{5,200})/)
+  const nextAction = nextMatch ? nextMatch[2].trim() : ''
+
+  // 整体内容作为 planAchievement
+  const planAchievement = t
+
+  return {
+    reportDate,
+    traveler: fallback.travelers || '',
+    travelDate,
+    destination,
+    purposes,
+    purposeOtherText: '',
+    customers: customers.length > 0 ? customers : [{ customerName: '', contactName: '', contactTitle: '', contactInfo: '', relationLevel: '', influence: '', customerBackground: '', otherRelation: '' }],
+    planAchievement,
+    ownerCommunication: '',
+    otherCommunication: '',
+    otherGains: '',
+    risks,
+    helpNeeded: '',
+    nextAction,
+  }
+}
+
 // 出差报告 — AI 解析原始文本，返回结构化字段 JSON
 router.post('/trip-parse', protect, async (req, res) => {
   try {
@@ -872,7 +979,13 @@ ${rawText}`
       }
     } catch (aiErr) {
       console.error('出差报告解析 AI 失败:', aiErr.message)
-      res.status(500).json({ error: 'AI 服务暂不可用，请手动填写或稍后重试' })
+      // AI 不可用时，使用本地正则解析降级
+      const fallback = parseTripTextLocal(rawText, { travelers, travelDate, location })
+      if (fallback) {
+        res.json({ success: true, data: fallback, fallback: true, warning: 'AI 服务暂不可用，已使用基础解析，请手动检查补充' })
+      } else {
+        res.status(500).json({ error: 'AI 服务暂不可用且本地解析失败，请手动填写' })
+      }
     }
   } catch (err) {
     console.error('出差报告解析错误:', err.message)

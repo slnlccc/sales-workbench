@@ -120,7 +120,7 @@ const getApiKey = () => {
 const chat = async (messages, options = {}) => {
   const apiKey = getApiKey()
   const endpoint = options.model || BAIDU_MODEL
-  const maxTokens = Math.min(options.maxTokens ?? 2048, 2048)
+  const maxTokens = Math.min(options.maxTokens ?? 2048, 8192)
 
   const body = {
     messages: messages.map(m => ({

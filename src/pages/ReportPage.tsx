@@ -304,6 +304,9 @@ ${tripForm.nextAction || '无'}`;
           helpNeeded: d.helpNeeded || '',
           nextAction: d.nextAction || '',
         });
+        if (resp.fallback && resp.warning) {
+          setParseError(resp.warning);
+        }
       } else {
         setParseError(resp.error || 'AI 解析失败，请重试或手动填写');
       }
