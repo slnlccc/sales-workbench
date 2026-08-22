@@ -3,24 +3,31 @@
  * 使用文心大模型（ERNIE），支持普通调用、流式调用和结构化输出
  *
  * 当前模型：ernie-4.0-turbo（免费可用，endpoint=ernie-4.0-turbo-8k）
+ * 降级方案：智谱AI GLM-4-Flash（永久免费，OpenAI兼容格式）
  *
  * 环境变量（可选，覆盖内置默认值）：
  *   BAIDU_API_KEY - 百度千帆 API Key（格式：bce-v3/ALTAK-xxx/xxx）
  *   BAIDU_MODEL   - 模型端点路径（默认 ernie-4.0-turbo-8k）
+ *   ZHIPU_API_KEY - 智谱AI API Key（永久免费，https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys）
  */
 
 const QIANFAN_BASE_URL = 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat'
+const ZHIPU_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
 
 // 加载密钥配置（优先环境变量，回退到配置文件）
-const { BAIDU_API_KEY: _defaultKey, BAIDU_MODEL: _defaultModel } = require('../config/aiKeys')
+const { BAIDU_API_KEY: _defaultKey, BAIDU_MODEL: _defaultModel, ZHIPU_API_KEY: _defaultZhipuKey } = require('../config/aiKeys')
 
 const BAIDU_MODEL = process.env.BAIDU_MODEL || _defaultModel || 'ernie-4.0-turbo-8k'
 
+// 智谱 API Key（环境变量优先，回退配置文件）
+const getZhipuKey = () => process.env.ZHIPU_API_KEY || _defaultZhipuKey || ''
+const isZhipuConfigured = () => !!getZhipuKey()
+
 /**
- * 检查 API Key 是否配置（千帆大模型）
+ * 检查 API Key 是否配置（千帆大模型 或 智谱AI）
  */
 const isConfigured = () => {
-  return !!(process.env.BAIDU_API_KEY || _defaultKey)
+  return !!(process.env.BAIDU_API_KEY || _defaultKey) || isZhipuConfigured()
 }
 
 const { BAIDU_ASR_API_KEY, BAIDU_ASR_SECRET_KEY } = require('../config/aiKeys')
@@ -156,6 +163,91 @@ const chat = async (messages, options = {}) => {
 }
 
 /**
+ * 智谱AI GLM 调用（永久免费降级方案）
+ * OpenAI 兼容格式，使用 GLM-4-Flash 模型
+ */
+const chatZhipu = async (messages, options = {}) => {
+  const apiKey = getZhipuKey()
+  if (!apiKey) throw new Error('ZHIPU_API_KEY 未配置')
+
+  const maxTokens = Math.min(options.maxTokens ?? 2048, 8192)
+
+  const body = {
+    model: options.model || 'glm-4-flash',
+    messages: messages.map(m => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+    })),
+    temperature: options.temperature ?? 0.7,
+    max_tokens: maxTokens,
+    stream: false,
+  }
+
+  const response = await fetch(ZHIPU_BASE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    const errText = await response.text()
+    throw new Error(`智谱 API 错误 (${response.status}): ${errText}`)
+  }
+
+  const data = await response.json()
+
+  if (data.error) {
+    throw new Error(`智谱 API 错误: ${data.error.message || JSON.stringify(data.error)}`)
+  }
+
+  return data.choices?.[0]?.message?.content || ''
+}
+
+/**
+ * 统一 chat 调用（带自动降级）
+ * 优先百度千帆，失败时自动降级到智谱AI GLM-4-Flash（永久免费）
+ */
+const chatWithFallback = async (messages, options = {}) => {
+  const baiduKey = process.env.BAIDU_API_KEY || _defaultKey
+
+  // 1. 先尝试百度千帆
+  if (baiduKey) {
+    try {
+      return await chatBaidu(messages, options)
+    } catch (err) {
+      const msg = err.message || ''
+      console.warn('百度千帆调用失败，尝试降级到智谱AI:', msg.substring(0, 100))
+      // 配额耗尽/限流/网络错误 → 降级
+      if (isZhipuConfigured()) {
+        try {
+          return await chatZhipu(messages, options)
+        } catch (zhipuErr) {
+          console.error('智谱AI也失败:', zhipuErr.message)
+          throw zhipuErr
+        }
+      }
+      throw err
+    }
+  }
+
+  // 2. 百度未配置，直接用智谱
+  if (isZhipuConfigured()) {
+    return await chatZhipu(messages, options)
+  }
+
+  throw new Error('BAIDU_API_KEY 和 ZHIPU_API_KEY 均未配置，AI 功能不可用')
+}
+
+// 重命名原 chat 为 chatBaidu（内部使用）
+const chatBaidu = chat
+
+// 对外导出的 chat 使用带降级的版本
+const chat = chatWithFallback
+
+/**
  * 流式调用（SSE）
  * @param {Array<{role: string, content: string}>} messages - 消息数组
  * @param {Object} options - 调用选项
@@ -268,7 +360,10 @@ const chatJSON = async (messages, options = {}) => {
 module.exports = {
   isConfigured,
   isAsrConfigured,
+  isZhipuConfigured,
   chat,
+  chatBaidu,
+  chatZhipu,
   chatStream,
   chatJSON,
   speechToText,
