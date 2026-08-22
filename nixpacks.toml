@@ -1,9 +1,9 @@
 # Railway 构建配置 - 销售工作台
-# 构建阶段：安装根目录前端依赖 + server目录后端依赖 + 构建前端
+# 构建阶段：安装根目录前端依赖（含dev） + server目录后端依赖 + 构建前端
 [phases.install]
 cmds = [
-  "npm install",
-  "cd server && npm install"
+  "npm install --include=dev",
+  "cd server && MONGOMS_DISABLE_POSTINSTALL=1 npm install"
 ]
 
 [phases.build]
