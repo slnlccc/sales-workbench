@@ -15,43 +15,61 @@ const reportTypes: { key: 'weekly' | 'trip'; label: string; desc: string; icon: 
   { key: 'trip', label: '出差报告', desc: '上传模板识别 · 语音填写 · 一键生成', icon: Plane, color: 'from-emerald-500 to-teal-500' },
 ];
 
-interface ItineraryItem {
-  date: string;
-  customer: string;
-  content: string;
-}
-
-interface VisitNote {
-  customer: string;
-  visitor: string;
-  points: string;
-  feedback: string;
+interface CustomerInfo {
+  customerName: string;
+  contactName: string;
+  contactTitle: string;
+  contactInfo: string;
+  relationLevel: string;
+  influence: string;
+  customerBackground: string;
+  otherRelation: string;
 }
 
 interface TripForm {
+  reportDate: string;
   traveler: string;
-  startDate: string;
-  endDate: string;
+  travelDate: string;
   destination: string;
-  customers: string;
-  purpose: string;
-  itinerary: ItineraryItem[];
-  visitNotes: VisitNote[];
-  achievements: string;
-  todos: string;
+  purposeGetOpportunity: boolean;
+  purposeNegotiateOrder: boolean;
+  purposeMaintainRelation: boolean;
+  purposeTechExchange: boolean;
+  purposePayment: boolean;
+  purposeHandleIssue: boolean;
+  purposeOther: boolean;
+  purposeOtherText: string;
+  customers: CustomerInfo[];
+  planAchievement: string;
+  ownerCommunication: string;
+  otherCommunication: string;
+  otherGains: string;
+  risks: string;
+  helpNeeded: string;
+  nextAction: string;
 }
 
 const initialTripForm: TripForm = {
+  reportDate: '',
   traveler: '',
-  startDate: '',
-  endDate: '',
+  travelDate: '',
   destination: '',
-  customers: '',
-  purpose: '',
-  itinerary: [{ date: '', customer: '', content: '' }],
-  visitNotes: [{ customer: '', visitor: '', points: '', feedback: '' }],
-  achievements: '',
-  todos: '',
+  purposeGetOpportunity: false,
+  purposeNegotiateOrder: false,
+  purposeMaintainRelation: false,
+  purposeTechExchange: false,
+  purposePayment: false,
+  purposeHandleIssue: false,
+  purposeOther: false,
+  purposeOtherText: '',
+  customers: [{ customerName: '', contactName: '', contactTitle: '', contactInfo: '', relationLevel: '', influence: '', customerBackground: '', otherRelation: '' }],
+  planAchievement: '',
+  ownerCommunication: '',
+  otherCommunication: '',
+  otherGains: '',
+  risks: '',
+  helpNeeded: '',
+  nextAction: '',
 };
 
 const voiceSamples = {
@@ -161,40 +179,69 @@ ${weeklyData.support}`;
   const generateTrip = () => {
     setGenerating(true);
     setTimeout(() => {
-      const itineraryText = tripForm.itinerary
-        .filter((it) => it.date || it.customer || it.content)
-        .map((it, i) => `  第${i + 1}天 ${it.date || '—'} | ${it.customer || '—'}\n    沟通内容：${it.content || '—'}`)
-        .join('\n');
-      const notesText = tripForm.visitNotes
-        .filter((n) => n.customer || n.visitor || n.points || n.feedback)
-        .map((n, i) => `  ${i + 1}. 客户：${n.customer || '—'}
-    拜访人：${n.visitor || '—'}
-    沟通要点：${n.points || '—'}
-    客户反馈：${n.feedback || '—'}`)
-        .join('\n');
-      const content = `【出差报告】
-出差人：${tripForm.traveler || '之欧'}
-生成日期：${today}
+      const reportDate = tripForm.reportDate || today;
 
-一、出差行程
-  目的地：${tripForm.destination || '—'}
-  时间：${tripForm.startDate || '—'} 至 ${tripForm.endDate || '—'}
-  拜访客户：${tripForm.customers || '—'}
-  出差目的：${tripForm.purpose || '—'}
+      // 主要目的复选框
+      const purposes: string[] = [];
+      if (tripForm.purposeGetOpportunity) purposes.push('☑获取商机'); else purposes.push('☐获取商机');
+      if (tripForm.purposeNegotiateOrder) purposes.push('☑洽谈订单'); else purposes.push('☐洽谈订单');
+      if (tripForm.purposeMaintainRelation) purposes.push('☑维护关系'); else purposes.push('☐维护关系');
+      if (tripForm.purposeTechExchange) purposes.push('☑技术交流'); else purposes.push('☐技术交流');
+      if (tripForm.purposePayment) purposes.push('☑收款'); else purposes.push('☐收款');
+      if (tripForm.purposeHandleIssue) purposes.push('☑处理问题'); else purposes.push('☐处理问题');
+      if (tripForm.purposeOther) purposes.push('☑其它'); else purposes.push('☐其它');
+      if (tripForm.purposeOther && tripForm.purposeOtherText) purposes.push(tripForm.purposeOtherText);
 
-二、行程安排
-${itineraryText || '  （暂无行程记录）'}
+      // 多客户循环生成
+      const customerSections = tripForm.customers
+        .filter((c) => c.customerName || c.contactName)
+        .map((c, i) => {
+          return `客户单位名称：${c.customerName || '无'}
+拜访客户姓名：${c.contactName || '无'}
+客户职位：${c.contactTitle || '无'}
+联系方式：${c.contactInfo || '无'}
+关系层级：${c.relationLevel || '无'}
+客户影响力：${c.influence || '无'}
+客户背景：${c.customerBackground || '无'}
+其它客户关系情况说明：${c.otherRelation || '无'}`;
+        })
+        .join('\n\n');
 
-三、客户拜访纪要
-${notesText || '  （暂无拜访纪要）'}
+      const content = `出差报告
+日报时间：${reportDate}
 
-四、成果与待办
-  主要成果：
-    ${tripForm.achievements || '—'}
+一、基本信息
+出差人：${tripForm.traveler || '无'}
+出差时间：${tripForm.travelDate || '无'}
+出差地点：${tripForm.destination || '无'}
 
-  后续待办事项：
-    ${tripForm.todos || '—'}`;
-      setGeneratedReport({ type: '出差报告', content, date: today });
+二、出差计划和目标
+主要目的（可勾选）：${purposes.join(' ')}
+
+三、出差对象（多客户循环生成，一个客户一组）
+${customerSections || '客户单位名称：无\n拜访客户姓名：无\n客户职位：无\n联系方式：无\n关系层级：无\n客户影响力：无\n客户背景：无\n其它客户关系情况说明：无'}
+
+四、出差日报总结（当天）
+（一）计划事项达成情况
+${tripForm.planAchievement || '无'}
+
+大小业主交流记录（如项目启动、资金到位情况、项目设计进展等）：${tripForm.ownerCommunication || '无'}
+
+其他人员交流记录：${tripForm.otherCommunication || '无'}
+
+（二）其他收获（其他有价值信息，选填）
+${tripForm.otherGains || '无'}
+
+（三）风险（如业务风险、客户风险、技术风险、交付质量风险等，选填）
+${tripForm.risks || '无'}
+
+（四）求助（需要协调的资源，如高层出面、技术支持、内部资源协调等，选填）
+${tripForm.helpNeeded || '无'}
+
+（五）下一步行动计划（明确接下来需要推进的具体事项）
+${tripForm.nextAction || '无'}`;
+
+      setGeneratedReport({ type: '出差报告', content, date: reportDate });
       setGenerating(false);
     }, 1200);
   };
@@ -205,16 +252,23 @@ ${notesText || '  （暂无拜访纪要）'}
       setIsVoiceRecording(false);
       if (activeType === 'trip') {
         setTripForm({
+          ...initialTripForm,
           traveler: '之欧',
-          startDate: '',
-          endDate: '',
           destination: '北京',
-          customers: '中国航发、航天科工',
-          purpose: '推进GH4169机匣项目交付节点，沟通TC4钛合金技术方案',
-          itinerary: [{ date: '', customer: '中国航发项目组', content: '确认GH4169机匣交付节点，沟通热处理工艺' }],
-          visitNotes: [{ customer: '中国航发', visitor: '张总、李工', points: 'GH4169机匣交付节点确认，工艺能力认可', feedback: '客户反馈良好，期待后续合作' }],
-          achievements: '获得2个项目阶段性进展',
-          todos: '本周内提交TC4报价单',
+          travelDate: '2026-07-15 至 2026-07-16',
+          purposeGetOpportunity: true,
+          purposeTechExchange: true,
+          customers: [
+            { customerName: '中国航发', contactName: '张总', contactTitle: '项目经理', contactInfo: '13800138000', relationLevel: '关键决策人', influence: '高', customerBackground: '航空发动机龙头央企，GH4169机匣锻件主要客户', otherRelation: '长期战略合作关系' },
+            { customerName: '航天科工', contactName: '李工', contactTitle: '技术主管', contactInfo: '13900139000', relationLevel: '技术对接人', influence: '中', customerBackground: '航天科工集团，TC4钛合金项目潜在客户', otherRelation: '技术交流阶段' },
+          ],
+          planAchievement: '1. 中国航发GH4169机匣锻件8月底交付节点已确认，客户对热处理工艺改进表示认可\n2. 航天科工TC4钛合金进入技术交流阶段，对方提出希望提供更多样件测试数据',
+          ownerCommunication: '中国航发项目组确认项目资金已到位，设计进展顺利，8月底交付节点无变动',
+          otherCommunication: '与航天科工采购部王经理交流，了解下半年采购计划',
+          otherGains: '行业信息：核电锻件市场需求增长，竞品报价偏低5%-8%',
+          risks: '交付质量风险：GH4169热处理工艺需加强质量控制',
+          helpNeeded: '需要技术部协助出具GH4169热处理工艺方案',
+          nextAction: '1. 本周内提交TC4钛合金报价单（商机跟进）\n2. 推进GH4169交付合同确认（合同推进）\n3. 安排下次技术交流（客户回访）',
         });
       }
     } else {
@@ -246,16 +300,10 @@ ${notesText || '  （暂无拜访纪要）'}
   const updateField = <K extends keyof TripForm>(key: K, value: TripForm[K]) => {
     setTripForm((prev) => ({ ...prev, [key]: value }));
   };
-  const updateItinerary = (idx: number, key: keyof ItineraryItem, value: string) => {
+  const updateCustomer = (idx: number, key: keyof CustomerInfo, value: string) => {
     setTripForm((prev) => ({
       ...prev,
-      itinerary: prev.itinerary.map((it, i) => (i === idx ? { ...it, [key]: value } : it)),
-    }));
-  };
-  const updateVisitNote = (idx: number, key: keyof VisitNote, value: string) => {
-    setTripForm((prev) => ({
-      ...prev,
-      visitNotes: prev.visitNotes.map((n, i) => (i === idx ? { ...n, [key]: value } : n)),
+      customers: prev.customers.map((c, i) => (i === idx ? { ...c, [key]: value } : c)),
     }));
   };
 
@@ -506,142 +554,100 @@ ${notesText || '  （暂无拜访纪要）'}
                 )}
               </div>
 
+              {/* 一、基本信息 */}
               <div className="bg-white rounded-2xl p-5 shadow-soft">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-                      <Plane className="w-5 h-5 text-emerald-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-coffee-900">出差报告</h3>
-                      <p className="text-xs text-coffee-500">上传模板识别 · 语音填写 · 一键生成</p>
-                    </div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                    <Plane className="w-5 h-5 text-emerald-600" />
                   </div>
-                  <label className="flex items-center gap-1.5 px-3 py-2 bg-cream hover:bg-coffee-50 rounded-xl text-sm text-coffee-700 cursor-pointer transition-colors">
-                    <Upload className="w-4 h-4" />
-                    <span>上传模板</span>
-                    <input type="file" className="hidden" accept=".doc,.docx,.txt" />
-                  </label>
+                  <div>
+                    <h3 className="text-base font-semibold text-coffee-900">一、基本信息</h3>
+                    <p className="text-xs text-coffee-500">出差人、时间、地点</p>
+                  </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-coffee-500 mb-1 block">日报时间</label>
+                    <input type="date" value={tripForm.reportDate} onChange={(e) => updateField('reportDate', e.target.value)} className={inputClass} />
+                  </div>
                   <div>
                     <label className="text-xs text-coffee-500 mb-1 block">出差人</label>
-                    <input
-                      value={tripForm.traveler}
-                      onChange={(e) => updateField('traveler', e.target.value)}
-                      placeholder="请输入出差人"
-                      className={inputClass}
-                    />
+                    <input value={tripForm.traveler} onChange={(e) => updateField('traveler', e.target.value)} placeholder="请输入出差人" className={inputClass} />
                   </div>
                   <div>
-                    <label className="text-xs text-coffee-500 mb-1 block">目的地</label>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl bg-cream">
-                        <MapPin className="w-4 h-4 text-coffee-400 flex-shrink-0" />
-                        <input
-                          value={tripForm.destination}
-                          onChange={(e) => updateField('destination', e.target.value)}
-                          placeholder="请输入目的地"
-                          className="flex-1 bg-transparent text-sm text-coffee-800 focus:outline-none placeholder:text-coffee-300"
-                        />
-                      </div>
+                    <label className="text-xs text-coffee-500 mb-1 block">出差时间</label>
+                    <input value={tripForm.travelDate} onChange={(e) => updateField('travelDate', e.target.value)} placeholder="如 2026-07-15 至 2026-07-16" className={inputClass} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-coffee-500 mb-1 block">出差地点</label>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-cream">
+                      <MapPin className="w-4 h-4 text-coffee-400 flex-shrink-0" />
+                      <input value={tripForm.destination} onChange={(e) => updateField('destination', e.target.value)} placeholder="请输入出差地点" className="flex-1 bg-transparent text-sm text-coffee-800 focus:outline-none placeholder:text-coffee-300" />
                     </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-coffee-500 mb-1 block">出差开始时间</label>
-                    <input type="date" value={tripForm.startDate} onChange={(e) => updateField('startDate', e.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className="text-xs text-coffee-500 mb-1 block">出差结束时间</label>
-                    <input type="date" value={tripForm.endDate} onChange={(e) => updateField('endDate', e.target.value)} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className="text-xs text-coffee-500 mb-1 block">拜访客户</label>
-                    <input
-                      value={tripForm.customers}
-                      onChange={(e) => updateField('customers', e.target.value)}
-                      placeholder="多个客户用顿号分隔"
-                      className={inputClass}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-xs text-coffee-500 mb-1 block">出差目的</label>
-                    <input
-                      value={tripForm.purpose}
-                      onChange={(e) => updateField('purpose', e.target.value)}
-                      placeholder="请输入出差目的"
-                      className={inputClass}
-                    />
                   </div>
                 </div>
               </div>
 
+              {/* 二、出差计划和目标 */}
               <div className="bg-white rounded-2xl p-5 shadow-soft">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-semibold text-coffee-900 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-emerald-500" />
-                    行程安排
-                  </h4>
-                  <button
-                    onClick={() => updateField('itinerary', [...tripForm.itinerary, { date: '', customer: '', content: '' }])}
-                    className="flex items-center gap-1 px-2.5 py-1 text-xs text-emerald-600 hover:bg-emerald-50 rounded-lg"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>添加行程</span>
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {tripForm.itinerary.map((it, idx) => (
-                    <div key={idx} className="p-3 bg-cream rounded-xl">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-coffee-600">第 {idx + 1} 天</span>
-                        {tripForm.itinerary.length > 1 && (
-                          <button
-                            onClick={() => updateField('itinerary', tripForm.itinerary.filter((_, i) => i !== idx))}
-                            className="text-coffee-400 hover:text-alert"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 mb-2">
-                        <input type="date" value={it.date} onChange={(e) => updateItinerary(idx, 'date', e.target.value)}
-                          className="px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300" />
-                        <input value={it.customer} onChange={(e) => updateItinerary(idx, 'customer', e.target.value)}
-                          placeholder="拜访客户"
-                          className="flex-1 px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
-                      </div>
-                      <input value={it.content} onChange={(e) => updateItinerary(idx, 'content', e.target.value)}
-                        placeholder="沟通内容"
-                        className="w-full px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
-                    </div>
+                <h4 className="text-sm font-semibold text-coffee-900 mb-3 flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-emerald-500" />
+                  二、出差计划和目标 — 主要目的（可勾选）
+                </h4>
+                <div className="flex flex-wrap gap-3">
+                  {([
+                    { key: 'purposeGetOpportunity', label: '获取商机' },
+                    { key: 'purposeNegotiateOrder', label: '洽谈订单' },
+                    { key: 'purposeMaintainRelation', label: '维护关系' },
+                    { key: 'purposeTechExchange', label: '技术交流' },
+                    { key: 'purposePayment', label: '收款' },
+                    { key: 'purposeHandleIssue', label: '处理问题' },
+                    { key: 'purposeOther', label: '其它' },
+                  ] as const).map((item) => (
+                    <label key={item.key} className="flex items-center gap-1.5 px-3 py-2 bg-cream rounded-xl cursor-pointer hover:bg-coffee-50 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={tripForm[item.key]}
+                        onChange={(e) => updateField(item.key, e.target.checked as any)}
+                        className="w-4 h-4 accent-emerald-500"
+                      />
+                      <span className="text-sm text-coffee-700">{item.label}</span>
+                    </label>
                   ))}
                 </div>
+                {tripForm.purposeOther && (
+                  <input
+                    value={tripForm.purposeOtherText}
+                    onChange={(e) => updateField('purposeOtherText', e.target.value)}
+                    placeholder="请输入其它目的说明"
+                    className="w-full mt-3 px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300"
+                  />
+                )}
               </div>
 
+              {/* 三、出差对象 */}
               <div className="bg-white rounded-2xl p-5 shadow-soft">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-sm font-semibold text-coffee-900 flex items-center gap-2">
                     <Wand2 className="w-4 h-4 text-amber-500" />
-                    客户拜访纪要
+                    三、出差对象（多客户循环生成）
                   </h4>
                   <button
-                    onClick={() => updateField('visitNotes', [...tripForm.visitNotes, { customer: '', visitor: '', points: '', feedback: '' }])}
-                    className="flex items-center gap-1 px-2.5 py-1 text-xs text-amber-600 hover:bg-amber-50 rounded-lg"
+                    onClick={() => updateField('customers', [...tripForm.customers, { customerName: '', contactName: '', contactTitle: '', contactInfo: '', relationLevel: '', influence: '', customerBackground: '', otherRelation: '' }])}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs text-emerald-600 hover:bg-emerald-50 rounded-lg"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>添加纪要</span>
+                    <span>添加客户</span>
                   </button>
                 </div>
                 <div className="space-y-3">
-                  {tripForm.visitNotes.map((n, idx) => (
+                  {tripForm.customers.map((c, idx) => (
                     <div key={idx} className="p-3 bg-cream rounded-xl space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-coffee-600">纪要 {idx + 1}</span>
-                        {tripForm.visitNotes.length > 1 && (
+                        <span className="text-xs font-medium text-coffee-600">客户 {idx + 1}</span>
+                        {tripForm.customers.length > 1 && (
                           <button
-                            onClick={() => updateField('visitNotes', tripForm.visitNotes.filter((_, i) => i !== idx))}
+                            onClick={() => updateField('customers', tripForm.customers.filter((_, i) => i !== idx))}
                             className="text-coffee-400 hover:text-alert"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -649,37 +655,54 @@ ${notesText || '  （暂无拜访纪要）'}
                         )}
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <input value={n.customer} onChange={(e) => updateVisitNote(idx, 'customer', e.target.value)} placeholder="客户名称"
-                          className="px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
-                        <input value={n.visitor} onChange={(e) => updateVisitNote(idx, 'visitor', e.target.value)} placeholder="拜访人"
-                          className="px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
+                        <input value={c.customerName} onChange={(e) => updateCustomer(idx, 'customerName', e.target.value)} placeholder="客户单位名称" className="px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
+                        <input value={c.contactName} onChange={(e) => updateCustomer(idx, 'contactName', e.target.value)} placeholder="拜访客户姓名" className="px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
+                        <input value={c.contactTitle} onChange={(e) => updateCustomer(idx, 'contactTitle', e.target.value)} placeholder="客户职位" className="px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
+                        <input value={c.contactInfo} onChange={(e) => updateCustomer(idx, 'contactInfo', e.target.value)} placeholder="联系方式" className="px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
+                        <input value={c.relationLevel} onChange={(e) => updateCustomer(idx, 'relationLevel', e.target.value)} placeholder="关系层级" className="px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
+                        <input value={c.influence} onChange={(e) => updateCustomer(idx, 'influence', e.target.value)} placeholder="客户影响力" className="px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
                       </div>
-                      <input value={n.points} onChange={(e) => updateVisitNote(idx, 'points', e.target.value)} placeholder="沟通要点"
-                        className="w-full px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
-                      <input value={n.feedback} onChange={(e) => updateVisitNote(idx, 'feedback', e.target.value)} placeholder="客户反馈"
-                        className="w-full px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
+                      <input value={c.customerBackground} onChange={(e) => updateCustomer(idx, 'customerBackground', e.target.value)} placeholder="客户背景" className="w-full px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
+                      <input value={c.otherRelation} onChange={(e) => updateCustomer(idx, 'otherRelation', e.target.value)} placeholder="其它客户关系情况说明" className="w-full px-3 py-2 rounded-lg bg-white text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 placeholder:text-coffee-300" />
                     </div>
                   ))}
                 </div>
               </div>
 
+              {/* 四、出差日报总结 */}
               <div className="bg-white rounded-2xl p-5 shadow-soft">
                 <h4 className="text-sm font-semibold text-coffee-900 mb-3 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  成果与待办
+                  四、出差日报总结（当天）
                 </h4>
                 <div className="space-y-3">
                   <div>
-                    <label className="text-xs text-coffee-500 mb-1 block">主要成果</label>
-                    <textarea value={tripForm.achievements} onChange={(e) => updateField('achievements', e.target.value)}
-                      placeholder="请输入主要成果" rows={2}
-                      className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none" />
+                    <label className="text-xs text-coffee-500 mb-1 block">（一）计划事项达成情况</label>
+                    <textarea value={tripForm.planAchievement} onChange={(e) => updateField('planAchievement', e.target.value)} placeholder="请输入计划达成详情" rows={3} className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none" />
                   </div>
                   <div>
-                    <label className="text-xs text-coffee-500 mb-1 block">后续待办事项</label>
-                    <textarea value={tripForm.todos} onChange={(e) => updateField('todos', e.target.value)}
-                      placeholder="请输入后续待办" rows={2}
-                      className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none" />
+                    <label className="text-xs text-coffee-500 mb-1 block">大小业主交流记录（如项目启动、资金到位情况、项目设计进展等）</label>
+                    <textarea value={tripForm.ownerCommunication} onChange={(e) => updateField('ownerCommunication', e.target.value)} placeholder="请输入业主交流记录" rows={2} className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-coffee-500 mb-1 block">其他人员交流记录</label>
+                    <textarea value={tripForm.otherCommunication} onChange={(e) => updateField('otherCommunication', e.target.value)} placeholder="请输入其他人员交流记录" rows={2} className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-coffee-500 mb-1 block">（二）其他收获（其他有价值信息，选填）</label>
+                    <textarea value={tripForm.otherGains} onChange={(e) => updateField('otherGains', e.target.value)} placeholder="包含行业、竞品、市场机会等信息" rows={2} className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-coffee-500 mb-1 block">（三）风险（选填）</label>
+                    <textarea value={tripForm.risks} onChange={(e) => updateField('risks', e.target.value)} placeholder="如业务风险、客户风险、技术风险、交付质量风险等" rows={2} className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-coffee-500 mb-1 block">（四）求助（需要协调的资源，选填）</label>
+                    <textarea value={tripForm.helpNeeded} onChange={(e) => updateField('helpNeeded', e.target.value)} placeholder="如高层出面、技术支持、内部资源协调等" rows={2} className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-coffee-500 mb-1 block">（五）下一步行动计划</label>
+                    <textarea value={tripForm.nextAction} onChange={(e) => updateField('nextAction', e.target.value)} placeholder="明确接下来需要推进的具体事项，区分商机跟进、合同推进、回款、内部协同、客户回访节点" rows={3} className="w-full px-3 py-2 rounded-xl bg-cream text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-coffee-300 resize-none" />
                   </div>
                 </div>
               </div>
