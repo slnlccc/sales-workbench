@@ -8,9 +8,10 @@ cmds = [
 
 [phases.build]
 cmds = [
-  "npm run build"
+  "npm run build",
+  "cp -r dist server/dist"
 ]
 
-# 启动阶段：从 server 目录启动后端，后端会 serve ../dist 静态文件
+# 启动阶段：从 server 目录启动后端，后端 serve dist 静态文件
 [start]
 cmd = "cd server && npm start"

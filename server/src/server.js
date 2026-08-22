@@ -6,6 +6,8 @@ const connectDB = require('./config/db')
 const User = require('./models/User')
 const { startDailyUpdate } = require('./services/dailyUpdateService')
 
+const fs = require('fs')
+
 const app = express()
 
 app.set('trust proxy', 1)
@@ -32,6 +34,57 @@ app.use((req, res, next) => {
   next()
 })
 
+const resolveStaticDir = () => {
+  const candidates = [
+    path.join(__dirname, '../dist'),
+    path.join(__dirname, '../../dist'),
+    path.join(__dirname, '../../../dist'),
+    path.join(process.cwd(), 'dist'),
+    path.join(process.cwd(), 'server', 'dist'),
+  ]
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, 'index.html'))) {
+      console.log(`[static] 找到前端构建产物: ${dir}`)
+      return dir
+    }
+  }
+  console.error('[static] 未找到前端构建产物！')
+  return candidates[0]
+}
+
+const STATIC_DIR = resolveStaticDir()
+
+const staticMimeTypes = {
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.map': 'application/json; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+}
+
+app.use(express.static(STATIC_DIR, {
+  setHeaders: (res, filePath) => {
+    const ext = path.extname(filePath).toLowerCase()
+    const mime = staticMimeTypes[ext]
+    if (mime) {
+      res.setHeader('Content-Type', mime)
+    }
+    res.setHeader('Cache-Control', ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable')
+  }
+}))
+
 const initDB = async () => {
   await connectDB()
 
@@ -46,8 +99,6 @@ const initDB = async () => {
     console.log('默认账号已创建: admin / admin123')
   }
 }
-
-app.use(express.static(path.join(__dirname, '../../dist')))
 
 // 公开健康检查端点（Railway 健康检查用，不需要认证）
 app.get('/api/health', (req, res) => {
@@ -83,8 +134,13 @@ app.use('/api/sync', require('./routes/syncRoutes'))
 app.use('/api/ai', require('./routes/aiRoutes'))
 app.use('/api/data', require('./routes/dataRoutes'))
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../dist', 'index.html'))
+app.get('*', (req, res, next) => {
+  const accept = req.headers.accept || ''
+  if (accept.includes('text/html') || accept === '*/*') {
+    res.sendFile(path.join(STATIC_DIR, 'index.html'))
+  } else {
+    res.status(404).json({ message: 'Not found' })
+  }
 })
 
 const PORT = process.env.PORT || 3001
