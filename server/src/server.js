@@ -150,6 +150,12 @@ app.get('/api/health', (req, res) => {
   }
   const statDir = resolveStaticDir()
   const indexExists = fs.existsSync(path.join(statDir, 'index.html'))
+  const assetsDir = path.join(statDir, 'assets')
+  const assetsExists = fs.existsSync(assetsDir)
+  const assetFiles = []
+  if (assetsExists) {
+    try { assetFiles.push(...fs.readdirSync(assetsDir).slice(0, 20)) } catch { /* skip */ }
+  }
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -159,6 +165,9 @@ app.get('/api/health', (req, res) => {
     aiConfigured: baidu.isConfigured(),
     staticDir: statDir,
     staticIndexExists: indexExists,
+    assetsDir: assetsDir,
+    assetsDirExists: assetsExists,
+    assetFiles,
   })
 })
 
