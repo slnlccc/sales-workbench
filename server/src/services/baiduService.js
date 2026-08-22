@@ -63,11 +63,19 @@ const getAsrAccessToken = async () => {
  */
 const speechToText = async (audioBase64, opts = {}) => {
   if (!audioBase64) throw new Error('音频内容为空')
-  const format = (opts.format || 'mp3').toLowerCase()
+  let format = (opts.format || 'mp3').toLowerCase()
   const sampleRate = Number(opts.sampleRate) || 16000
   const channels = Number(opts.channels) || 1
-  // 百度ASR对音频有限制（60秒以内/5MB以内），这里做个简单的 base64 长度校验（1MB base64≈1.36MB 原数据）
+  // 百度ASR对音频有限制（60秒以内/5MB以内），这里做个简单的 base64 长度校验
   if (audioBase64.length > 5_000_000) throw new Error('音频过大，请控制在 60 秒以内')
+
+  // 百度ASR支持的格式：pcm, wav, amr, m4a, mp3
+  // webm 不被支持，需要前端先转换成 wav/m4a
+  const supportedFormats = ['pcm', 'wav', 'amr', 'm4a', 'mp3']
+  if (!supportedFormats.includes(format)) {
+    throw new Error(`ASR不支持的音频格式: ${format}。请使用 m4a/wav/mp3 格式`)
+  }
+
   const accessToken = await getAsrAccessToken()
   const body = {
     format,

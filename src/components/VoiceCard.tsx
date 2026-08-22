@@ -55,15 +55,15 @@ const blobToBase64 = (blob: Blob): Promise<string> =>
 
 const pickMediaRecorderMimeType = (): string => {
   if (typeof MediaRecorder === 'undefined') return '';
-  // iOS Safari 常用：mp4/aac；Android Chrome/桌面 Chrome 常用 webm/opus；最后回退浏览器默认
-  const candidates = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/mp4',
-    'audio/mp4;codecs=mp4a.40.2',
-    'audio/m4a',
-    'audio/wav',
-  ];
+  const mobile = isMobileDevice();
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+  // 百度ASR支持：wav, m4a, mp3, amr, pcm。不支持 webm！
+  // 优先选择百度ASR兼容的格式
+  const candidates = isIOS
+    ? ['audio/mp4', 'audio/mp4;codecs=mp4a.40.2', 'audio/m4a', 'audio/webm', 'audio/webm;codecs=opus']
+    : mobile
+    ? ['audio/mp4', 'audio/mp4;codecs=mp4a.40.2', 'audio/m4a', 'audio/webm;codecs=opus', 'audio/webm']
+    : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/mp4;codecs=mp4a.40.2'];
   for (const c of candidates) {
     try {
       if (MediaRecorder.isTypeSupported(c)) return c;
@@ -121,6 +121,15 @@ const blobToWav16k = async (audioBuffer: AudioBuffer): Promise<Blob> => {
   return new Blob([buffer], { type: 'audio/wav' });
 };
 
+const isMobileDevice = (): boolean => {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const mobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|HarmonyOS/i;
+  if (mobileUA.test(ua)) return true;
+  if (typeof window !== 'undefined' && window.innerWidth <= 800) return true;
+  return false;
+};
+
 const isBrowserSpeechRecognitionSupported = (): boolean => {
   if (typeof window === 'undefined') return false;
   const w = window as unknown as {
@@ -150,6 +159,7 @@ export default function VoiceCard() {
   const [recognizing, setRecognizing] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
   const [mediaRecorderSupported, setMediaRecorderSupported] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const finalTextRef = useRef<string>('');
@@ -167,7 +177,9 @@ export default function VoiceCard() {
 
   useEffect(() => {
     const secure = isSecureContext2();
-    setSpeechSupported(isBrowserSpeechRecognitionSupported() && secure);
+    const mobile = isMobileDevice();
+    setIsMobile(mobile);
+    setSpeechSupported(isBrowserSpeechRecognitionSupported() && secure && !mobile);
     setMediaRecorderSupported(isMediaRecorderSupported() && secure);
   }, []);
 
@@ -236,9 +248,10 @@ export default function VoiceCard() {
       let sampleRate = 16000;
       let channels = 1;
 
-      // 为了最高识别率，对非 wav 格式统一用 AudioContext 重采样成 16kHz 单声道 wav
-      try {
-        if (typeof window !== 'undefined' && (window as any).AudioContext && (window as any).FileReader && blob.size > 0) {
+      // 优先尝试用 AudioContext 重采样成 16kHz WAV（兼容性最好）
+      const conversionOk = await (async () => {
+        try {
+          if (typeof window === 'undefined' || !(window as any).AudioContext) return false;
           const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext;
           const ab = await blob.arrayBuffer();
           const ac = new AC();
@@ -248,17 +261,23 @@ export default function VoiceCard() {
             finalFormat = 'wav';
             sampleRate = 16000;
             channels = 1;
+            return true;
           } finally {
             try { ac.close?.(); } catch { /* noop */ }
           }
+        } catch {
+          return false;
         }
-      } catch (e: any) {
-        // 不抛出：保留原 blob 上传
-        console.warn('重采样转16kWAV失败，上传原格式:', e?.message || e);
+      })();
+
+      if (!conversionOk) {
+        console.warn('音频重采样失败，使用原始格式上传:', finalFormat);
       }
 
       const base64 = await blobToBase64(finalBlob);
       if (sessionIdRef.current !== mySession) return false;
+
+      setCorrectInfo('语音上传识别中…（最长 60 秒）');
       const result = await aiApi.voiceAsr({
         audioBase64: base64,
         format: finalFormat,
@@ -284,8 +303,10 @@ export default function VoiceCard() {
         setCorrectInfo('登录已过期，请刷新页面重新登录后再试');
       } else if (/音频过大|60秒|超时/i.test(msg)) {
         setCorrectInfo('语音过长，请控制在 60 秒以内重试');
+      } else if (/不支持的音频格式|webm/i.test(msg)) {
+        setCorrectInfo('⚠️ 手机端录音格式不被识别，建议使用 iPhone Safari 或在电脑端使用 Chrome/Edge');
       } else {
-        setCorrectInfo('⚠️ 语音识别失败：' + (msg.length > 40 ? msg.slice(0, 40) + '…' : msg) + '。可重试或使用示例文本');
+        setCorrectInfo('⚠️ 语音识别失败：' + (msg.length > 60 ? msg.slice(0, 60) + '…' : msg) + '。可重试或使用示例文本');
       }
       return false;
     }
@@ -385,8 +406,8 @@ export default function VoiceCard() {
       return;
     }
 
-    // 策略：Web Speech API 优先（所有设备），5秒无回调降级到 MediaRecorder
-    // 手机端 Web Speech API 可能因网络/服务问题无回调，需超时保护
+    // 策略：手机端直接走 MediaRecorder + 后端ASR（Web Speech API 在国内手机端不可靠）
+    // 桌面端 Web Speech API 优先，5秒无回调降级到 MediaRecorder
     const useWebSpeech = speechSupported;
     const useRecorder = mediaRecorderSupported;
 
@@ -398,10 +419,10 @@ export default function VoiceCard() {
       return;
     }
 
-    // 不支持 Web Speech 的浏览器：MediaRecorder + 后端百度ASR
-    if (!useWebSpeech) {
+    // 手机端 或 不支持 Web Speech：MediaRecorder + 后端百度ASR
+    if (!useWebSpeech || isMobile) {
       setLiveTranscript('');
-      setCorrectInfo('');
+      setCorrectInfo(isMobile ? '手机端使用录音上传识别，请开始说话…' : '');
       setIsRecording(true);
       startMediaRecorder(mySession);
       return;
@@ -525,7 +546,7 @@ export default function VoiceCard() {
       setCorrectInfo('语音识别启动失败，已使用示例文本');
       useMockText();
     }
-  }, [speechSupported, mediaRecorderSupported, callAICorrect, setIsRecording, startMediaRecorder, useMockText]);
+  }, [speechSupported, mediaRecorderSupported, isMobile, callAICorrect, setIsRecording, startMediaRecorder, useMockText]);
 
   const handleStop = useCallback(() => {
     isManualStopRef.current = true;
@@ -610,11 +631,13 @@ export default function VoiceCard() {
           </div>
           <p className="text-cream-100 text-sm leading-relaxed">
             {correcting
-              ? 'DeepSeek AI 正在修正锻造专业术语中的同音错别字…'
-              : speechSupported
-              ? '点击说话，实时语音识别（支持手机和桌面浏览器）；5秒无响应自动切换录音模式'
-              : mediaRecorderSupported
+              ? 'AI 正在矫正语音文本…'
+              : isMobile
               ? '点击说话录音，停止后上传后端 AI 识别（最长 60 秒）；识别后可手动修改并提交分类'
+              : speechSupported
+              ? '点击说话，实时语音识别；5秒无响应自动切换录音模式'
+              : mediaRecorderSupported
+              ? '点击说话录音，停止后上传后端 AI 识别（最长 60 秒）'
               : '当前环境麦克风不可用；点击可演示示例文本，或点击下方"使用示例文本（演示）"'}
           </p>
           {!speechSupported && !mediaRecorderSupported && !isRecording && !recognizing && !correcting && (
