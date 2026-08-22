@@ -163,6 +163,7 @@ export default function VoiceCard() {
   const mediaChunksRef = useRef<Blob[]>([]);
   const mediaRecorderStartTimeRef = useRef<number>(0);
   const mediaRecorderTimerRef = useRef<number | null>(null);
+  const webSpeechTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     const secure = isSecureContext2();
@@ -177,6 +178,7 @@ export default function VoiceCard() {
       try { mediaRecorderRef.current?.state !== 'inactive' && mediaRecorderRef.current?.stop(); } catch { /* noop */ }
       try { mediaStreamRef.current?.getTracks().forEach((t: any) => t.stop()); } catch { /* noop */ }
       if (mediaRecorderTimerRef.current) { window.clearTimeout(mediaRecorderTimerRef.current); mediaRecorderTimerRef.current = null; }
+      if (webSpeechTimeoutRef.current) { window.clearTimeout(webSpeechTimeoutRef.current); webSpeechTimeoutRef.current = null; }
     };
   }, []);
 
@@ -383,8 +385,8 @@ export default function VoiceCard() {
       return;
     }
 
-    // 所有设备优先用 Web Speech API（现代 iOS Safari 14.5+ / Android Chrome 均支持）
-    // MediaRecorder + 后端 ASR 仅作为不支持 Web Speech 时的后备
+    // 策略：Web Speech API 优先（所有设备），5秒无回调降级到 MediaRecorder
+    // 手机端 Web Speech API 可能因网络/服务问题无回调，需超时保护
     const useWebSpeech = speechSupported;
     const useRecorder = mediaRecorderSupported;
 
@@ -396,7 +398,7 @@ export default function VoiceCard() {
       return;
     }
 
-    // 不支持 Web Speech 的浏览器：MediaRecorder + 后端百度ASR（真实识别）
+    // 不支持 Web Speech 的浏览器：MediaRecorder + 后端百度ASR
     if (!useWebSpeech) {
       setLiveTranscript('');
       setCorrectInfo('');
@@ -420,6 +422,8 @@ export default function VoiceCard() {
 
     instance.onresult = (event: SpeechRecognitionEventLike) => {
       if (sessionIdRef.current !== mySession) return;
+      // 收到结果，清除超时定时器
+      if (webSpeechTimeoutRef.current) { window.clearTimeout(webSpeechTimeoutRef.current); webSpeechTimeoutRef.current = null; }
       let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const r = event.results[i];
@@ -434,6 +438,7 @@ export default function VoiceCard() {
 
     instance.onerror = (e: { error: string }) => {
       if (sessionIdRef.current !== mySession) return;
+      if (webSpeechTimeoutRef.current) { window.clearTimeout(webSpeechTimeoutRef.current); webSpeechTimeoutRef.current = null; }
       console.warn('语音识别错误:', e.error);
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         setCorrectInfo('⚠️ 麦克风权限被拒绝，请在浏览器设置中允许麦克风访问');
@@ -468,6 +473,7 @@ export default function VoiceCard() {
 
     instance.onend = () => {
       if (sessionIdRef.current !== mySession) return;
+      if (webSpeechTimeoutRef.current) { window.clearTimeout(webSpeechTimeoutRef.current); webSpeechTimeoutRef.current = null; }
       // 如果 recogning 已经被 onerror 的降级分支覆盖（已重新走录音），则不再最终处理
       if (mediaRecorderRef.current) return;
       setRecognizing(false);
@@ -488,6 +494,24 @@ export default function VoiceCard() {
       setRecognizing(true);
       setLiveTranscript('');
       setCorrectInfo('');
+      // 5秒超时检测：如果 Web Speech API 无任何回调（手机端常见），降级到 MediaRecorder
+      if (webSpeechTimeoutRef.current) { window.clearTimeout(webSpeechTimeoutRef.current); }
+      webSpeechTimeoutRef.current = window.setTimeout(() => {
+        if (sessionIdRef.current !== mySession) return;
+        if (mediaRecorderRef.current) return; // 已切换
+        console.warn('Web Speech API 5秒无回调，降级到 MediaRecorder');
+        try { instance.abort(); } catch { /* noop */ }
+        recognitionRef.current = null;
+        if (mediaRecorderSupported) {
+          setCorrectInfo('在线语音服务响应超时，已切换为录音上传识别…');
+          startMediaRecorder(mySession);
+        } else {
+          setCorrectInfo('语音服务响应超时，请重试或使用示例文本');
+          setRecognizing(false);
+          setIsRecording(false);
+          setTimeout(() => { if (sessionIdRef.current === mySession) useMockText(); }, 500);
+        }
+      }, 5000);
     } catch (err) {
       console.error('语音识别启动失败:', err);
       // 启动失败降级：若 MediaRecorder 支持则走后端ASR
@@ -588,7 +612,7 @@ export default function VoiceCard() {
             {correcting
               ? 'DeepSeek AI 正在修正锻造专业术语中的同音错别字…'
               : speechSupported
-              ? '点击说话，实时语音识别（支持手机和桌面浏览器）；识别后可手动修改并"AI分析提取"分类'
+              ? '点击说话，实时语音识别（支持手机和桌面浏览器）；5秒无响应自动切换录音模式'
               : mediaRecorderSupported
               ? '点击说话录音，停止后上传后端 AI 识别（最长 60 秒）；识别后可手动修改并提交分类'
               : '当前环境麦克风不可用；点击可演示示例文本，或点击下方"使用示例文本（演示）"'}
