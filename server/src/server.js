@@ -138,9 +138,10 @@ app.get('/api/health', (req, res) => {
   const cloudSync = require('./services/cloudSyncService')
   const baidu = require('./services/baiduService')
   const cosKeys = require('./config/cosKeys')
+  const aiKeys = require('./config/aiKeys')
   const cosCfg = (k) => process.env[k] || cosKeys[k] || ''
   const v = (k) => {
-    const val = cosCfg(k)
+    const val = cosCfg(k) || aiKeys[k] || ''
     if (!val) return 'NOT_SET'
     if (val.startsWith('your-') || val === 'placeholder') return `PLACEHOLDER(${val})`
     if (k.includes('SECRET') || k.includes('KEY')) {
