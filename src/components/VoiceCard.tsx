@@ -82,11 +82,6 @@ const mimeTypeToExt = (mime: string): string => {
   return 'webm';
 };
 
-const isMobileDevice = (): boolean => {
-  if (typeof navigator === 'undefined') return false;
-  return /Android|iPhone|iPad|iPod|HarmonyOS|Harmony|Mobile|Mobile\//i.test(navigator.userAgent || '');
-};
-
 const blobToWav16k = async (audioBuffer: AudioBuffer): Promise<Blob> => {
   const targetRate = 16000;
   const channels = 1;
@@ -388,8 +383,10 @@ export default function VoiceCard() {
       return;
     }
 
-    const useWebSpeech = speechSupported && !isMobileDevice(); // 桌面优先用 Web Speech API（实时流式体验好）
-    const useRecorder = mediaRecorderSupported; // 手机端 / Safari 走 MediaRecorder → 后端 ASR
+    // 所有设备优先用 Web Speech API（现代 iOS Safari 14.5+ / Android Chrome 均支持）
+    // MediaRecorder + 后端 ASR 仅作为不支持 Web Speech 时的后备
+    const useWebSpeech = speechSupported;
+    const useRecorder = mediaRecorderSupported;
 
     if (!useWebSpeech && !useRecorder) {
       setCorrectInfo('当前浏览器不支持语音识别（建议使用 iPhone Safari / Android Chrome / 桌面 Chrome / Edge）');
@@ -399,7 +396,7 @@ export default function VoiceCard() {
       return;
     }
 
-    // 手机端：MediaRecorder + 后端百度ASR（真实识别）
+    // 不支持 Web Speech 的浏览器：MediaRecorder + 后端百度ASR（真实识别）
     if (!useWebSpeech) {
       setLiveTranscript('');
       setCorrectInfo('');
@@ -444,15 +441,22 @@ export default function VoiceCard() {
         setCorrectInfo('未检测到语音，请重试或使用示例文本');
       } else if (e.error === 'audio-capture') {
         setCorrectInfo('未检测到麦克风设备，请检查设备连接');
-      } else if (e.error === 'network' || e.error === 'service-not-allowed') {
-        // 桌面网络或服务不可用时降级到 MediaRecorder 后端ASR（如 MediaRecorder 支持）
-        setCorrectInfo('Web Speech API 网络异常，已切换为录音上传识别…');
+      } else if (e.error === 'network' || e.error === 'service-not-allowed' || e.error === 'aborted' || e.error === 'audio-stream-error' || e.error === 'language-unavailable') {
+        // Web Speech 服务不可用 / 网络异常 → 降级到 MediaRecorder 后端 ASR
+        setCorrectInfo('在线语音服务异常，已切换为录音上传识别…');
         try { instance.abort(); } catch { /* noop */ }
         if (mediaRecorderSupported) {
           startMediaRecorder(mySession);
           return;
         }
       } else {
+        // 其他错误：尝试 MediaRecorder 后备
+        if (mediaRecorderSupported && !isManualStopRef.current) {
+          setCorrectInfo('语音识别异常，已切换为录音上传识别…');
+          try { instance.abort(); } catch { /* noop */ }
+          startMediaRecorder(mySession);
+          return;
+        }
         setCorrectInfo('语音识别异常，请重试');
       }
       setRecognizing(false);
@@ -584,7 +588,7 @@ export default function VoiceCard() {
             {correcting
               ? 'DeepSeek AI 正在修正锻造专业术语中的同音错别字…'
               : speechSupported
-              ? '桌面端实时识别；手机端/Safari 会录音上传后端识别，最长 60 秒；识别后可手动修改并"AI分析提取"分类'
+              ? '点击说话，实时语音识别（支持手机和桌面浏览器）；识别后可手动修改并"AI分析提取"分类'
               : mediaRecorderSupported
               ? '点击说话录音，停止后上传后端 AI 识别（最长 60 秒）；识别后可手动修改并提交分类'
               : '当前环境麦克风不可用；点击可演示示例文本，或点击下方"使用示例文本（演示）"'}
