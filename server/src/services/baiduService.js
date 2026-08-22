@@ -119,12 +119,12 @@ const getApiKey = () => {
 }
 
 /**
- * 普通调用（非流式）
+ * 百度千帆普通调用（非流式）
  * @param {Array<{role: string, content: string}>} messages - 消息数组
  * @param {Object} options - 调用选项
  * @returns {Promise<string>} AI 返回的文本
  */
-const chat = async (messages, options = {}) => {
+const chatBaidu = async (messages, options = {}) => {
   const apiKey = getApiKey()
   const endpoint = options.model || BAIDU_MODEL
   const maxTokens = Math.min(options.maxTokens ?? 2048, 8192)
@@ -240,9 +240,6 @@ const chatWithFallback = async (messages, options = {}) => {
 
   throw new Error('BAIDU_API_KEY 和 ZHIPU_API_KEY 均未配置，AI 功能不可用')
 }
-
-// 重命名原 chat 为 chatBaidu（内部使用）
-const chatBaidu = chat
 
 // 对外导出的 chat 使用带降级的版本
 const chat = chatWithFallback
