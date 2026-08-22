@@ -181,13 +181,21 @@ app.use('/api/ai', require('./routes/aiRoutes'))
 app.use('/api/data', require('./routes/dataRoutes'))
 
 app.get('*', (req, res, next) => {
+  const urlPath = req.path
+  const ext = path.extname(urlPath).toLowerCase()
+  const staticExts = ['.js', '.mjs', '.css', '.svg', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.webp', '.woff', '.woff2', '.ttf', '.map', '.json', '.txt', '.xml', '.wasm']
+
+  if (staticExts.includes(ext)) {
+    return res.status(404).json({ message: 'Not found', path: urlPath })
+  }
+
   const accept = req.headers.accept || ''
   if (accept.includes('text/html') || accept === '*/*') {
     const dir = resolveStaticDir()
     const indexPath = path.join(dir, 'index.html')
     if (fs.existsSync(indexPath)) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
-      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
       res.sendFile(indexPath)
     } else {
       res.status(503).send(`<html><body><h2>前端构建产物未找到</h2><p>期望路径: ${dir}</p><p>请在 Railway 上重新部署并确保 npm run build 成功</p></body></html>`)
