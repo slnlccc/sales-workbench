@@ -776,6 +776,110 @@ ${d.nextSteps || '（待制定）'}
   }
 })
 
+// 出差报告 — AI 解析原始文本，返回结构化字段 JSON
+router.post('/trip-parse', protect, async (req, res) => {
+  try {
+    const { rawText, travelers, travelDate, location } = req.body || {}
+
+    if (!rawText || String(rawText).trim().length < 5) {
+      return res.status(400).json({ error: '请输入需要解析的出差记录内容' })
+    }
+
+    const systemPrompt = `你是一个出差报告信息提取助手。用户会粘贴一段自由格式的出差记录文本，你需要从中提取结构化信息，严格按照以下 JSON 格式输出。
+
+只能输出 JSON，不要输出任何其他文字、解释或 markdown 标记。
+
+JSON 字段说明：
+{
+  "reportDate": "日报时间，格式 YYYY-MM-DD，如文本中没有则留空",
+  "traveler": "出差人姓名，如文本中没有则填用户提供的兜底值",
+  "travelDate": "出差时间，如 '2026-07-15 至 2026-07-16'，如文本中没有则填用户提供的兜底值",
+  "destination": "出差地点，如文本中没有则填用户提供的兜底值",
+  "purposes": ["从以下选项中选：获取商机/洽谈订单/维护关系/技术交流/收款/处理问题/其它"],
+  "purposeOtherText": "如果目的包含'其它'，这里填具体说明，否则留空",
+  "customers": [
+    {
+      "customerName": "客户单位名称",
+      "contactName": "拜访客户姓名",
+      "contactTitle": "客户职位",
+      "contactInfo": "联系方式",
+      "relationLevel": "关系层级，如关键决策人/技术对接人等",
+      "influence": "客户影响力，高/中/低",
+      "customerBackground": "客户背景描述",
+      "otherRelation": "其它客户关系情况说明"
+    }
+  ],
+  "planAchievement": "计划事项达成情况，将原文中相关内容归纳整理为清晰的条目",
+  "ownerCommunication": "大小业主交流记录，如项目启动、资金到位情况、项目设计进展等",
+  "otherCommunication": "其他人员交流记录",
+  "otherGains": "其他收获，包含行业、竞品、市场机会等信息",
+  "risks": "风险内容，如业务风险、客户风险、技术风险、交付质量风险等",
+  "helpNeeded": "求助需要协调的资源，如高层出面、技术支持、内部资源协调等",
+  "nextAction": "下一步行动计划，区分商机跟进、合同推进、回款、内部协同、客户回访节点"
+}
+
+提取规则：
+1. 从文本中尽可能提取所有字段信息，文本中未提及的字段填空字符串 ""
+2. 如果有多个客户，customers 数组包含多个对象
+3. 将口语化、碎片化的内容归纳整理为书面语，保持原意
+4. 对短句关键词适当扩写为完整句子，但不编造未提及的人名、数据
+5. 只输出 JSON，确保是合法 JSON 格式`
+
+    const userContent = `请解析以下出差记录文本，提取结构化信息。
+
+兜底信息（文本中未提到时使用）：
+出差人：${travelers || ''}
+出差时间：${travelDate || ''}
+出差地点：${location || ''}
+
+出差记录文本：
+${rawText}`
+
+    try {
+      const result = await chat(
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
+        { temperature: 0.3, maxTokens: 4096 }
+      )
+
+      // 从 AI 返回中提取 JSON
+      let parsed = null
+      try {
+        // 尝试直接解析
+        parsed = JSON.parse(result)
+      } catch {
+        // 尝试从 markdown 代码块中提取
+        const jsonMatch = result.match(/```(?:json)?\s*([\s\S]*?)```/)
+        if (jsonMatch) {
+          try { parsed = JSON.parse(jsonMatch[1].trim()) } catch { /* noop */ }
+        }
+        // 尝试从花括号中提取
+        if (!parsed) {
+          const braceMatch = result.match(/\{[\s\S]*\}/)
+          if (braceMatch) {
+            try { parsed = JSON.parse(braceMatch[0]) } catch { /* noop */ }
+          }
+        }
+      }
+
+      if (parsed) {
+        res.json({ success: true, data: parsed })
+      } else {
+        // AI 返回了非 JSON，尝试返回原始文本让前端降级
+        res.json({ success: false, rawResponse: result, error: 'AI 返回格式异常，请重试或手动填写' })
+      }
+    } catch (aiErr) {
+      console.error('出差报告解析 AI 失败:', aiErr.message)
+      res.status(500).json({ error: 'AI 服务暂不可用，请手动填写或稍后重试' })
+    }
+  } catch (err) {
+    console.error('出差报告解析错误:', err.message)
+    res.status(500).json({ error: '服务器错误' })
+  }
+})
+
 function buildFallbackReport(data) {
   const d = data || {}
   const date = d.travelDate || new Date().toISOString().split('T')[0]

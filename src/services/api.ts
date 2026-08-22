@@ -149,6 +149,10 @@ export const aiApi = {
   }) =>
     request('/ai/travel-report', { method: 'POST', body: JSON.stringify(data) }),
 
+  // 出差报告 — AI 解析原始文本为结构化字段
+  tripParse: (data: { rawText: string; travelers?: string; travelDate?: string; location?: string }) =>
+    request('/ai/trip-parse', { method: 'POST', body: JSON.stringify(data) }),
+
   // 行业洞察
   industryInsight: (data: { topic?: string; articles?: string }) =>
     request('/ai/industry-insight', { method: 'POST', body: JSON.stringify(data) }),

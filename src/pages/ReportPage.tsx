@@ -2,11 +2,12 @@ import { useState } from 'react';
 import {
   FileText, Calendar, Plane, Sparkles, Mic, Download, Copy,
   Plus, Trash2, MapPin, CheckCircle2, X, ChevronRight, FileCheck,
-  Upload, Wand2,
+  Upload, Wand2, ClipboardPaste, Loader2,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { cn } from '@/lib/utils';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
+import { aiApi } from '@/services/api';
 
 type ReportType = 'weekly' | 'trip' | null;
 
@@ -129,6 +130,9 @@ export default function ReportPage() {
   const [tripForm, setTripForm] = useState<TripForm>(initialTripForm);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [voiceText, setVoiceText] = useState('');
+  const [rawText, setRawText] = useState('');
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState('');
 
   const [weeklyData, setWeeklyData] = useState({
     orderCount: 0,
@@ -246,6 +250,75 @@ ${tripForm.nextAction || '无'}`;
     }, 1200);
   };
 
+  // AI 解析原始文本 → 自动填充表单
+  const handleAiParse = async () => {
+    if (!rawText.trim()) {
+      setParseError('请先粘贴或输入出差记录内容');
+      return;
+    }
+    setParsing(true);
+    setParseError('');
+    try {
+      const resp: any = await aiApi.tripParse({
+        rawText,
+        travelers: tripForm.traveler,
+        travelDate: tripForm.travelDate,
+        location: tripForm.destination,
+      });
+      if (resp.success && resp.data) {
+        const d = resp.data;
+        // 映射 purposes 数组到复选框
+        const purposes: string[] = Array.isArray(d.purposes) ? d.purposes : [];
+        const newCustomers = Array.isArray(d.customers) && d.customers.length > 0
+          ? d.customers.map((c: any) => ({
+              customerName: c.customerName || '',
+              contactName: c.contactName || '',
+              contactTitle: c.contactTitle || '',
+              contactInfo: c.contactInfo || '',
+              relationLevel: c.relationLevel || '',
+              influence: c.influence || '',
+              customerBackground: c.customerBackground || '',
+              otherRelation: c.otherRelation || '',
+            }))
+          : [{ customerName: '', contactName: '', contactTitle: '', contactInfo: '', relationLevel: '', influence: '', customerBackground: '', otherRelation: '' }];
+
+        setTripForm({
+          reportDate: d.reportDate || tripForm.reportDate,
+          traveler: d.traveler || tripForm.traveler,
+          travelDate: d.travelDate || tripForm.travelDate,
+          destination: d.destination || tripForm.destination,
+          purposeGetOpportunity: purposes.includes('获取商机'),
+          purposeNegotiateOrder: purposes.includes('洽谈订单'),
+          purposeMaintainRelation: purposes.includes('维护关系'),
+          purposeTechExchange: purposes.includes('技术交流'),
+          purposePayment: purposes.includes('收款'),
+          purposeHandleIssue: purposes.includes('处理问题'),
+          purposeOther: purposes.includes('其它'),
+          purposeOtherText: d.purposeOtherText || '',
+          customers: newCustomers,
+          planAchievement: d.planAchievement || '',
+          ownerCommunication: d.ownerCommunication || '',
+          otherCommunication: d.otherCommunication || '',
+          otherGains: d.otherGains || '',
+          risks: d.risks || '',
+          helpNeeded: d.helpNeeded || '',
+          nextAction: d.nextAction || '',
+        });
+      } else {
+        setParseError(resp.error || 'AI 解析失败，请重试或手动填写');
+      }
+    } catch (err: any) {
+      const msg = err?.message || String(err) || '';
+      if (/未授权|令牌|401|not auth/i.test(msg)) {
+        setParseError('登录已过期，请刷新页面重新登录');
+      } else {
+        setParseError('AI 解析失败：' + (msg.length > 50 ? msg.slice(0, 50) + '…' : msg));
+      }
+    } finally {
+      setParsing(false);
+    }
+  };
+
   const handleVoiceInput = () => {
     if (isVoiceRecording) {
       setVoiceText('明天去北京出差，拜访中国航发和航天科工，主要推进GH4169机匣项目交付，顺便沟通TC4钛合金技术方案');
@@ -295,6 +368,8 @@ ${tripForm.nextAction || '无'}`;
     setActiveType(null);
     setTripForm(initialTripForm);
     setVoiceText('');
+    setRawText('');
+    setParseError('');
   };
 
   const updateField = <K extends keyof TripForm>(key: K, value: TripForm[K]) => {
@@ -522,6 +597,59 @@ ${tripForm.nextAction || '无'}`;
             </div>
           ) : (
             <div className="space-y-4 animate-fade-in">
+              {/* AI 智能解析原始文本 */}
+              <div className="bg-gradient-to-br from-violet-50 to-purple-50 border border-violet-200 rounded-2xl p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-violet-500 flex items-center justify-center">
+                    <ClipboardPaste className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-coffee-900">粘贴原始记录，AI 自动识别填充</h3>
+                    <p className="text-xs text-coffee-500">将出差记录粘贴到下方，AI 自动提取并填入各字段</p>
+                  </div>
+                </div>
+                <textarea
+                  value={rawText}
+                  onChange={(e) => { setRawText(e.target.value); setParseError(''); }}
+                  placeholder={'粘贴你的出差记录、会议纪要、聊天记录等原始内容…\n\n例如：\n7月15日去北京出差，拜访中国航发张总（电话13800138000），确认了GH4169机匣8月底交付节点。下午去航天科工见李工聊TC4钛合金技术方案，对方希望提供更多样件数据。风险是热处理工艺需要技术部支持。下周提交TC4报价单。'}
+                  rows={5}
+                  className="w-full px-3 py-2.5 rounded-xl bg-white/80 text-sm text-coffee-800 focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder:text-coffee-400 resize-none"
+                />
+                <div className="flex items-center gap-3 mt-3">
+                  <button
+                    onClick={handleAiParse}
+                    disabled={parsing || !rawText.trim()}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-500 to-purple-500 text-white rounded-xl text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+                  >
+                    {parsing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>AI 识别中…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="w-4 h-4" />
+                        <span>AI 识别填充</span>
+                      </>
+                    )}
+                  </button>
+                  {rawText && !parsing && (
+                    <button
+                      onClick={() => { setRawText(''); setParseError(''); }}
+                      className="px-3 py-2 text-sm text-coffee-500 hover:text-coffee-700"
+                    >
+                      清空
+                    </button>
+                  )}
+                </div>
+                {parseError && (
+                  <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+                    {parseError}
+                  </div>
+                )}
+              </div>
+
+              {/* 语音输入 */}
               <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className={cn(
