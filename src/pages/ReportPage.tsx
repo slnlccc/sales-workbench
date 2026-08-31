@@ -180,74 +180,66 @@ ${weeklyData.support}`;
     }, 1200);
   };
 
-  const generateTrip = () => {
+  // 【直接调用后端AI】根据 rawText 或 表单数据，生成8大模块专业出差报告
+  const generateTrip = async () => {
     setGenerating(true);
-    setTimeout(() => {
-      const reportDate = tripForm.reportDate || today;
+    try {
+      // 准备请求体：优先 rawText（碎片文本直接生成），其次是表单
+      let body: any = {};
+      if (rawText.trim()) {
+        body.rawText = rawText.trim();
+        body.travelers = tripForm.traveler;
+        body.travelDate = tripForm.travelDate;
+        body.location = tripForm.destination;
+      } else {
+        // 用结构化表单数据
+        const reportDate = tripForm.reportDate || today;
+        const purposes: string[] = [];
+        if (tripForm.purposeGetOpportunity) purposes.push('获取商机');
+        if (tripForm.purposeNegotiateOrder) purposes.push('洽谈订单');
+        if (tripForm.purposeMaintainRelation) purposes.push('维护关系');
+        if (tripForm.purposeTechExchange) purposes.push('技术交流');
+        if (tripForm.purposePayment) purposes.push('收款');
+        if (tripForm.purposeHandleIssue) purposes.push('处理问题');
+        if (tripForm.purposeOther) purposes.push('其它');
+        if (tripForm.purposeOther && tripForm.purposeOtherText) purposes.push(tripForm.purposeOtherText);
 
-      // 主要目的复选框
-      const purposes: string[] = [];
-      if (tripForm.purposeGetOpportunity) purposes.push('☑获取商机'); else purposes.push('☐获取商机');
-      if (tripForm.purposeNegotiateOrder) purposes.push('☑洽谈订单'); else purposes.push('☐洽谈订单');
-      if (tripForm.purposeMaintainRelation) purposes.push('☑维护关系'); else purposes.push('☐维护关系');
-      if (tripForm.purposeTechExchange) purposes.push('☑技术交流'); else purposes.push('☐技术交流');
-      if (tripForm.purposePayment) purposes.push('☑收款'); else purposes.push('☐收款');
-      if (tripForm.purposeHandleIssue) purposes.push('☑处理问题'); else purposes.push('☐处理问题');
-      if (tripForm.purposeOther) purposes.push('☑其它'); else purposes.push('☐其它');
-      if (tripForm.purposeOther && tripForm.purposeOtherText) purposes.push(tripForm.purposeOtherText);
+        const clientsArr = tripForm.customers
+          .filter((c) => c.customerName || c.contactName)
+          .map((c, i) => `客户${i + 1}：单位${c.customerName || '【待确认】'}，姓名${c.contactName || '【待确认】'}，职位${c.contactTitle || '【待确认】'}，联系方式${c.contactInfo || ''}，关系层级${c.relationLevel || ''}，影响力${c.influence || ''}`);
 
-      // 多客户循环生成
-      const customerSections = tripForm.customers
-        .filter((c) => c.customerName || c.contactName)
-        .map((c, i) => {
-          return `客户单位名称：${c.customerName || '无'}
-拜访客户姓名：${c.contactName || '无'}
-客户职位：${c.contactTitle || '无'}
-联系方式：${c.contactInfo || '无'}
-关系层级：${c.relationLevel || '无'}
-客户影响力：${c.influence || '无'}
-客户背景：${c.customerBackground || '无'}
-其它客户关系情况说明：${c.otherRelation || '无'}`;
-        })
-        .join('\n\n');
+        body = {
+          travelers: tripForm.traveler,
+          travelDate: tripForm.travelDate || reportDate,
+          location: tripForm.destination,
+          purpose: purposes.join('、') || '【待确认】',
+          clients: clientsArr.join('\n') || '【待确认】',
+          customerBackground: tripForm.customers.map(c => c.customerBackground).filter(Boolean).join('\n') || '【待确认】',
+          customerRelations: tripForm.customers.map(c => c.otherRelation).filter(Boolean).join('\n') || '【待确认】',
+          planAchievement: tripForm.planAchievement || '【待确认】',
+          ownerComm: tripForm.ownerCommunication || '【待确认】',
+          otherComm: tripForm.otherCommunication || '【待确认】',
+          otherHarvest: tripForm.otherGains || '【待确认】',
+          risks: tripForm.risks || '【待确认】',
+          helpNeeded: tripForm.helpNeeded || '【待确认】',
+          nextSteps: tripForm.nextAction || '【待确认】',
+        };
+      }
 
-      const content = `出差报告
-日报时间：${reportDate}
-
-一、基本信息
-出差人：${tripForm.traveler || '无'}
-出差时间：${tripForm.travelDate || '无'}
-出差地点：${tripForm.destination || '无'}
-
-二、出差计划和目标
-主要目的（可勾选）：${purposes.join(' ')}
-
-三、出差对象（多客户循环生成，一个客户一组）
-${customerSections || '客户单位名称：无\n拜访客户姓名：无\n客户职位：无\n联系方式：无\n关系层级：无\n客户影响力：无\n客户背景：无\n其它客户关系情况说明：无'}
-
-四、出差日报总结（当天）
-（一）计划事项达成情况
-${tripForm.planAchievement || '无'}
-
-大小业主交流记录（如项目启动、资金到位情况、项目设计进展等）：${tripForm.ownerCommunication || '无'}
-
-其他人员交流记录：${tripForm.otherCommunication || '无'}
-
-（二）其他收获（其他有价值信息，选填）
-${tripForm.otherGains || '无'}
-
-（三）风险（如业务风险、客户风险、技术风险、交付质量风险等，选填）
-${tripForm.risks || '无'}
-
-（四）求助（需要协调的资源，如高层出面、技术支持、内部资源协调等，选填）
-${tripForm.helpNeeded || '无'}
-
-（五）下一步行动计划（明确接下来需要推进的具体事项）
-${tripForm.nextAction || '无'}`;
-
-      setGeneratedReport({ type: '出差报告', content, date: reportDate });
+      const resp: any = await aiApi.travelReport(body);
+      const content = resp?.content || '';
+      setGeneratedReport({
+        type: '出差报告',
+        content,
+        date: tripForm.reportDate || today,
+        warning: resp?.warning || '',
+      });
+    } catch (err: any) {
+      const msg = err?.message || String(err) || '生成失败';
+      setParseError(msg.includes('未授权') || msg.includes('401') ? '登录已过期，请刷新页面重新登录' : '报告生成失败：' + msg.slice(0, 50));
+    } finally {
       setGenerating(false);
-    }, 1200);
+    }
   };
 
   // AI 解析原始文本 → 自动填充表单
