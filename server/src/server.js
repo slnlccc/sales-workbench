@@ -212,17 +212,20 @@ app.get('*', (req, res, next) => {
 
 const PORT = process.env.PORT || 3001
 const HOST = process.env.HOST || '0.0.0.0'
+let dbReady = false
 
-initDB().then(() => {
-  app.listen(PORT, HOST, () => {
-    console.log(`服务器运行在 ${HOST}:${PORT}`)
-    console.log(`网络访问模式: 公网开放模式（支持HTTP/HTTPS、公网IP、动态IP、云端域名）`)
-    console.log(`安全策略: JWT鉴权已启用，IP白名单已关闭`)
+// Express 先启动监听，确保健康检查立即通过（不需要等 MongoDB 初始化完成）
+app.listen(PORT, HOST, () => {
+  console.log(`服务器运行在 ${HOST}:${PORT}`)
+  console.log(`网络访问模式: 公网开放模式（支持HTTP/HTTPS、公网IP、动态IP、云端域名）`)
+  console.log(`安全策略: JWT鉴权已启用，IP白名单已关闭`)
 
-    // 启动每日数据自动更新（每天 8:00）
+  // 异步初始化数据库（mongodb-memory-server 下载可能较慢）
+  initDB().then(() => {
+    dbReady = true
+    console.log('✅ 数据库初始化完成')
     startDailyUpdate()
+  }).catch(err => {
+    console.error('❌ 数据库初始化失败（API 路由可能不可用）:', err.message)
   })
-}).catch(err => {
-  console.error('服务器启动失败:', err)
-  process.exit(1)
 })
