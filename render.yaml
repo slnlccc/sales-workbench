@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: sales-workbench
+    env: node
+    buildCommand: bash render-build.sh
+    startCommand: cd server && node src/server.js
+    healthCheckPath: /api/health
+    plan: free
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PORT
+        value: 10000
