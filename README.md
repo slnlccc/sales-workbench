@@ -55,3 +55,11 @@ export default tseslint.config({
   },
 })
 ```
+
+---
+
+## 🚀 一键部署到 Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=github.com/slnlccc/sales-workbench)
+
+点上面按钮 → 登录 GitHub → 确认部署 → 等 2 分钟就搞定！
