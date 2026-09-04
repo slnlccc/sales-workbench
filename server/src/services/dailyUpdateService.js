@@ -218,12 +218,22 @@ const generateRadarMaterials = async () => {
   )
 
   return (result.materials || []).map((m, i) => {
-    const history = Array.isArray(m.priceHistory) && m.priceHistory.length > 0
+    let history = Array.isArray(m.priceHistory) && m.priceHistory.length > 0
       ? m.priceHistory
       : [m.price]
     // 确保最后一个值等于当前价格
     if (history[history.length - 1] !== m.price) {
       history[history.length - 1] = m.price
+    }
+    // 如果 history 长度不足 30，用当前价格填充；如果超过 30，取最后 30 个
+    const targetLen = 30
+    if (history.length < targetLen) {
+      // 在开头填充，保持最后一个是 price
+      const padStart = Array(targetLen - history.length).fill(history[0] || m.price)
+      history = [...padStart, ...history]
+    } else if (history.length > targetLen) {
+      history = history.slice(-targetLen)
+      history[history.length - 1] = m.price // 确保最后一个还是 price
     }
     return {
       id: m.id || `radar-mat-${i + 1}`,

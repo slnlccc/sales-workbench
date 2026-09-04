@@ -5,12 +5,12 @@
 
 const express = require('express')
 const router = express.Router()
-const { protect } = require('../middleware/auth')
+const { protectOrGuest } = require('../middleware/auth')
 const { getMarketData, runDailyUpdate } = require('../services/dailyUpdateService')
 const { isConfigured } = require('../services/baiduService')
 
 // 获取市场数据概览（含市情雷达各模块：行业动态/原材料价格/招投标/政策法规/行业展会/竞争对手动态）
-router.get('/market-overview', protect, (req, res) => {
+router.get('/market-overview', protectOrGuest, (req, res) => {
   const data = getMarketData()
   res.json({
     ...data,
@@ -29,7 +29,7 @@ router.get('/competitors', (req, res) => {
 })
 
 // 手动刷新市场数据（AI 可用时重新生成，不可用时确保 fallback 数据在内存中）
-router.post('/refresh', protect, async (req, res) => {
+router.post('/refresh', protectOrGuest, async (req, res) => {
   try {
     await runDailyUpdate()
     const data = getMarketData()

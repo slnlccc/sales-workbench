@@ -323,7 +323,15 @@ const chatStream = async (messages, options = {}, onChunk) => {
  * @returns {Promise<Object>} 解析后的 JSON 对象
  */
 const chatJSON = async (messages, options = {}) => {
-  const enhancedMessages = messages.map(m => {
+  // 智谱AI 要求 messages 中必须有 user 角色
+  // 如果调用方只传了 system 消息（常见于纯指令型prompt），自动补一条 user 消息
+  const hasUser = messages.some(m => m.role === 'user')
+  const fixedMessages = hasUser ? messages : [
+    ...messages,
+    { role: 'user', content: '请按上述要求生成内容并返回 JSON 格式结果。' },
+  ]
+
+  const enhancedMessages = fixedMessages.map(m => {
     if (m.role === 'system') {
       return {
         ...m,
@@ -341,16 +349,40 @@ const chatJSON = async (messages, options = {}) => {
   try {
     return JSON.parse(text)
   } catch {
-    const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
-    try {
-      return JSON.parse(cleaned)
-    } catch {
-      const match = cleaned.match(/\{[\s\S]*\}/)
-      if (match) {
-        return JSON.parse(match[0])
-      }
-      throw new Error('AI 返回内容无法解析为 JSON: ' + text.substring(0, 200))
+    let cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+    // 尝试多种修复策略
+    const tryParse = (str) => {
+      try { return JSON.parse(str) } catch { return null }
     }
+
+    // 1. 直接解析
+    let result = tryParse(cleaned)
+    if (result) return result
+
+    // 2. 修复数组/对象末尾多余逗号: [1, 2, 3,] 或 {"a": 1,}
+    cleaned = cleaned.replace(/,\s*([\]}])/g, '$1')
+    result = tryParse(cleaned)
+    if (result) return result
+
+    // 3. 从文本中提取 JSON 对象
+    const match = cleaned.match(/\{[\s\S]*\}/)
+    if (match) {
+      let extracted = match[0]
+      // 再尝试修复多余逗号
+      extracted = extracted.replace(/,\s*([\]}])/g, '$1')
+      result = tryParse(extracted)
+      if (result) return result
+
+      // 4. 尝试截断到最后一个完整的 }，处理可能的截断问题
+      const lastBrace = extracted.lastIndexOf('}')
+      if (lastBrace > 0) {
+        const truncated = extracted.substring(0, lastBrace + 1)
+        result = tryParse(truncated) || tryParse(truncated.replace(/,\s*([\]}])/g, '$1'))
+        if (result) return result
+      }
+    }
+
+    throw new Error('AI 返回内容无法解析为 JSON: ' + text.substring(0, 200))
   }
 }
 
