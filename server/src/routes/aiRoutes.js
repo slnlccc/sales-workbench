@@ -5,7 +5,7 @@
 
 const express = require('express')
 const router = express.Router()
-const { protect } = require('../middleware/auth')
+const { protect, protectOrGuest } = require('../middleware/auth')
 const { isConfigured, isAsrConfigured, chat, chatStream, chatJSON, speechToText } = require('../services/baiduService')
 
 // AI 未配置时的中间件
@@ -250,7 +250,7 @@ router.post('/voice-assistant', protect, async (req, res) => {
 // ============================================================
 // 2. 客户分析 — 画像分析、跟进建议、商机预测
 // ============================================================
-router.post('/customer-analysis', protect, async (req, res) => {
+router.post('/customer-analysis', protectOrGuest, async (req, res) => {
   try {
     const { customerName, customerInfo, records, projects } = req.body
 
@@ -287,7 +287,7 @@ router.post('/customer-analysis', protect, async (req, res) => {
 // ============================================================
 // 3. 报告生成 — 周报、出差报告、拜访纪要、方案摘要
 // ============================================================
-router.post('/report-generation', protect, async (req, res) => {
+router.post('/report-generation', protectOrGuest, async (req, res) => {
   try {
     const { reportType, records, dateRange, extraInfo } = req.body
 
@@ -402,7 +402,7 @@ ${JSON.stringify(records || [], null, 2)}`
 // ============================================================
 // 4. 行业洞察 — 行业资讯智能摘要
 // ============================================================
-router.post('/industry-insight', protect, async (req, res) => {
+router.post('/industry-insight', protectOrGuest, async (req, res) => {
   try {
     const { topic, articles } = req.body
 
@@ -439,7 +439,7 @@ ${articles || '请基于你的知识提供最新的行业洞察。'}`
 // ============================================================
 // 5. AI 对话（通用流式）
 // ============================================================
-router.post('/chat', protect, async (req, res) => {
+router.post('/chat', protectOrGuest, async (req, res) => {
   try {
     const { messages } = req.body
     if (!messages || !Array.isArray(messages)) {
@@ -562,7 +562,7 @@ router.post('/voice-correct', protect, async (req, res) => {
 // ============================================================
 // 8. 出差报告生成
 // ============================================================
-router.post('/travel-report', protect, async (req, res) => {
+router.post('/travel-report', protectOrGuest, async (req, res) => {
   try {
     const d = req.body || {}
 
@@ -806,7 +806,7 @@ function parseTripTextLocal(text, fallback) {
 }
 
 // 出差报告 — AI 解析原始文本，返回结构化字段 JSON
-router.post('/trip-parse', protect, async (req, res) => {
+router.post('/trip-parse', protectOrGuest, async (req, res) => {
   try {
     const { rawText, travelers, travelDate, location } = req.body || {}
 
