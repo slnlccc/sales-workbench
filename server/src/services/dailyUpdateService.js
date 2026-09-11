@@ -7,6 +7,31 @@
 
 const { isConfigured, chat, chatJSON } = require('./baiduService')
 
+/**
+ * 日期工具：获取今天日期（YYYY-MM-DD）
+ */
+const todayStr = () => new Date().toISOString().split('T')[0]
+
+/**
+ * 日期工具：获取从今天起倒推 N 天的日期（YYYY-MM-DD）
+ * 用于给列表项分配不同的日期（最新 → 最早）
+ */
+const offsetDate = (offsetDays) => {
+  const d = new Date()
+  d.setDate(d.getDate() - offsetDays)
+  return d.toISOString().split('T')[0]
+}
+
+/**
+ * 日期工具：获取从今天起往后 N 天的日期（YYYY-MM-DD）
+ * 用于招标截止日等未来日期
+ */
+const futureDate = (offsetDays) => {
+  const d = new Date()
+  d.setDate(d.getDate() + offsetDays)
+  return d.toISOString().split('T')[0]
+}
+
 // 内存存储（当 MongoDB 不可用时使用）
 let memoryData = {
   // AI市场数据（旧版，保留兼容 MarketDataPanel）
@@ -168,6 +193,7 @@ const generateRadarNews = async () => {
     { temperature: 0.8, maxTokens: 2048 }
   )
 
+  // 强制覆盖日期为最近一周，不依赖 AI 返回的旧日期
   return (result.news || []).map((n, i) => ({
     id: n.id || `radar-news-${i + 1}`,
     title: n.title,
@@ -175,7 +201,7 @@ const generateRadarNews = async () => {
     sourceUrl: n.sourceUrl,
     summary: n.summary,
     keywords: n.keywords || [],
-    publishedAt: n.publishedAt || today,
+    publishedAt: offsetDate(i), // 今天、昨天、前天...
     category: n.category || '行业动态',
     industry: n.industry || '机械',
     impactLevel: n.impactLevel || '中',
@@ -246,7 +272,7 @@ const generateRadarMaterials = async () => {
       description: m.description || '',
       frequency: m.frequency || 0,
       source: m.source || '中国金属网',
-      lastUpdate: m.lastUpdate || today,
+      lastUpdate: todayStr(), // 强制使用今天日期
       priceHistory: history,
     }
   })
@@ -286,12 +312,13 @@ const generateRadarBidding = async () => {
     { temperature: 0.8, maxTokens: 2048 }
   )
 
+  // deadline 设为从今天起未来 1-4 周的日期（招标截止日应在未来）
   return (result.bidding || []).map((b, i) => ({
     id: b.id || `radar-bid-${i + 1}`,
     title: b.title,
     org: b.org,
     amount: b.amount || 0,
-    deadline: b.deadline,
+    deadline: futureDate(14 + i * 7), // 2周后、3周后、4周后...
     type: 'tender',
     industry: b.industry || '机械',
     status: b.status || '招标中',
@@ -335,12 +362,13 @@ const generateRadarPolicies = async () => {
     { temperature: 0.8, maxTokens: 3072 }
   )
 
+  // 强制覆盖日期为最近一周
   return (result.policies || []).map((p, i) => ({
     id: p.id || `radar-pol-${i + 1}`,
     title: p.title,
     policyType: p.policyType || '产业规划',
     department: p.department,
-    publishedAt: p.publishedAt || today,
+    publishedAt: offsetDate(i),
     keywords: p.keywords || [],
     content: p.content,
     summary: p.summary || '',
@@ -439,13 +467,14 @@ const generateCompetitors = async () => {
     { temperature: 0.8, maxTokens: 3072 }
   )
 
+  // 强制覆盖日期为最近一周
   return (result.competitors || []).map((c, i) => ({
     id: c.id || `comp-${i + 1}`,
     competitorName: c.competitorName,
     channel: c.channel || '新闻',
     title: c.title,
     summary: c.summary,
-    publishedAt: c.publishedAt || today,
+    publishedAt: offsetDate(i),
     sourceName: c.sourceName || '',
     sourceUrl: c.sourceUrl || '',
     category: c.category || '合作动态',
@@ -469,6 +498,15 @@ const isRadarUpdatedToday = () => {
  * 执行每日数据更新（市情雷达各模块 + 旧版 AI市场数据）
  */
 const runDailyUpdate = async () => {
+  // 对 fallback/已有数据做日期偏移，确保始终显示近期日期
+  const refreshDates = () => {
+    memoryData.radarNews = memoryData.radarNews.map((n, i) => ({ ...n, publishedAt: offsetDate(i) }))
+    memoryData.radarMaterials = memoryData.radarMaterials.map((m) => ({ ...m, lastUpdate: todayStr() }))
+    memoryData.radarBidding = memoryData.radarBidding.map((b, i) => ({ ...b, deadline: futureDate(14 + i * 7) }))
+    memoryData.radarPolicies = memoryData.radarPolicies.map((p, i) => ({ ...p, publishedAt: offsetDate(i) }))
+    memoryData.competitors = memoryData.competitors.map((c, i) => ({ ...c, publishedAt: offsetDate(i) }))
+  }
+
   // 先确保各模块至少有 fallback 数据，即使 AI 不可用也不影响展示
   memoryData.radarNews = memoryData.radarNews.length > 0 ? memoryData.radarNews : FALLBACK_RADAR_NEWS
   memoryData.radarMaterials = memoryData.radarMaterials.length > 0 ? memoryData.radarMaterials : FALLBACK_RADAR_MATERIALS
@@ -480,8 +518,11 @@ const runDailyUpdate = async () => {
   memoryData.industryNews = memoryData.industryNews.length > 0 ? memoryData.industryNews : FALLBACK_INDUSTRY_NEWS
   memoryData.exhibitions = memoryData.exhibitions.length > 0 ? memoryData.exhibitions : FALLBACK_EXHIBITIONS
 
+  // 刷新日期，不依赖 AI
+  refreshDates()
+
   if (!isConfigured()) {
-    console.log('[每日更新] DEEPSEEK_API_KEY 未配置，使用兜底数据，跳过 AI 更新')
+    console.log('[每日更新] AI 未配置，使用兜底数据并刷新日期')
     memoryData.radarLastUpdate = new Date().toISOString()
     memoryData.lastUpdate = new Date().toISOString()
     return
