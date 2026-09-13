@@ -58,7 +58,10 @@ const saveLocalUser = (user: LocalUser) => {
 }
 
 const generateLocalToken = (userId: string): string => {
-  return btoa(`local.${userId}.${Date.now()}`)
+  // 不加 btoa！直接明文 local.xxx 格式
+  // 这样所有 startsWith('local.') 判断才能正确命中
+  // （local token 只是后端不可达时的临时离线兜底，不需要加密）
+  return `local.${userId}.${Date.now()}`
 }
 
 // 本地登录验证
