@@ -95,6 +95,15 @@ const request = async (url: string, options: RequestInit = {}): Promise<any> => 
 
   // 401 自动刷新后重试一次（只对非 refresh-token 调用生效）
   if (response.status === 401 && !isRefreshCall) {
+    // local token 是离线兜底登录，不触发 refresh / 全局登出
+    // （Render 冷启动时用户可能先用 localLogin 登录，之后后端起来了，API 401 但不应该把用户踢出去）
+    if (token && token.startsWith('local.')) {
+      // local token 跳过全局登出，只当普通错误抛出
+      const err = new Error('离线模式，后端不可达')
+      ;(err as any).silent = true // 标记为静默错误，调用方自行处理
+      throw err
+    }
+
     const newToken = await refreshTokenSilently()
     if (newToken) {
       const retryHeaders: HeadersInit = { 'Content-Type': 'application/json', ...options.headers, Authorization: `Bearer ${newToken}` }

@@ -178,31 +178,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       // 本地降级 token：后端不可用时的兜底登录
-      // 检测后端是否已恢复——如果恢复了我们引导用户重新登录获取正式 token
+      // initAuth 只在应用启动时恢复状态，不再主动探测后端恢复
+      // （如果用户是用 localLogin 主动登录的，说明当时后端确实不可用，就保持离线模式不打扰用户）
+      // 真正的后端恢复检测交给 api.ts 的 401 拦截器 + login 重试逻辑处理
       if (storedToken.startsWith('local.')) {
-        try {
-          const probe = await fetch('/api/users/refresh-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-            signal: AbortSignal.timeout(3000),
-          })
-          // 后端能响应（不管 401 还是 200）说明服务在线
-          // 清除 local token，让用户用正式账号重新登录
-          if (probe.ok || probe.status === 400 || probe.status === 401) {
-            localStorage.removeItem(LOCAL_TOKEN_KEY)
-            localStorage.removeItem('sw_current_user')
-            if (mounted) {
-              setToken(null)
-              setUser(null)
-              setLogoutMessage('请重新登录您的账号')
-              setLoading(false)
-            }
-            return
-          }
-        } catch {
-          // 后端不可达 → 继续使用 local token（离线模式）
-        }
         if (mounted) setLoading(false)
         return
       }
