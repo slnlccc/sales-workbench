@@ -10,7 +10,7 @@ export default function LoginPage() {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   
-  const { login, register, loading } = useAuth()
+  const { login, register, loading, logoutMessage } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   
@@ -104,6 +104,12 @@ export default function LoginPage() {
           {error && (
             <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-center">
               {error}
+            </div>
+          )}
+
+          {logoutMessage && !error && (
+            <div className="mb-4 p-3 bg-amber-50 text-amber-700 rounded-xl text-center text-sm">
+              {logoutMessage}
             </div>
           )}
 

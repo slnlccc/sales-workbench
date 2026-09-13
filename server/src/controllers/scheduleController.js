@@ -21,7 +21,7 @@ exports.getSchedules = async (req, res) => {
 
 exports.getSchedule = async (req, res) => {
   try {
-    const schedule = await Schedule.findById(req.params.id)
+    const schedule = await Schedule.findOne({ _id: req.params.id, userId: req.user._id })
     if (!schedule) return res.status(404).json({ message: '日程不存在' })
     res.json(schedule)
   } catch (err) {
@@ -41,7 +41,7 @@ exports.createSchedule = async (req, res) => {
 
 exports.updateSchedule = async (req, res) => {
   try {
-    const schedule = await Schedule.findById(req.params.id)
+    const schedule = await Schedule.findOne({ _id: req.params.id, userId: req.user._id })
     if (!schedule) return res.status(404).json({ message: '日程不存在' })
 
     Object.assign(schedule, req.body)
@@ -55,7 +55,7 @@ exports.updateSchedule = async (req, res) => {
 
 exports.deleteSchedule = async (req, res) => {
   try {
-    const schedule = await Schedule.findById(req.params.id)
+    const schedule = await Schedule.findOne({ _id: req.params.id, userId: req.user._id })
     if (!schedule) return res.status(404).json({ message: '日程不存在' })
 
     await schedule.deleteOne()
@@ -67,7 +67,7 @@ exports.deleteSchedule = async (req, res) => {
 
 exports.toggleClosed = async (req, res) => {
   try {
-    const schedule = await Schedule.findById(req.params.id)
+    const schedule = await Schedule.findOne({ _id: req.params.id, userId: req.user._id })
     if (!schedule) return res.status(404).json({ message: '日程不存在' })
 
     schedule.closed = !schedule.closed

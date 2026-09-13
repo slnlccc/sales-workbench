@@ -11,6 +11,8 @@ export default function CloudSyncPanel({ compact = false }: { compact?: boolean 
   const lastSync = status?.lastSyncAt
     ? new Date(status.lastSyncAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
     : null
+  const isLocalMode = !configured && !!error && error.includes('本地模式')
+  const isAuthError = !configured && !!error && error.includes('重新登录')
 
   const handleUpload = async () => {
     const result = await upload()
@@ -33,21 +35,32 @@ export default function CloudSyncPanel({ compact = false }: { compact?: boolean 
         <div className="flex items-center gap-2 text-xs px-3">
           {configured ? (
             <Cloud className="w-4 h-4 text-green-500" />
+          ) : isLocalMode ? (
+            <CloudOff className="w-4 h-4 text-cream-400" />
+          ) : isAuthError ? (
+            <AlertCircle className="w-4 h-4 text-blue-400" />
           ) : error ? (
             <AlertCircle className="w-4 h-4 text-amber-500" />
           ) : (
             <CloudOff className="w-4 h-4 text-cream-400" />
           )}
           <span className="text-cream-600">
-            {configured ? '云端同步' : error ? '同步异常' : '云端未配置'}
+            {configured ? '云端同步' : isLocalMode ? '本地模式' : isAuthError ? '请重新登录' : error ? '同步异常' : '云端未配置'}
           </span>
           {configured && lastSync && (
             <span className="text-cream-400 ml-auto">{lastSync}</span>
           )}
         </div>
         {!configured && error && (
-          <div className="px-3 text-xs text-amber-600 flex items-start gap-1">
-            <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+          <div className={cn(
+            "px-3 text-xs flex items-start gap-1",
+            isLocalMode ? "text-cream-500" : isAuthError ? "text-blue-500" : "text-amber-600"
+          )}>
+            <AlertCircle className={cn(
+              "w-3 h-3 mt-0.5 flex-shrink-0",
+              isLocalMode && "text-cream-400",
+              isAuthError && "text-blue-400"
+            )} />
             <span>{error}</span>
           </div>
         )}

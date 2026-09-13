@@ -11,7 +11,7 @@ exports.getCustomers = async (req, res) => {
 
 exports.getCustomer = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id)
+    const customer = await Customer.findOne({ _id: req.params.id, userId: req.user._id })
     if (!customer) return res.status(404).json({ message: '客户不存在' })
     res.json(customer)
   } catch (err) {
@@ -31,7 +31,7 @@ exports.createCustomer = async (req, res) => {
 
 exports.updateCustomer = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id)
+    const customer = await Customer.findOne({ _id: req.params.id, userId: req.user._id })
     if (!customer) return res.status(404).json({ message: '客户不存在' })
 
     Object.assign(customer, req.body)
@@ -45,7 +45,7 @@ exports.updateCustomer = async (req, res) => {
 
 exports.deleteCustomer = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id)
+    const customer = await Customer.findOne({ _id: req.params.id, userId: req.user._id })
     if (!customer) return res.status(404).json({ message: '客户不存在' })
 
     await customer.deleteOne()
@@ -57,7 +57,7 @@ exports.deleteCustomer = async (req, res) => {
 
 exports.addProject = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id)
+    const customer = await Customer.findOne({ _id: req.params.id, userId: req.user._id })
     if (!customer) return res.status(404).json({ message: '客户不存在' })
 
     const project = { ...req.body.project, id: Date.now().toString() }
@@ -72,7 +72,7 @@ exports.addProject = async (req, res) => {
 
 exports.updateProject = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id)
+    const customer = await Customer.findOne({ _id: req.params.id, userId: req.user._id })
     if (!customer) return res.status(404).json({ message: '客户不存在' })
 
     const projectIdx = customer.projects.findIndex(p => p.id === req.body.project.id)
@@ -89,7 +89,7 @@ exports.updateProject = async (req, res) => {
 
 exports.deleteProject = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id)
+    const customer = await Customer.findOne({ _id: req.params.id, userId: req.user._id })
     if (!customer) return res.status(404).json({ message: '客户不存在' })
 
     customer.projects = customer.projects.filter(p => p.id !== req.params.projectId)

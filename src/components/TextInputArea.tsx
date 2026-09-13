@@ -296,6 +296,7 @@ export default function TextInputArea() {
   const [editTime, setEditTime] = useState('');
   const [editTypes, setEditTypes] = useState<string[]>([]);
   const [correcting, setCorrecting] = useState(false);
+  const [expanding, setExpanding] = useState(false);
 
   const handleAICorrect = async () => {
     if (!inputText.trim()) return;
@@ -309,6 +310,20 @@ export default function TextInputArea() {
       // 矫正失败时保留原文
     } finally {
       setCorrecting(false);
+    }
+  };
+
+  const handleAIExpand = async () => {
+    if (!inputText.trim()) return;
+    setExpanding(true);
+    try {
+      const result = await aiApi.expandText(inputText);
+      const expanded = result.expandedText || inputText;
+      setInputText(expanded);
+    } catch {
+      // 扩写失败时保留原文
+    } finally {
+      setExpanding(false);
     }
   };
 
@@ -484,6 +499,28 @@ export default function TextInputArea() {
                 <>
                   <Wand2 className="w-4 h-4" />
                   <span>AI锻造矫正</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleAIExpand}
+              disabled={!inputText.trim() || expanding}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl transition-all',
+                inputText.trim() && !expanding
+                  ? 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              )}
+            >
+              {expanding ? (
+                <>
+                  <Sparkles className="w-4 h-4 animate-spin" />
+                  <span>扩写中...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>AI扩写</span>
                 </>
               )}
             </button>

@@ -1,13 +1,16 @@
 const express = require('express')
 const router = express.Router()
 const { protect } = require('../middleware/auth')
-const { syncUpload, syncPull, syncStatus, syncConfig } = require('../controllers/syncController')
+const { syncUpload, syncUploadLocal, syncPull, syncStatus, syncConfig } = require('../controllers/syncController')
 
 // 所有同步路由都需要登录
 router.use(protect)
 
-// 上传数据到云端
+// 上传 MongoDB 里的数据到云端（原有方式）
 router.post('/upload', syncUpload)
+
+// 上传前端 localStorage 的数据到云端（绕过 MongoDB，桥接前端数据源）
+router.post('/upload-local', syncUploadLocal)
 
 // 从云端拉取数据
 router.post('/pull', syncPull)

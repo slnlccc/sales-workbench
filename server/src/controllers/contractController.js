@@ -28,7 +28,7 @@ exports.getContracts = async (req, res) => {
 
 exports.getContract = async (req, res) => {
   try {
-    const contract = await Contract.findById(req.params.id)
+    const contract = await Contract.findOne({ _id: req.params.id, userId: req.user._id })
     if (!contract) return res.status(404).json({ message: '合同不存在' })
     res.json(contract)
   } catch (err) {
@@ -48,7 +48,7 @@ exports.createContract = async (req, res) => {
 
 exports.updateContract = async (req, res) => {
   try {
-    const contract = await Contract.findById(req.params.id)
+    const contract = await Contract.findOne({ _id: req.params.id, userId: req.user._id })
     if (!contract) return res.status(404).json({ message: '合同不存在' })
 
     Object.assign(contract, req.body)
@@ -62,11 +62,11 @@ exports.updateContract = async (req, res) => {
 
 exports.deleteContract = async (req, res) => {
   try {
-    const contract = await Contract.findById(req.params.id)
+    const contract = await Contract.findOne({ _id: req.params.id, userId: req.user._id })
     if (!contract) return res.status(404).json({ message: '合同不存在' })
 
     await Project.updateMany(
-      { clientContractNo: contract.clientContractNo },
+      { clientContractNo: contract.clientContractNo, userId: req.user._id },
       { hasContract: false, clientContractNo: '—' }
     )
 
@@ -79,10 +79,10 @@ exports.deleteContract = async (req, res) => {
 
 exports.getLinkedProjects = async (req, res) => {
   try {
-    const contract = await Contract.findById(req.params.id)
+    const contract = await Contract.findOne({ _id: req.params.id, userId: req.user._id })
     if (!contract) return res.status(404).json({ message: '合同不存在' })
 
-    const projects = await Project.find({ clientContractNo: contract.clientContractNo })
+    const projects = await Project.find({ clientContractNo: contract.clientContractNo, userId: req.user._id })
     res.json(projects)
   } catch (err) {
     res.status(500).json({ message: err.message })

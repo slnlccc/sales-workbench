@@ -1,10 +1,14 @@
 const cloudSync = require('../services/cloudSyncService')
 const cosKeys = require('../config/cosKeys')
 
+// 统一获取用户ID字符串
+const getUserId = (req) => String(req.user._id || req.user.id)
+const getUsername = (req) => String(req.user.username || '')
+
 // 上传数据到云端
 const syncUpload = async (req, res) => {
   try {
-    const result = await cloudSync.uploadToCloud(req.user.id)
+    const result = await cloudSync.uploadToCloud(getUserId(req), getUsername(req))
     res.json({
       message: '数据同步到云端成功',
       ...result,
@@ -17,8 +21,10 @@ const syncUpload = async (req, res) => {
 // 从云端拉取数据
 const syncPull = async (req, res) => {
   try {
-    const cloudData = await cloudSync.downloadFromCloud(req.user.id)
-    const imported = await cloudSync.importCloudData(req.user.id, cloudData)
+    const userId = getUserId(req)
+    const username = getUsername(req)
+    const cloudData = await cloudSync.downloadFromCloud(username)
+    const imported = await cloudSync.importCloudData(userId, cloudData)
     res.json({
       message: '从云端拉取数据成功',
       imported,
@@ -32,7 +38,7 @@ const syncPull = async (req, res) => {
 // 获取同步状态
 const syncStatus = async (req, res) => {
   try {
-    const status = await cloudSync.getSyncStatus(req.user.id)
+    const status = await cloudSync.getSyncStatus(getUsername(req))
     res.json(status)
   } catch (err) {
     res.status(500).json({ message: err.message || '获取同步状态失败' })
@@ -48,8 +54,23 @@ const syncConfig = async (req, res) => {
   })
 }
 
+// 接收前端传来的 localStorage 数据，直接写入云端（绕过 MongoDB）
+const syncUploadLocal = async (req, res) => {
+  try {
+    const localData = req.body
+    if (!localData || typeof localData !== 'object') {
+      return res.status(400).json({ message: '无效的数据格式' })
+    }
+    const result = await cloudSync.uploadLocalDataToCloud(getUsername(req), localData)
+    res.json({ message: '本地数据同步到云端成功', ...result })
+  } catch (err) {
+    res.status(500).json({ message: err.message || '云端同步失败' })
+  }
+}
+
 module.exports = {
   syncUpload,
+  syncUploadLocal,
   syncPull,
   syncStatus,
   syncConfig,
