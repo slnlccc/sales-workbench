@@ -94,30 +94,54 @@ function decodeJwtExp(token: string): number | null {
   }
 }
 
+// 后端健康检查：用于登录页预热 Render 冷启动
+// 返回 'ok' | 'down'，15 秒超时（Render 冷启动可能需要 30-60 秒，但 health 比 login 轻量很多）
+export const pingBackendHealth = async (timeoutMs = 15000): Promise<'ok' | 'down'> => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const resp = await fetch('/api/health', { signal: controller.signal })
+    return resp.ok ? 'ok' : 'down'
+  } catch {
+    return 'down'
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // 尝试后端登录，失败则使用本地登录
+// 加长超时到 20 秒，避免 Render 冷启动期间 fetch 默认超时误判后端不可用
 const tryBackendLogin = async (username: string, password: string): Promise<{ user: User; token: string } | null> => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 20 * 1000)
   try {
     const response = await fetch('/api/users/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
+      signal: controller.signal,
     })
     if (!response.ok) return null
     const data = await response.json()
     return { user: { _id: data._id, username: data.username, email: data.email, name: data.name }, token: data.token }
   } catch { return null }
+  finally { clearTimeout(timer) }
 }
 
 const tryBackendRegister = async (username: string, email: string, password: string, name?: string): Promise<{ user: User; token: string } | null> => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 20 * 1000)
   try {
     const response = await fetch('/api/users/register', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, email, password, name }),
+      signal: controller.signal,
     })
     if (!response.ok) return null
     const data = await response.json()
     return { user: { _id: data._id, username: data.username, email: data.email, name: data.name }, token: data.token }
   } catch { return null }
+  finally { clearTimeout(timer) }
 }
 
 // 后端刷新 token（用旧 token 换新 token）
@@ -310,6 +334,84 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [token, refreshToken])
 
+  // ===== 本地 token 自动升级为后端 JWT =====
+  // 当用户因 Render 冷启动等原因用 localLogin 兜底登录后，
+  // 后端恢复后自动用 sessionStorage 中保存的凭据重新登录，
+  // 把 local.xxx token 升级为后端 JWT，从而启用云端同步。
+  // 策略：先 10 秒探测一次（应对刚登录后端就起来），失败后改为 30 秒间隔。
+  const upgradeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const upgradingRef = useRef(false)
+
+  useEffect(() => {
+    // 清理上次的定时器
+    if (upgradeTimerRef.current) {
+      clearInterval(upgradeTimerRef.current)
+      upgradeTimerRef.current = null
+    }
+
+    // 仅当持有 local token 时启动升级流程
+    if (!token || !token.startsWith('local.')) return
+
+    const pending = sessionStorage.getItem('sw_pending_login')
+    if (!pending) return // 没有保存的凭据（可能是 initAuth 恢复的旧 local token），无法升级
+
+    let credentials: { username: string; password: string } | null = null
+    try {
+      credentials = JSON.parse(pending)
+    } catch {
+      return
+    }
+    if (!credentials) return
+
+    const attemptUpgrade = async () => {
+      if (upgradingRef.current) return
+      upgradingRef.current = true
+      try {
+        // 当前 token 已被升级（用户重新登录或别的 effect 已处理）就停止
+        const currentToken = localStorage.getItem(LOCAL_TOKEN_KEY)
+        if (!currentToken || !currentToken.startsWith('local.')) return
+
+        const result = await tryBackendLogin(credentials.username, credentials.password)
+        if (result) {
+          // 升级成功：写入新 token，触发上层 state 变更，
+          // 同时清掉 pending 凭据（敏感信息用完即焚）
+          localStorage.setItem(LOCAL_TOKEN_KEY, result.token)
+          localStorage.setItem('sw_current_user', JSON.stringify(result.user))
+          sessionStorage.removeItem('sw_pending_login')
+          setToken(result.token)
+          setUser(result.user)
+          // 通知 api.ts：新的 JWT token 已就绪
+          window.dispatchEvent(new CustomEvent('auth:token-refreshed', { detail: result.token }))
+        }
+      } catch {
+        // 静默失败，等下一个间隔再试
+      } finally {
+        upgradingRef.current = false
+      }
+    }
+
+    // 暴露立即重试入口：用户在 CloudSyncPanel 点击"重试连接"时触发
+    const onRetryUpgrade = () => {
+      attemptUpgrade()
+    }
+    window.addEventListener('auth:retry-upgrade', onRetryUpgrade)
+
+    // 10 秒后做首次尝试（刚登录后端可能在准备中，等它一下）
+    const firstShot = setTimeout(attemptUpgrade, 10 * 1000)
+    // 之后每 30 秒探测一次
+    upgradeTimerRef.current = setInterval(attemptUpgrade, 30 * 1000)
+
+    return () => {
+      clearTimeout(firstShot)
+      window.removeEventListener('auth:retry-upgrade', onRetryUpgrade)
+      if (upgradeTimerRef.current) {
+        clearInterval(upgradeTimerRef.current)
+        upgradeTimerRef.current = null
+      }
+      upgradingRef.current = false
+    }
+  }, [token])
+
   // ===== 登录 =====
   const login = async (username: string, password: string) => {
     setLoading(true)
@@ -323,6 +425,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else {
         loggedInUser = localLogin(username, password)
         newToken = generateLocalToken(loggedInUser._id)
+        // 保存凭据到 sessionStorage，用于后端恢复后自动升级 token
+        sessionStorage.setItem('sw_pending_login', JSON.stringify({ username, password }))
       }
 
       localStorage.setItem(LOCAL_TOKEN_KEY, newToken)

@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { CloudUpload, CloudDownload, RefreshCw, Cloud, CloudOff, CheckCircle, AlertCircle, Loader2, Settings, X } from 'lucide-react'
+import { CloudUpload, CloudDownload, RefreshCw, Cloud, CloudOff, CheckCircle, AlertCircle, Loader2, Settings, X, Wifi } from 'lucide-react'
 import { useCloudSync } from '@/hooks/useCloudSync'
 import { cn } from '@/lib/utils'
 
 export default function CloudSyncPanel({ compact = false }: { compact?: boolean }) {
   const { status, syncing, error, autoSync, upload, pull, refreshStatus, toggleAutoSync } = useCloudSync()
   const [showDetail, setShowDetail] = useState(false)
+  const [retrying, setRetrying] = useState(false)
 
   const configured = status?.configured ?? false
   const lastSync = status?.lastSyncAt
@@ -13,6 +14,17 @@ export default function CloudSyncPanel({ compact = false }: { compact?: boolean 
     : null
   const isLocalMode = !configured && !!error && error.includes('本地模式')
   const isAuthError = !configured && !!error && error.includes('重新登录')
+
+  // 触发 AuthContext 立即重试后端登录，把 local token 升级为 JWT
+  const handleRetryUpgrade = async () => {
+    setRetrying(true)
+    window.dispatchEvent(new CustomEvent('auth:retry-upgrade'))
+    // 等几秒让升级走完，再刷新同步状态
+    setTimeout(async () => {
+      await refreshStatus()
+      setRetrying(false)
+    }, 2500)
+  }
 
   const handleUpload = async () => {
     const result = await upload()
@@ -52,17 +64,29 @@ export default function CloudSyncPanel({ compact = false }: { compact?: boolean 
           )}
         </div>
         {!configured && error && (
-          <div className={cn(
-            "px-3 text-xs flex items-start gap-1",
-            isLocalMode ? "text-cream-500" : isAuthError ? "text-blue-500" : "text-amber-600"
-          )}>
-            <AlertCircle className={cn(
-              "w-3 h-3 mt-0.5 flex-shrink-0",
-              isLocalMode && "text-cream-400",
-              isAuthError && "text-blue-400"
-            )} />
-            <span>{error}</span>
-          </div>
+          <>
+            <div className={cn(
+              "px-3 text-xs flex items-start gap-1",
+              isLocalMode ? "text-cream-500" : isAuthError ? "text-blue-500" : "text-amber-600"
+            )}>
+              <AlertCircle className={cn(
+                "w-3 h-3 mt-0.5 flex-shrink-0",
+                isLocalMode && "text-cream-400",
+                isAuthError && "text-blue-400"
+              )} />
+              <span>{error}</span>
+            </div>
+            {isLocalMode && (
+              <button
+                onClick={handleRetryUpgrade}
+                disabled={retrying}
+                className="mx-2 mt-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs rounded-lg bg-cream-100 hover:bg-cream-200 text-cream-700 transition-colors disabled:opacity-50"
+              >
+                {retrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wifi className="w-3 h-3" />}
+                {retrying ? '正在重连...' : '重试连接云端'}
+              </button>
+            )}
+          </>
         )}
         {configured && (
           <div className="flex gap-1.5 px-2">
