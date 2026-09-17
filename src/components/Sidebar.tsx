@@ -16,10 +16,13 @@ import {
   Users,
   FileCheck,
   X,
+  LogOut,
+  UserCircle,
 } from 'lucide-react';
 import { navGroups } from '@/data/mock';
 import { cn } from '@/lib/utils';
 import CloudSyncPanel from './CloudSyncPanel';
+import { useAuth } from '@/context/AuthContext';
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Mic,
@@ -39,9 +42,17 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const handleNavigate = (path: string) => {
     navigate(path);
+    onClose();
+  };
+
+  // 切换账号：登出当前账号并跳回登录页
+  const handleSwitchAccount = () => {
+    logout();
+    navigate('/login');
     onClose();
   };
 
@@ -129,6 +140,25 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
           <Terminal className="w-4 h-4" />
           <span>销售工作台 v2.0</span>
         </div>
+
+        {/* 当前账号信息 + 切换账号 */}
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-cream-100/60">
+          <UserCircle className="w-5 h-5 text-cream-700 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs text-cream-500">当前账号</div>
+            <div className="text-sm font-medium text-cream-900 truncate">
+              {user?.name || user?.username || '未登录'}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={handleSwitchAccount}
+          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-cream-700 hover:bg-cream-100 transition-colors group"
+        >
+          <LogOut className="w-[18px] h-[18px] text-cream-600 group-hover:text-cream-700" />
+          <span className="text-sm font-medium">切换账号</span>
+        </button>
+
         <button className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-cream-700 hover:bg-cream-100 transition-colors">
           <span className="text-sm font-medium">控制台日志</span>
           <div className="flex items-center gap-1 ml-auto">
