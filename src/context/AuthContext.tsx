@@ -18,7 +18,20 @@ interface AuthContextType {
   logoutMessage: string | null
   /** 尝试用旧 token 换新 token。返回成功/失败。供 API 拦截器使用。 */
   refreshToken: () => Promise<boolean>
+  /**
+   * 立即重试把 local token 升级为后端 JWT（用户在 CloudSyncPanel 点"重试连接云端"时调用）。
+   * 内部策略：先 login，失败则 ping 后端 → 后端可达则 register（解决后端内存 DB 丢用户场景）。
+   * 返回 { success, reason }，调用方可据此展示准确提示。
+   */
+  retryUpgrade: () => Promise<{ success: boolean; reason?: UpgradeFailReason }>
 }
+
+type UpgradeFailReason =
+  | 'no_credentials'        // 未保存登录凭据（用户从未做过本地模式兜底登录）
+  | 'invalid_credentials'   // 凭据已损坏/无法解析
+  | 'backend_unreachable'   // 后端健康检查不可达
+  | 'register_failed'       // 后端可达但 login/register 都失败
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
@@ -348,73 +361,109 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [token, refreshToken])
 
-  // ===== 本地 token 自动升级为后端 JWT =====
+  // ===== 本地 token 升级为后端 JWT =====
   // 当用户因 Render 冷启动等原因用 localLogin 兜底登录后，
-  // 后端恢复后自动用 localStorage 中保存的凭据重新登录，
+  // 后端恢复后用 localStorage 中保存的凭据重新登录，
   // 把 local.xxx token 升级为后端 JWT，从而启用云端同步。
-  // 策略：先 10 秒探测一次（应对刚登录后端就起来），失败后改为 30 秒间隔。
-  // 注意：凭据存在 localStorage 而非 sessionStorage，确保关闭标签页重开后仍能升级。
+  //
+  // 策略：
+  //   1. 先 login（用户已注册过）
+  //   2. login 失败 → ping 后端
+  //      - 后端不可达 → 等下次重试
+  //      - 后端可达但 login 失败 → 用户在后端不存在（内存 DB 重启丢用户）→ register
+  //
+  // 注：retryUpgrade 返回 Promise<{success, reason}>，让 CloudSyncPanel 能展示准确提示。
   const upgradeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const upgradingRef = useRef(false)
+  const upgradePromiseRef = useRef<Promise<{ success: boolean; reason?: UpgradeFailReason }> | null>(null)
 
+  const retryUpgrade = useCallback(async (): Promise<{ success: boolean; reason?: UpgradeFailReason }> => {
+    // 非 local token 视为已升级
+    const cur = localStorage.getItem(LOCAL_TOKEN_KEY) || ''
+    if (!cur.startsWith('local.')) return { success: true }
+
+    // 并发去重：如果已有重试在进行中，复用同一个 promise
+    if (upgradePromiseRef.current) return upgradePromiseRef.current
+
+    upgradePromiseRef.current = (async () => {
+      upgradingRef.current = true
+      try {
+        // 取出之前本地登录时保存的凭据
+        const pending = localStorage.getItem('sw_pending_login')
+        if (!pending) return { success: false, reason: 'no_credentials' }
+
+        let credentials: { username: string; password: string } | null = null
+        try { credentials = JSON.parse(pending) }
+        catch { return { success: false, reason: 'invalid_credentials' } }
+        if (!credentials || !credentials.username || !credentials.password) {
+          return { success: false, reason: 'invalid_credentials' }
+        }
+
+        // 1) 先 login
+        let result = await tryBackendLogin(credentials.username, credentials.password)
+
+        // 2) login 失败 → 区分"后端不可达" vs "后端可达但用户不存在"
+        if (!result) {
+          const healthOk = await pingBackendHealth(8000)
+          if (!healthOk) return { success: false, reason: 'backend_unreachable' }
+
+          // 后端可达但 login 失败 → 后端 DB 里没这个用户（内存 DB 重启丢数据）
+          // 用现有 sw_current_user 的 email/name 注册一个新账号
+          let email = '', name = ''
+          try {
+            const cu = JSON.parse(localStorage.getItem('sw_current_user') || '{}')
+            email = cu.email || ''
+            name = cu.name || credentials.username
+          } catch { /* ignore */ }
+          if (!email) email = `${credentials.username}@local.placeholder`
+
+          const regResult = await tryBackendRegister(credentials.username, email, credentials.password, name)
+          if (regResult) {
+            result = regResult
+          } else {
+            return { success: false, reason: 'register_failed' }
+          }
+        }
+
+        // 升级成功：写入新 token，清掉 pending 凭据（敏感信息用完即焚）
+        localStorage.setItem(LOCAL_TOKEN_KEY, result.token)
+        localStorage.setItem('sw_current_user', JSON.stringify(result.user))
+        localStorage.removeItem('sw_pending_login')
+        setToken(result.token)
+        setUser(result.user)
+        // 通知 api.ts：新 JWT token 已就绪
+        window.dispatchEvent(new CustomEvent('auth:token-refreshed', { detail: result.token }))
+        return { success: true }
+      } catch {
+        // 任何意外异常都视为后端不可达，避免误导用户
+        return { success: false, reason: 'backend_unreachable' }
+      } finally {
+        upgradingRef.current = false
+        upgradePromiseRef.current = null
+      }
+    })()
+
+    return upgradePromiseRef.current
+  }, [])
+
+  // 自动升级：持有 local token 时每 30 秒探测一次（不打扰用户）
+  // 用户在 CloudSyncPanel 手动点"重试连接云端"会直接 await retryUpgrade()，
+  // 这里只负责后台兜底，所以用事件桥接保留兼容性。
   useEffect(() => {
-    // 清理上次的定时器
     if (upgradeTimerRef.current) {
       clearInterval(upgradeTimerRef.current)
       upgradeTimerRef.current = null
     }
 
-    // 仅当持有 local token 时启动升级流程
     if (!token || !token.startsWith('local.')) return
 
-    const pending = localStorage.getItem('sw_pending_login')
-    if (!pending) return // 没有保存的凭据，无法升级
-
-    let credentials: { username: string; password: string } | null = null
-    try {
-      credentials = JSON.parse(pending)
-    } catch {
-      return
-    }
-    if (!credentials) return
-
-    const attemptUpgrade = async () => {
-      if (upgradingRef.current) return
-      upgradingRef.current = true
-      try {
-        // 当前 token 已被升级（用户重新登录或别的 effect 已处理）就停止
-        const currentToken = localStorage.getItem(LOCAL_TOKEN_KEY)
-        if (!currentToken || !currentToken.startsWith('local.')) return
-
-        const result = await tryBackendLogin(credentials.username, credentials.password)
-        if (result) {
-          // 升级成功：写入新 token，触发上层 state 变更，
-          // 同时清掉 pending 凭据（敏感信息用完即焚）
-          localStorage.setItem(LOCAL_TOKEN_KEY, result.token)
-          localStorage.setItem('sw_current_user', JSON.stringify(result.user))
-          localStorage.removeItem('sw_pending_login') // 升级成功，清除保存的凭据
-          setToken(result.token)
-          setUser(result.user)
-          // 通知 api.ts：新的 JWT token 已就绪
-          window.dispatchEvent(new CustomEvent('auth:token-refreshed', { detail: result.token }))
-        }
-      } catch {
-        // 静默失败，等下一个间隔再试
-      } finally {
-        upgradingRef.current = false
-      }
-    }
-
-    // 暴露立即重试入口：用户在 CloudSyncPanel 点击"重试连接"时触发
-    const onRetryUpgrade = () => {
-      attemptUpgrade()
-    }
+    const onRetryUpgrade = () => { retryUpgrade().catch(() => {}) }
     window.addEventListener('auth:retry-upgrade', onRetryUpgrade)
 
     // 10 秒后做首次尝试（刚登录后端可能在准备中，等它一下）
-    const firstShot = setTimeout(attemptUpgrade, 10 * 1000)
+    const firstShot = setTimeout(() => { retryUpgrade().catch(() => {}) }, 10 * 1000)
     // 之后每 30 秒探测一次
-    upgradeTimerRef.current = setInterval(attemptUpgrade, 30 * 1000)
+    upgradeTimerRef.current = setInterval(() => { retryUpgrade().catch(() => {}) }, 30 * 1000)
 
     return () => {
       clearTimeout(firstShot)
@@ -425,7 +474,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       upgradingRef.current = false
     }
-  }, [token])
+  }, [token, retryUpgrade])
 
   // ===== 登录 =====
   const login = async (username: string, password: string) => {
@@ -495,7 +544,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, loading, logoutMessage, refreshToken }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, loading, logoutMessage, refreshToken, retryUpgrade }}>
       {children}
     </AuthContext.Provider>
   )

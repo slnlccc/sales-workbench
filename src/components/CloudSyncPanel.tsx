@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { CloudUpload, CloudDownload, RefreshCw, Cloud, CloudOff, CheckCircle, AlertCircle, Loader2, Settings, X, Wifi } from 'lucide-react'
 import { useCloudSync } from '@/hooks/useCloudSync'
+import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
 
 export default function CloudSyncPanel({ compact = false }: { compact?: boolean }) {
   const { status, syncing, error, autoSync, upload, pull, refreshStatus, toggleAutoSync } = useCloudSync()
+  const { retryUpgrade } = useAuth()
   const [showDetail, setShowDetail] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [retryMsg, setRetryMsg] = useState<string | null>(null)
@@ -16,25 +18,34 @@ export default function CloudSyncPanel({ compact = false }: { compact?: boolean 
   const isLocalMode = !configured && !!error && error.includes('本地模式')
   const isAuthError = !configured && !!error && error.includes('重新登录')
 
-  // 触发 AuthContext 立即重试后端登录，把 local token 升级为 JWT
+  // 立即重试：调用 AuthContext.retryUpgrade，根据真实结果显示准确提示。
+  // 不再用 setTimeout 猜结果，避免后端登录耗时 > 等待时间时误报"连接失败"。
+  // 后端使用内存 MongoDB，重启后会丢用户，所以 retryUpgrade 内部会先 login 失败再 register。
   const handleRetryUpgrade = async () => {
     setRetrying(true)
     setRetryMsg(null)
-    window.dispatchEvent(new CustomEvent('auth:retry-upgrade'))
-    // 给后端登录留足时间（Render 冷启动可能需要 20-30 秒）
-    setTimeout(async () => {
-      await refreshStatus()
-      setRetrying(false)
-      // 通过检查 token 是否仍是 local token 判断升级是否成功
-      const token = localStorage.getItem('token')
-      if (token && token.startsWith('local.')) {
-        setRetryMsg('连接失败：后端可能仍在启动中，请稍后重试')
-      } else {
+    try {
+      const result = await retryUpgrade()
+      if (result.success) {
+        await refreshStatus()
         setRetryMsg('已连接云端，数据同步已启用')
+      } else {
+        const reasonMap: Record<string, string> = {
+          'no_credentials': '无法升级：未保存登录凭据，请退出后重新登录',
+          'invalid_credentials': '凭据已失效，请退出后重新登录',
+          'backend_unreachable': '后端不可达，请稍后重试',
+          'register_failed': '后端拒绝注册，请切换账号或联系管理员',
+        }
+        const reason = result.reason ? (reasonMap[result.reason] || result.reason) : '未知原因'
+        setRetryMsg('连接失败：' + reason)
       }
-      // 3 秒后清除提示
-      setTimeout(() => setRetryMsg(null), 3000)
-    }, 3000)
+    } catch (e: any) {
+      setRetryMsg('连接失败：' + (e?.message || '未知错误'))
+    } finally {
+      setRetrying(false)
+      // 4 秒后清除提示
+      setTimeout(() => setRetryMsg(null), 4000)
+    }
   }
 
   const handleUpload = async () => {
