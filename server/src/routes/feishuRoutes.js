@@ -148,6 +148,18 @@ router.post('/sync-user', async (req, res) => {
   const userRefreshToken = req.body?.userRefreshToken
   const userExpiresAt = req.body?.userExpiresAt // 毫秒时间戳
 
+  // 调试日志（定位飞书返回 "Invalid access token" 问题）
+  console.log('[sync-user] 收到请求:', {
+    hasAppId: !!appId,
+    hasAppSecret: !!appSecret,
+    hasUserAccessToken: !!userAccessToken,
+    userAccessTokenPrefix: userAccessToken ? userAccessToken.substring(0, 10) : '(none)',
+    userAccessTokenLength: userAccessToken ? userAccessToken.length : 0,
+    hasUserRefreshToken: !!userRefreshToken,
+    userExpiresAt,
+    userExpiresAtPast: userExpiresAt ? Date.now() > userExpiresAt : 'n/a',
+  })
+
   if (!appId || !appSecret) {
     return res.status(200).json({ source: 'mock', items: [], message: '飞书应用未配置' })
   }

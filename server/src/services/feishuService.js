@@ -218,6 +218,14 @@ async function searchMinutesAsUser(userAccessToken, options = {}) {
   const startTime = String(Math.floor((now - days * 24 * 60 * 60 * 1000) / 1000))
   const endTime = String(Math.floor(now / 1000))
 
+  // 调试日志：确认 token 拼接正确
+  console.log('[searchMinutesAsUser] 调飞书 search:', {
+    tokenPrefix: userAccessToken ? userAccessToken.substring(0, 15) + '...' : '(none)',
+    tokenLength: userAccessToken ? userAccessToken.length : 0,
+    authHeader: userAccessToken ? `Bearer ${userAccessToken.substring(0, 15)}...` : '(none)',
+    startTime, endTime, ownerIds, pageSize,
+  })
+
   let res
   try {
     res = await http.post(
