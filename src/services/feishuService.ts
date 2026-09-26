@@ -320,6 +320,7 @@ export function feishuToMeetingItem(m: FeishuMinutesItem): MeetingItem {
     todos: extractTodosFromText(content),
     insights: extractInsightsFromText(content),
     completed: false,
+    url: m.url,
   };
 }
 

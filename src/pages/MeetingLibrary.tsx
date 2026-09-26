@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   BookOpen, Search, ChevronRight, Clock, Tag, User, CheckCircle2,
-  Lightbulb, Sparkles, Filter, X,
+  Lightbulb, Sparkles, Filter, X, ExternalLink, Trash2,
   Cloud, Zap, Brain, ListTodo, FileText, Settings, Save, AlertCircle, Check,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { cn } from '@/lib/utils';
+import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import {
   syncMeetingsFromFeishu, getFeishuConfig, saveFeishuConfig,
   startUserAuth, type FeishuConfig,
@@ -22,6 +24,10 @@ export default function MeetingLibrary() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState('未同步');
   const [syncError, setSyncError] = useState('');
+
+  // 跳转 + 工作台 store（用于把待办推到日程、知识沉淀推到知识库）
+  const navigate = useNavigate();
+  const { setActiveTab, addScheduleFromTodo, addMemoKnowledge } = useWorkbenchStore();
 
   // 飞书配置弹窗
   const [showConfig, setShowConfig] = useState(false);
@@ -90,29 +96,36 @@ export default function MeetingLibrary() {
   const insightCount = items.reduce((acc, m) => acc + m.insights.length, 0);
   const feishuCount = items.filter((m) => m.source === 'feishu').length;
 
-  const toggleTodo = (itemId: string, todoIdx: number) => {
-    setItems((prev) =>
-      prev.map((m) => {
-        if (m.id === itemId) {
-          const newTodos = [...m.todos];
-          newTodos[todoIdx] = newTodos[todoIdx].startsWith('✓ ')
-            ? newTodos[todoIdx].slice(2)
-            : '✓ ' + newTodos[todoIdx];
-          return { ...m, todos: newTodos };
-        }
-        return m;
-      })
-    );
-    if (selected?.id === itemId) {
-      setSelected((prev) => {
-        if (!prev) return null;
-        const newTodos = [...prev.todos];
-        newTodos[todoIdx] = newTodos[todoIdx].startsWith('✓ ')
-          ? newTodos[todoIdx].slice(2)
-          : '✓ ' + newTodos[todoIdx];
-        return { ...prev, todos: newTodos };
-      });
-    }
+  // 删除会议纪要
+  const handleDelete = (itemId: string) => {
+    if (!window.confirm('确定删除这条会议纪要？删除后不可恢复。')) return;
+    setItems((prev) => prev.filter((m) => m.id !== itemId));
+    if (selected?.id === itemId) setSelected(null);
+  };
+
+  // 待办事项 → 跳转到语音工作台 → 日程日历（并把这条待办创建为日程）
+  const handleTodoClick = (todo: string) => {
+    const text = todo.startsWith('✓ ') ? todo.slice(2) : todo;
+    // 推一条新日程到工作台 store
+    addScheduleFromTodo(text, new Date().toISOString().slice(0, 10), undefined);
+    // 切到 calendar tab，然后跳转
+    setActiveTab('calendar');
+    navigate('/voice-workbench');
+  };
+
+  // 知识沉淀 → 跳转到语音工作台 → 备忘录 → 知识库沉淀（并加一条）
+  const handleInsightClick = (insight: string) => {
+    // 截短做标题，全句做摘要
+    const title = insight.length > 24 ? insight.slice(0, 24) + '…' : insight;
+    addMemoKnowledge({
+      id: `kb-${Date.now()}`,
+      title,
+      summary: insight,
+      source: '会议知识库',
+      createdAt: new Date().toISOString(),
+    });
+    setActiveTab('memo');
+    navigate('/voice-workbench');
   };
 
   return (
@@ -303,7 +316,19 @@ export default function MeetingLibrary() {
                         </span>
                       )}
                     </div>
-                    <ChevronRight className="w-4 h-4 text-coffee-400 group-hover:translate-x-0.5 transition-transform" />
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(m.id);
+                        }}
+                        title="删除"
+                        className="p-1 rounded text-coffee-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <ChevronRight className="w-4 h-4 text-coffee-400 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
                   </div>
                   <h4 className="text-sm font-semibold text-coffee-900 mb-1.5 line-clamp-1">{m.title}</h4>
                   <p className="text-xs text-coffee-500 line-clamp-2 mb-2 leading-relaxed">{m.content}</p>
@@ -358,9 +383,29 @@ export default function MeetingLibrary() {
                           )}
                         </div>
                       </div>
-                      <button onClick={() => setSelected(null)} className="text-coffee-400 hover:text-coffee-600">
-                        <X className="w-5 h-5" />
-                      </button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {selected.url && (
+                          <a
+                            href={selected.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="查看飞书妙记原文"
+                            className="p-1.5 rounded text-indigo-500 hover:bg-indigo-50 transition-colors"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        )}
+                        <button
+                          onClick={() => handleDelete(selected.id)}
+                          title="删除"
+                          className="p-1.5 rounded text-coffee-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setSelected(null)} className="text-coffee-400 hover:text-coffee-600">
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {selected.tags.map((t) => (
@@ -396,24 +441,26 @@ export default function MeetingLibrary() {
                         return (
                           <div
                             key={idx}
-                            onClick={() => toggleTodo(selected.id, idx)}
+                            onClick={() => handleTodoClick(todo)}
+                            title="点击跳转到日程日历"
                             className={cn(
-                              'flex items-start gap-2 p-2.5 rounded-lg cursor-pointer transition-colors',
-                              done ? 'bg-emerald-50' : 'bg-white hover:bg-amber-50'
+                              'flex items-start gap-2 p-2.5 rounded-lg cursor-pointer transition-all hover:shadow-soft hover:translate-x-0.5',
+                              done ? 'bg-emerald-50' : 'bg-white hover:bg-amber-50 hover:border-amber-200 border border-transparent'
                             )}
                           >
                             <div className={cn(
                               'w-4 h-4 rounded border-2 flex items-center justify-center mt-0.5 flex-shrink-0',
-                              done ? 'bg-emerald-500 border-emerald-500' : 'border-coffee-300'
+                              done ? 'bg-emerald-500 border-emerald-500' : 'border-amber-400'
                             )}>
                               {done && <CheckCircle2 className="w-3 h-3 text-white" />}
                             </div>
                             <span className={cn(
-                              'text-sm',
+                              'text-sm flex-1',
                               done ? 'text-coffee-400 line-through' : 'text-coffee-700'
                             )}>
                               {done ? todo.slice(2) : todo}
                             </span>
+                            <ChevronRight className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                           </div>
                         );
                       })}
@@ -433,9 +480,15 @@ export default function MeetingLibrary() {
                       {selected.insights.length === 0 ? (
                         <p className="text-xs text-coffee-400">本次会议未提炼出知识沉淀</p>
                       ) : selected.insights.map((insight, idx) => (
-                        <div key={idx} className="flex items-start gap-2 p-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg">
+                        <div
+                          key={idx}
+                          onClick={() => handleInsightClick(insight)}
+                          title="点击跳转到知识库沉淀"
+                          className="flex items-start gap-2 p-3 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg cursor-pointer hover:shadow-soft hover:translate-x-0.5 transition-all border border-transparent hover:border-emerald-200"
+                        >
                           <Lightbulb className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                          <p className="text-sm text-coffee-700 leading-relaxed">{insight}</p>
+                          <p className="text-sm text-coffee-700 leading-relaxed flex-1">{insight}</p>
+                          <ChevronRight className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
                         </div>
                       ))}
                     </div>

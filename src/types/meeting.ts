@@ -14,4 +14,5 @@ export interface MeetingItem {
   todos: string[];
   insights: string[];
   completed: boolean;
+  url?: string;              // 飞书妙记原文链接
 }
