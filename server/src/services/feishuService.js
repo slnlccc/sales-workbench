@@ -289,6 +289,8 @@ async function searchMinutesAsUser(userAccessToken, options = {}) {
       let title = titleFromDisplay
       let summary = m.meta_data?.description || ''
       let createTime = nowSec
+      let chapters = []
+      let keywords = []
 
       // 调 detail API 拉真实 title + summary（用户身份，可读用户私有妙记详情）
       if (token) {
@@ -297,6 +299,8 @@ async function searchMinutesAsUser(userAccessToken, options = {}) {
           if (detail?.title) title = detail.title
           if (detail?.summary) summary = detail.summary
           if (detail?.create_time) createTime = detail.create_time
+          if (detail?.chapters) chapters = detail.chapters
+          if (detail?.keywords) keywords = detail.keywords
         } catch (e) {
           // 详情拉失败不影响列表，用 search 的 fallback 数据
           console.warn(`[searchMinutesAsUser] 拉详情失败 token=${token}:`, e.message)
@@ -311,6 +315,8 @@ async function searchMinutesAsUser(userAccessToken, options = {}) {
         create_time: createTime,
         url: m.meta_data?.app_link || m.url || '',
         summary,
+        chapters,
+        keywords,
       }
     })
   )
@@ -345,8 +351,12 @@ async function fetchMinuteDetail(userAccessToken, minuteToken) {
     // 基础信息失败时仍可尝试 artifacts，不直接抛
   }
 
-  // 2) AI 产物（summary / transcript）
+  // 2) AI 产物（summary / transcript / minute_chapters / keywords）
+  //    飞书返回结构：data 直接含 summary(string)、transcript、minute_chapters、keywords
+  //    不是嵌套在 data.artifacts 里（之前字段路径错了）
   let summary = ''
+  let chapters = []
+  let keywords = []
   try {
     const res = await http.get(
       `${FEISHU_BASE}/minutes/v1/minutes/${minuteToken}/artifacts`,
@@ -360,15 +370,16 @@ async function fetchMinuteDetail(userAccessToken, minuteToken) {
     )
     const data = res.data || {}
     if (data.code === 0) {
-      const artifacts = data.data?.artifacts || []
-      const summaryArt = artifacts.find(a => a.type === 'summary' || a.name === 'summary')
-      summary = summaryArt?.content || summaryArt?.text || ''
+      const d = data.data || {}
+      summary = d.summary || ''
+      chapters = d.minute_chapters || []
+      keywords = d.keywords || []
     }
   } catch (e) {
     // artifacts 失败不抛，只返回基础信息
   }
 
-  return { title, summary, create_time: createTime }
+  return { title, summary, create_time: createTime, chapters, keywords }
 }
 
 module.exports = {

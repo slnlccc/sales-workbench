@@ -153,6 +153,13 @@ export function clearFeishuConfig() {
 }
 
 // 飞书返回的妙记原始结构（节选）
+interface FeishuChapter {
+  start_ms?: string;
+  stop_ms?: string;
+  summary_content?: string;
+  title?: string;
+}
+
 interface FeishuMinutesItem {
   minutes_id: string;
   title: string;
@@ -163,6 +170,8 @@ interface FeishuMinutesItem {
   transcript?: string;        // 转写文本
   summary?: string;           // AI 摘要
   attendees?: string[];
+  chapters?: FeishuChapter[]; // AI 智能章节
+  keywords?: string[];        // AI 关键词
 }
 
 // 1) 获取 tenant_access_token
@@ -238,7 +247,39 @@ export function extractInsightsFromText(text: string): string[] {
 
 // 4) 把飞书妙记转成 MeetingItem
 export function feishuToMeetingItem(m: FeishuMinutesItem): MeetingItem {
-  const content = m.transcript || m.summary || '';
+  // 把 summary + chapters + keywords 拼成完整会议内容
+  // chapters 是飞书 AI 自动分章节总结，keywords 是关键词条目
+  const parts: string[] = [];
+
+  if (m.summary) {
+    parts.push('【AI 总结】');
+    parts.push(m.summary);
+    parts.push('');
+  }
+
+  if (m.chapters && m.chapters.length > 0) {
+    parts.push('【智能章节】');
+    m.chapters.forEach((ch, idx) => {
+      const title = ch.title || `章节 ${idx + 1}`;
+      const content = ch.summary_content || '';
+      parts.push(`${idx + 1}. ${title}`);
+      if (content) parts.push(content);
+    });
+    parts.push('');
+  }
+
+  if (m.keywords && m.keywords.length > 0) {
+    parts.push('【关键词】');
+    parts.push(m.keywords.join('、'));
+    parts.push('');
+  }
+
+  if (m.transcript) {
+    parts.push('【转写原文】');
+    parts.push(m.transcript);
+  }
+
+  const content = parts.join('\n');
 
   // create_time 可能是：0（拉详情失败 fallback）、数字秒、数字毫秒、ISO 字符串、或无效值
   // 用 try-catch 兜底，任何异常都 fallback 用今天日期
