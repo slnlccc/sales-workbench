@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const { protect } = require('../middleware/auth')
+const { protect, protectOrGuest } = require('../middleware/auth')
 const {
   syncMinutes,
   fetchUserAccessToken,
@@ -95,9 +95,11 @@ router.post('/exchange-user-token', async (req, res) => {
 })
 
 // =====================================
-// 路由分组 2：需登录（带 workbench JWT）
+// 路由分组 2：飞书同步（用 protectOrGuest，飞书 user token 是真正鉴权）
+// 飞书 sync 不依赖工作台用户身份（飞书 user_access_token 才是凭证），
+// 即便工作台 JWT 过期也能跑通，避免"refresh 失败→logout→无法同步"死锁
 // =====================================
-router.use(protect)
+router.use(protectOrGuest)
 
 /**
  * POST /api/feishu/sync
