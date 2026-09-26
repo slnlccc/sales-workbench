@@ -171,20 +171,14 @@ async function registerWebhook(url: string) {
 import { mockMeetings } from '@/data/meetings';
 
 // 调后端代理拉取真实妙记（后端用 axios 调飞书 API，绕过浏览器 CORS）
+// 走统一 request 函数：401 时会自动 refresh token + 重试，避免直接抛"未授权"
+import { request } from '@/services/api';
+
 async function fetchFromBackend(cfg: FeishuConfig): Promise<FeishuMinutesItem[]> {
-  const token = localStorage.getItem('token') || '';
-  const res = await fetch('/api/feishu/sync', {
+  const data = await request('/feishu/sync', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
     body: JSON.stringify({ appId: cfg.appId, appSecret: cfg.appSecret }),
   });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data?.message || `HTTP ${res.status}`);
-  }
   if (data.source !== 'real' || !Array.isArray(data.items) || data.items.length === 0) {
     // 后端拉失败或返回空 → 抛错让上层走 mock 兜底
     throw new Error(data?.message || '后端未返回真实妙记数据');
