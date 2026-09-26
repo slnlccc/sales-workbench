@@ -407,8 +407,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const healthOk = await pingBackendHealth(8000)
           if (!healthOk) return { success: false, reason: 'backend_unreachable' }
 
-          // 后端可达但 login 失败 → 后端 DB 里没这个用户（内存 DB 重启丢数据）
-          // 用现有 sw_current_user 的 email/name 注册一个新账号
+          // 后端可达但 login 失败：有两种可能
+          //   a) 后端 DB 里没这个用户（内存 DB 重启丢数据）→ 走 register
+          //   b) 后端冷启动未完全就绪 / 网络抖动 → login 重试可能就成功了
+          // 先尝试 register，register 返回"已存在"说明用户其实在后端存在，
+          // 再 login 一次通常就能拿到 token。
           let email = '', name = ''
           try {
             const cu = JSON.parse(localStorage.getItem('sw_current_user') || '{}')
@@ -421,7 +424,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (regResult) {
             result = regResult
           } else {
-            return { success: false, reason: 'register_failed' }
+            // register 被拒（"用户名或邮箱已存在"说明用户其实已存在）
+            // 冷启动期间 login 可能因 token 验证/连接问题短暂失败 → 等 2s 再 login 一次
+            await new Promise(r => setTimeout(r, 2000))
+            const retryLogin = await tryBackendLogin(credentials.username, credentials.password)
+            if (retryLogin) {
+              result = retryLogin
+            } else {
+              return { success: false, reason: 'register_failed' }
+            }
           }
         }
 
