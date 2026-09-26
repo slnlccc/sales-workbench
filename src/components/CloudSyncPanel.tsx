@@ -148,7 +148,7 @@ export default function CloudSyncPanel({ compact = false }: { compact?: boolean 
         {showDetail && configured && (
           <div className="mx-2 p-3 rounded-xl bg-cream-50 border border-cream-200 space-y-2">
             <label className="flex items-center justify-between text-xs text-cream-600">
-              <span>自动同步（5分钟）</span>
+              <span>自动同步（5秒）</span>
               <button
                 onClick={toggleAutoSync}
                 className={cn(
@@ -237,7 +237,7 @@ export default function CloudSyncPanel({ compact = false }: { compact?: boolean 
           <label className="flex items-center justify-between py-2">
             <div>
               <span className="text-sm text-cream-700">自动同步</span>
-              <p className="text-xs text-cream-400">每5分钟自动上传数据</p>
+              <p className="text-xs text-cream-400">每5秒自动上传数据</p>
             </div>
             <button
               onClick={toggleAutoSync}

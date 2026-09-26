@@ -162,23 +162,29 @@ export default function MarketRadar() {
   const [radarLoading, setRadarLoading] = useState(false);
   const [radarLastUpdate, setRadarLastUpdate] = useState<string | null>(null);
 
-  // 拉取后端每日更新的雷达数据（行业动态/原材料价格/招投标/政策/展会/竞争对手）
-  const fetchRadarData = async () => {
+  // 拉取后端雷达数据（行业动态/原材料价格/招投标/政策/展会/竞争对手）
+  // forceRegenerate=true 时调用 POST /data/refresh 触发后端重新生成数据（AI 或兜底），
+  // false 时只读 GET /data/market-overview 缓存数据（用于首次加载）。
+  const fetchRadarData = async (forceRegenerate = false) => {
     setRadarLoading(true);
     try {
-      const result = await dataApi.marketOverview();
-      if (result.aiEnabled) {
-        if (Array.isArray(result.radarNews) && result.radarNews.length > 0) setRadarNews(result.radarNews);
-        if (Array.isArray(result.radarMaterials) && result.radarMaterials.length > 0) {
-          const checked = normalizeAndCheckTrends(result.radarMaterials);
-          setMaterials(checked);
-        }
-        if (Array.isArray(result.radarBidding) && result.radarBidding.length > 0) setRadarBidding(result.radarBidding);
-        if (Array.isArray(result.radarPolicies) && result.radarPolicies.length > 0) setRadarPolicies(result.radarPolicies);
-        if (Array.isArray(result.radarExhibitions) && result.radarExhibitions.length > 0) setRadarExhibitions(result.radarExhibitions);
-        if (Array.isArray(result.competitors) && result.competitors.length > 0) setCompetitors(result.competitors);
-        if (result.radarLastUpdate) setRadarLastUpdate(result.radarLastUpdate);
+      const result = forceRegenerate
+        ? await dataApi.refresh()
+        : await dataApi.marketOverview();
+
+      // 不再以 aiEnabled 作为更新前置条件：
+      // AI 未启用时后端仍会返回兜底数据，应当更新到 UI；
+      // 只有数组非空时才覆盖，避免把已有数据刷成空数组。
+      if (Array.isArray(result.radarNews) && result.radarNews.length > 0) setRadarNews(result.radarNews);
+      if (Array.isArray(result.radarMaterials) && result.radarMaterials.length > 0) {
+        const checked = normalizeAndCheckTrends(result.radarMaterials);
+        setMaterials(checked);
       }
+      if (Array.isArray(result.radarBidding) && result.radarBidding.length > 0) setRadarBidding(result.radarBidding);
+      if (Array.isArray(result.radarPolicies) && result.radarPolicies.length > 0) setRadarPolicies(result.radarPolicies);
+      if (Array.isArray(result.radarExhibitions) && result.radarExhibitions.length > 0) setRadarExhibitions(result.radarExhibitions);
+      if (Array.isArray(result.competitors) && result.competitors.length > 0) setCompetitors(result.competitors);
+      if (result.radarLastUpdate) setRadarLastUpdate(result.radarLastUpdate);
     } catch {
       // 后端不可用时使用静态兜底数据
     } finally {
@@ -213,7 +219,7 @@ export default function MarketRadar() {
 
   const refreshMaterials = () => {
     setMaterialsUpdating(true);
-    fetchRadarData().finally(() => setMaterialsUpdating(false));
+    fetchRadarData(true).finally(() => setMaterialsUpdating(false));
   };
 
   // 合并后端每日数据 + 静态数据（后端优先，去重）
@@ -422,7 +428,14 @@ export default function MarketRadar() {
                   <RefreshCw className={cn('w-3 h-3', radarLoading && 'animate-spin')} />
                   {radarLastUpdate ? `每日更新 · 上次更新：${new Date(radarLastUpdate).toLocaleString('zh-CN')}` : '每日 8:00 自动更新'}
                 </span>
-                <span>共 {filteredNews.length} 条</span>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => fetchRadarData(true)} disabled={radarLoading}
+                    className="flex items-center gap-1 px-2 py-1 bg-cream-200 text-cream-700 rounded-lg hover:bg-cream-300 disabled:opacity-50 transition-colors">
+                    <RefreshCw className={cn('w-3 h-3', radarLoading && 'animate-spin')} />
+                    <span>{radarLoading ? '刷新中...' : '刷新'}</span>
+                  </button>
+                  <span>共 {filteredNews.length} 条</span>
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -591,10 +604,10 @@ export default function MarketRadar() {
                   派克新材竞争对手动态（公众号/官网/招投标/新闻扒取）
                   {radarLastUpdate && <span className="ml-2">· 上次更新：{new Date(radarLastUpdate).toLocaleString('zh-CN')}</span>}
                 </span>
-                <button onClick={() => fetchRadarData()} disabled={radarLoading}
-                  className="flex items-center gap-1 px-2 py-1 bg-cream-200 text-cream-700 rounded-lg hover:bg-cream-300 disabled:opacity-50">
+                <button onClick={() => fetchRadarData(true)} disabled={radarLoading}
+                  className="flex items-center gap-1 px-2 py-1 bg-cream-200 text-cream-700 rounded-lg hover:bg-cream-300 disabled:opacity-50 transition-colors">
                   <RefreshCw className={cn('w-3 h-3', radarLoading && 'animate-spin')} />
-                  <span>刷新</span>
+                  <span>{radarLoading ? '刷新中...' : '刷新'}</span>
                 </button>
               </div>
               {/* 分类筛选器 */}
