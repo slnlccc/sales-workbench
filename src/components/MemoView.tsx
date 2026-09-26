@@ -131,7 +131,7 @@ export default function MemoView() {
                   <button
                     onClick={() => deleteMemoKnowledge(kb.id)}
                     title="删除知识条目"
-                    className="p-1 rounded text-coffee-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 ml-2 opacity-0 group-hover:opacity-100"
+                    className="p-1 rounded text-coffee-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 ml-2"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

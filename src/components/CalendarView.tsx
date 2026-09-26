@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  ChevronLeft, ChevronRight, Plus, CalendarClock, Sparkles, Phone, FileText, Check, X, Clock, User
+  ChevronLeft, ChevronRight, Plus, CalendarClock, Sparkles, Phone, FileText, Check, X, Clock, User, Trash2
 } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import type { WorkbenchRecord } from '@/types';
@@ -317,8 +317,12 @@ export default function CalendarView() {
         {/* 即将到来的日程 */}
         {scheduleRecords.filter((r) => !r.done).slice(0, 3).map((r) => {
           const time = new Date(r.reminderAt || r.createdAt);
+          const handleUpcomingDelete = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (confirm('确定删除该日程吗？')) deleteRecord(r.id);
+          };
           return (
-            <div key={r.id} className="bg-white rounded-2xl p-4 shadow-soft">
+            <div key={r.id} className="bg-white rounded-2xl p-4 shadow-soft group">
               <div className="flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-coffee-400" />
                 <div className="flex-1 min-w-0">
@@ -328,6 +332,13 @@ export default function CalendarView() {
                   </p>
                 </div>
                 <span className="text-xs" title={sourceLabel(r)}>{sourceMarker(r)}</span>
+                <button
+                  onClick={handleUpcomingDelete}
+                  title="删除日程"
+                  className="p-1.5 rounded-lg text-coffee-300 hover:text-alert hover:bg-red-50 transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
           );
