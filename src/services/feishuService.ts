@@ -21,6 +21,10 @@ export interface FeishuConfig {
   webhookUrl: string;
   redirectUri: string;
   enabled: boolean;
+  // OAuth user token（拉取用户私有妙记所必需，飞书妙记是用户级数据）
+  userAccessToken?: string;
+  userRefreshToken?: string;
+  userExpiresAt?: number;  // 毫秒时间戳
 }
 
 const STORAGE_KEY = 'feishu_miaojI_config';
@@ -43,6 +47,104 @@ export function saveFeishuConfig(cfg: FeishuConfig) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
   if (cfg.webhookUrl) {
     registerWebhook(cfg.webhookUrl);
+  }
+}
+
+// 单独更新 user token（避免每次授权后要重新填整个 config）
+export function saveUserToken(token: {
+  userAccessToken: string;
+  userRefreshToken?: string;
+  userExpiresAt?: number;
+}) {
+  const cfg = getFeishuConfig();
+  saveFeishuConfig({
+    ...cfg,
+    userAccessToken: token.userAccessToken,
+    userRefreshToken: token.userRefreshToken || cfg.userRefreshToken,
+    userExpiresAt: token.userExpiresAt,
+  });
+}
+
+export function clearUserToken() {
+  const cfg = getFeishuConfig();
+  saveFeishuConfig({
+    ...cfg,
+    userAccessToken: undefined,
+    userRefreshToken: undefined,
+    userExpiresAt: undefined,
+  });
+}
+
+// 是否已授权（有可用的 user token）
+export function isUserAuthorized(): boolean {
+  const cfg = getFeishuConfig();
+  return !!(cfg.userAccessToken);
+}
+
+// 触发 OAuth 授权流程：打开子窗口跳转 /api/feishu/login
+// 子窗口回调后通过 postMessage 把 code 传回，由 listener 处理
+export function startUserAuth(onSuccess?: () => void, onError?: (msg: string) => void) {
+  const cfg = getFeishuConfig();
+  if (!cfg.appId) {
+    onError?.('请先在飞书配置中填入 App ID');
+    return;
+  }
+
+  const url = `/api/feishu/login?app_id=${encodeURIComponent(cfg.appId)}&state=sw`;
+  const popup = window.open(url, 'feishu_auth', 'width=600,height=700');
+
+  const onMessage = (e: MessageEvent) => {
+    if (e.data?.type !== 'feishu:auth-code') return;
+    window.removeEventListener('message', onMessage);
+    const code = e.data.code as string;
+    if (!code) {
+      onError?.('未收到授权 code');
+      return;
+    }
+    // 用 code 换 user token
+    exchangeUserToken(cfg, code)
+      .then((ok) => {
+        if (ok) onSuccess?.();
+        else onError?.('换取 user token 失败');
+      })
+      .catch((err) => onError?.(err.message || '换取 user token 失败'));
+  };
+  window.addEventListener('message', onMessage);
+
+  // 30 秒后自动清理 listener，避免内存泄漏
+  setTimeout(() => {
+    window.removeEventListener('message', onMessage);
+    if (popup && !popup.closed) popup.close();
+  }, 5 * 60 * 1000);
+}
+
+// 用 OAuth code 换 user_access_token（调后端 /api/feishu/exchange-user-token）
+async function exchangeUserToken(cfg: FeishuConfig, code: string): Promise<boolean> {
+  try {
+    const res = await fetch('/api/feishu/exchange-user-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        appId: cfg.appId,
+        appSecret: cfg.appSecret,
+        code,
+        redirectUri: cfg.redirectUri || `${window.location.origin}/api/feishu/callback`,
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      console.error('[Feishu] exchangeUserToken:', data.message);
+      return false;
+    }
+    saveUserToken({
+      userAccessToken: data.accessToken,
+      userRefreshToken: data.refreshToken,
+      userExpiresAt: data.expiresAt,
+    });
+    return true;
+  } catch (err) {
+    console.error('[Feishu] exchangeUserToken error:', err);
+    return false;
   }
 }
 
@@ -174,13 +276,39 @@ import { mockMeetings } from '@/data/meetings';
 // 走统一 request 函数：401 时会自动 refresh token + 重试，避免直接抛"未授权"
 import { request } from '@/services/api';
 
+// user token 路径（owner_ids=me 能拉到用户私有的妙记）
+async function fetchFromBackendAsUser(cfg: FeishuConfig): Promise<FeishuMinutesItem[]> {
+  const data = await request('/feishu/sync-user', {
+    method: 'POST',
+    body: JSON.stringify({
+      appId: cfg.appId,
+      appSecret: cfg.appSecret,
+      userAccessToken: cfg.userAccessToken,
+      userRefreshToken: cfg.userRefreshToken,
+      userExpiresAt: cfg.userExpiresAt,
+    }),
+  });
+  // 若后端自动 refresh 了 token，更新到本地
+  if (data.refreshedToken) {
+    saveUserToken({
+      userAccessToken: data.refreshedToken.accessToken,
+      userRefreshToken: data.refreshedToken.refreshToken,
+      userExpiresAt: data.refreshedToken.expiresAt,
+    });
+  }
+  if (data.source !== 'real' || !Array.isArray(data.items) || data.items.length === 0) {
+    throw new Error(data?.message || '后端未返回真实妙记数据');
+  }
+  return data.items as FeishuMinutesItem[];
+}
+
+// bot token 路径（tenant token，搜不到用户私有妙记，作为兜底）
 async function fetchFromBackend(cfg: FeishuConfig): Promise<FeishuMinutesItem[]> {
   const data = await request('/feishu/sync', {
     method: 'POST',
     body: JSON.stringify({ appId: cfg.appId, appSecret: cfg.appSecret }),
   });
   if (data.source !== 'real' || !Array.isArray(data.items) || data.items.length === 0) {
-    // 后端拉失败或返回空 → 抛错让上层走 mock 兜底
     throw new Error(data?.message || '后端未返回真实妙记数据');
   }
   return data.items as FeishuMinutesItem[];
@@ -192,12 +320,15 @@ export async function syncMeetingsFromFeishu(force = false): Promise<MeetingItem
     // 未配置时直接返回 mock（初始演示态，合理）
     return mockMeetings;
   }
-  // 配置了就走后端代理；失败时让错误冒泡到 UI，不再静默 fallback
-  // （否则 handleSync 走成功路径，syncError 永远是空，用户看不到任何反馈）
-  const items = await fetchFromBackend(cfg);
-  if (items.length === 0 && !force) return mockMeetings;
-  const meetingItems = items.map(feishuToMeetingItem);
-  // 与手动添加的合并
-  const manualItems = mockMeetings.filter((m) => m.source === 'manual');
-  return [...meetingItems, ...manualItems];
+  // 优先用 user_access_token 拉用户私有妙记（飞书妙记是用户级数据）
+  // 没授权就抛错，让 UI 引导用户点"飞书授权登录"
+  if (cfg.userAccessToken) {
+    const items = await fetchFromBackendAsUser(cfg);
+    if (items.length === 0 && !force) return mockMeetings;
+    const meetingItems = items.map(feishuToMeetingItem);
+    const manualItems = mockMeetings.filter((m) => m.source === 'manual');
+    return [...meetingItems, ...manualItems];
+  }
+  // 没授权 → 提示用户去授权（而不是默默用 bot token 搜不到）
+  throw new Error('请先点击"飞书授权登录"完成 OAuth 授权，飞书妙记是用户私有数据，必须用 user token 才能拉取');
 }

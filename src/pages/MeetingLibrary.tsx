@@ -8,7 +8,7 @@ import Layout from '@/components/Layout';
 import { cn } from '@/lib/utils';
 import {
   syncMeetingsFromFeishu, getFeishuConfig, saveFeishuConfig,
-  type FeishuConfig,
+  startUserAuth, type FeishuConfig,
 } from '@/services/feishuService';
 import type { MeetingItem } from '@/types/meeting';
 
@@ -53,6 +53,27 @@ export default function MeetingLibrary() {
     setTimeout(() => setCfgSaved(false), 1500);
     // 保存后立即拉一次
     handleSync();
+  };
+
+  // 飞书 OAuth 授权：打开子窗口跳转 /api/feishu/login
+  // 子窗口回调通过 postMessage 把 code 传回，feishuService 自动换 user token 存 localStorage
+  const handleFeishuAuth = () => {
+    setSyncing(true);
+    setSyncError('');
+    startUserAuth(
+      async () => {
+        // 授权成功 → 更新 cfg 状态 + 自动同步一次
+        setCfg(getFeishuConfig());
+        setSyncing(false);
+        setSyncError('');
+        // 自动触发同步
+        setTimeout(() => handleSync(), 100);
+      },
+      (msg) => {
+        setSyncing(false);
+        setSyncError(msg || '飞书授权失败');
+      }
+    );
   };
 
   const filtered = items.filter((m) => {
@@ -115,6 +136,26 @@ export default function MeetingLibrary() {
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
                 )}
               </button>
+              {cfg.enabled && !cfg.userAccessToken && (
+                <button
+                  onClick={handleFeishuAuth}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700"
+                  title="飞书妙记是用户私有数据，必须用 OAuth 授权拿到 user token 后才能拉取"
+                >
+                  <User className="w-4 h-4" />
+                  <span>飞书授权登录</span>
+                </button>
+              )}
+              {cfg.enabled && cfg.userAccessToken && (
+                <button
+                  onClick={handleFeishuAuth}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white text-emerald-700 border border-emerald-300 rounded-xl text-sm font-medium hover:bg-emerald-50"
+                  title="已授权，点击重新授权（access token 过期会自动 refresh，无需手动）"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>已授权</span>
+                </button>
+              )}
               <button
                 onClick={handleSync}
                 disabled={syncing}

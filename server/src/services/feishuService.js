@@ -130,8 +130,135 @@ async function syncMinutes(appId, appSecret, options = {}) {
   return items
 }
 
+// ============================================================
+// OAuth user_access_token 流程（拉取用户私有妙记所必需）
+// ============================================================
+
+// 4) 用 OAuth code 换 user_access_token
+//    POST /open-apis/authen/v1/access_token/internal/user_access_token
+async function fetchUserAccessToken(appId, appSecret, code, redirectUri) {
+  // 先拿 tenant_access_token（调 user token 接口需要 TAT 鉴权）
+  const tat = await fetchTenantAccessToken(appId, appSecret)
+
+  let res
+  try {
+    res = await http.post(
+      `${FEISHU_BASE}/authen/v1/access_token/internal/user_access_token`,
+      {
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${tat}`,
+        },
+      }
+    )
+  } catch (err) {
+    throw new Error(formatAxiosError('换取 user token 失败', err))
+  }
+  const data = res.data || {}
+  if (data.code !== 0) {
+    throw new Error(`换取 user token 失败: ${data.msg || 'code=' + data.code}`)
+  }
+  // data.data: { access_token, refresh_token, token_type, expires_in(秒), refresh_expires_in }
+  const ud = data.data || {}
+  return {
+    accessToken: ud.access_token,
+    refreshToken: ud.refresh_token,
+    openId: ud.open_id,
+    expiresAt: Date.now() + (ud.expires_in || 7200) * 1000,
+    refreshExpiresAt: Date.now() + (ud.refresh_expires_in || 30 * 86400) * 1000,
+  }
+}
+
+// 5) 用 refresh_token 续期 user_access_token
+async function refreshUserToken(appId, appSecret, refreshToken) {
+  const tat = await fetchTenantAccessToken(appId, appSecret)
+  let res
+  try {
+    res = await http.post(
+      `${FEISHU_BASE}/authen/v1/refresh_access_token/internal`,
+      {
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${tat}`,
+        },
+      }
+    )
+  } catch (err) {
+    throw new Error(formatAxiosError('刷新 user token 失败', err))
+  }
+  const data = res.data || {}
+  if (data.code !== 0) {
+    throw new Error(`刷新 user token 失败: ${data.msg || 'code=' + data.code}`)
+  }
+  const ud = data.data || {}
+  return {
+    accessToken: ud.access_token,
+    refreshToken: ud.refresh_token || refreshToken, // 续期后 refresh_token 可能换新也可能不变
+    openId: ud.open_id,
+    expiresAt: Date.now() + (ud.expires_in || 7200) * 1000,
+    refreshExpiresAt: Date.now() + (ud.refresh_expires_in || 30 * 86400) * 1000,
+  }
+}
+
+// 6) 用 user_access_token 搜索妙记（owner_ids=me 能拉到用户私有的妙记）
+//    search API 必须传一个过滤条件，时间范围最大 1 个月 → 默认 30 天
+async function searchMinutesAsUser(userAccessToken, options = {}) {
+  const { pageSize = 30, days = 30, ownerIds = 'me' } = options
+  const now = Date.now()
+  const startTime = String(Math.floor((now - days * 24 * 60 * 60 * 1000) / 1000))
+  const endTime = String(Math.floor(now / 1000))
+
+  let res
+  try {
+    res = await http.post(
+      `${FEISHU_BASE}/minutes/v1/minutes/search`,
+      {
+        page_size: pageSize,
+        owner_ids: ownerIds ? [ownerIds] : undefined,
+        start_time: startTime,
+        end_time: endTime,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${userAccessToken}`,
+        },
+      }
+    )
+  } catch (err) {
+    throw new Error(formatAxiosError('拉取用户妙记失败', err))
+  }
+  const data = res.data || {}
+  if (data.code !== 0) {
+    throw new Error(`拉取用户妙记失败: ${data.msg || 'code=' + data.code}`)
+  }
+  const items = data.data?.items || []
+  return items.map((m) => ({
+    minutes_id: m.minute_token || m.minutes_id || m.token || '',
+    minute_token: m.minute_token || m.minutes_id || m.token || '',
+    title: m.title || '未命名妙记',
+    owner_id: m.owner?.open_id || m.owner_id || '',
+    create_time: m.create_time || m.start_time || Math.floor(now / 1000),
+    url: m.meta_data?.app_link || m.url || '',
+    summary: m.summary || m.meta_data?.description || '',
+  }))
+}
+
 module.exports = {
   syncMinutes,
   fetchTenantAccessToken,
   searchMinutes,
+  // OAuth user token 流程
+  fetchUserAccessToken,
+  refreshUserToken,
+  searchMinutesAsUser,
 }
