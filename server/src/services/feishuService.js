@@ -211,32 +211,51 @@ async function refreshUserToken(appId, appSecret, refreshToken) {
 }
 
 // 6) 用 user_access_token 搜索妙记（owner_ids=me 能拉到用户私有的妙记）
-//    search API 必须传一个过滤条件，时间范围最大 1 个月 → 默认 30 天
+//    正确请求体格式（参考 lark-cli --dry-run 输出）：
+//      {
+//        "filter": {
+//          "create_time": { "start_time": "ISO 8601", "end_time": "ISO 8601" },
+//          "owner_ids": ["ou_xxx"]   // 必须是 open_id，不是 "me"
+//        }
+//      }
+//    时间格式：ISO 8601 字符串（YYYY-MM-DDTHH:MM:SSZ），不是 unix 时间戳
 async function searchMinutesAsUser(userAccessToken, options = {}) {
-  const { pageSize = 30, days = 30, ownerIds = 'me' } = options
-  const now = Date.now()
-  const startTime = String(Math.floor((now - days * 24 * 60 * 60 * 1000) / 1000))
-  const endTime = String(Math.floor(now / 1000))
+  const { pageSize = 30, days = 30, userOpenId } = options
 
-  // 调试日志：确认 token 拼接正确
+  // 时间格式：ISO 8601（UTC）
+  const now = new Date()
+  const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
+  const startTimeIso = start.toISOString().replace(/\.\d+Z$/, 'T00:00:00Z')
+  const endTimeIso = now.toISOString().replace(/\.\d+Z$/, 'T23:59:59Z')
+
+  // 构造请求体：filter.create_time + filter.owner_ids（必须是 open_id）
+  const body = {
+    filter: {
+      create_time: {
+        start_time: startTimeIso,
+        end_time: endTimeIso,
+      },
+    },
+  }
+  if (userOpenId) {
+    body.filter.owner_ids = [userOpenId]
+  }
+
   console.log('[searchMinutesAsUser] 调飞书 search:', {
     tokenPrefix: userAccessToken ? userAccessToken.substring(0, 15) + '...' : '(none)',
     tokenLength: userAccessToken ? userAccessToken.length : 0,
-    authHeader: userAccessToken ? `Bearer ${userAccessToken.substring(0, 15)}...` : '(none)',
-    startTime, endTime, ownerIds, pageSize,
+    userOpenId: userOpenId || '(none)',
+    startTimeIso, endTimeIso,
+    bodyStructure: Object.keys(body.filter),
   })
 
   let res
   try {
     res = await http.post(
       `${FEISHU_BASE}/minutes/v1/minutes/search`,
+      body,
       {
-        page_size: pageSize,
-        owner_ids: ownerIds ? [ownerIds] : undefined,
-        start_time: startTime,
-        end_time: endTime,
-      },
-      {
+        params: { page_size: String(pageSize) },
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${userAccessToken}`,
@@ -251,12 +270,13 @@ async function searchMinutesAsUser(userAccessToken, options = {}) {
     throw new Error(`拉取用户妙记失败: ${data.msg || 'code=' + data.code}`)
   }
   const items = data.data?.items || []
+  const nowSec = Math.floor(Date.now() / 1000)
   return items.map((m) => ({
     minutes_id: m.minute_token || m.minutes_id || m.token || '',
     minute_token: m.minute_token || m.minutes_id || m.token || '',
     title: m.title || '未命名妙记',
     owner_id: m.owner?.open_id || m.owner_id || '',
-    create_time: m.create_time || m.start_time || Math.floor(now / 1000),
+    create_time: m.create_time || m.start_time || nowSec,
     url: m.meta_data?.app_link || m.url || '',
     summary: m.summary || m.meta_data?.description || '',
   }))
