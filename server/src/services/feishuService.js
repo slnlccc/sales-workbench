@@ -276,15 +276,99 @@ async function searchMinutesAsUser(userAccessToken, options = {}) {
   }
   const items = data.data?.items || []
   const nowSec = Math.floor(Date.now() / 1000)
-  return items.map((m) => ({
-    minutes_id: m.minute_token || m.minutes_id || m.token || '',
-    minute_token: m.minute_token || m.minutes_id || m.token || '',
-    title: m.title || '未命名妙记',
-    owner_id: m.owner?.open_id || m.owner_id || '',
-    create_time: m.create_time || m.start_time || nowSec,
-    url: m.meta_data?.app_link || m.url || '',
-    summary: m.summary || m.meta_data?.description || '',
-  }))
+
+  // 飞书 search API 只返回 display_info + meta_data + token，没有 title/summary
+  // 需要对每条 item 再调 detail API 拉真实 title + AI summary
+  const enriched = await Promise.all(
+    items.map(async (m) => {
+      const token = m.minute_token || m.minutes_id || m.token || ''
+      // 从 display_info 提取标题（第一行的纯文本部分）
+      const displayInfo = m.display_info || ''
+      const titleFromDisplay = displayInfo.split('\n')[0] || '未命名妙记'
+
+      let title = titleFromDisplay
+      let summary = m.meta_data?.description || ''
+      let createTime = nowSec
+
+      // 调 detail API 拉真实 title + summary（用户身份，可读用户私有妙记详情）
+      if (token) {
+        try {
+          const detail = await fetchMinuteDetail(userAccessToken, token)
+          if (detail?.title) title = detail.title
+          if (detail?.summary) summary = detail.summary
+          if (detail?.create_time) createTime = detail.create_time
+        } catch (e) {
+          // 详情拉失败不影响列表，用 search 的 fallback 数据
+          console.warn(`[searchMinutesAsUser] 拉详情失败 token=${token}:`, e.message)
+        }
+      }
+
+      return {
+        minutes_id: token,
+        minute_token: token,
+        title,
+        owner_id: m.owner?.open_id || m.owner_id || '',
+        create_time: createTime,
+        url: m.meta_data?.app_link || m.url || '',
+        summary,
+      }
+    })
+  )
+  return enriched
+}
+
+// 7) 拉单条妙记详情（title + AI summary + create_time）
+//    GET /minutes/v1/minutes/{minute_token}       → 妙记基础信息（title、create_time 等）
+//    GET /minutes/v1/minutes/{minute_token}/artifacts  → AI 产物（summary、transcript 等）
+//    两个接口合并返回给前端
+async function fetchMinuteDetail(userAccessToken, minuteToken) {
+  // 1) 基础信息
+  let title = ''
+  let createTime = 0
+  try {
+    const res = await http.get(
+      `${FEISHU_BASE}/minutes/v1/minutes/${minuteToken}`,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${userAccessToken}`,
+        },
+      }
+    )
+    const data = res.data || {}
+    if (data.code === 0) {
+      const m = data.data?.minute || data.data || {}
+      title = m.title || ''
+      createTime = m.create_time || m.start_time || 0
+    }
+  } catch (e) {
+    // 基础信息失败时仍可尝试 artifacts，不直接抛
+  }
+
+  // 2) AI 产物（summary / transcript）
+  let summary = ''
+  try {
+    const res = await http.get(
+      `${FEISHU_BASE}/minutes/v1/minutes/${minuteToken}/artifacts`,
+      {
+        params: { type: 'summary' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${userAccessToken}`,
+        },
+      }
+    )
+    const data = res.data || {}
+    if (data.code === 0) {
+      const artifacts = data.data?.artifacts || []
+      const summaryArt = artifacts.find(a => a.type === 'summary' || a.name === 'summary')
+      summary = summaryArt?.content || summaryArt?.text || ''
+    }
+  } catch (e) {
+    // artifacts 失败不抛，只返回基础信息
+  }
+
+  return { title, summary, create_time: createTime }
 }
 
 module.exports = {

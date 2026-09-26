@@ -239,8 +239,11 @@ export function extractInsightsFromText(text: string): string[] {
 // 4) 把飞书妙记转成 MeetingItem
 export function feishuToMeetingItem(m: FeishuMinutesItem): MeetingItem {
   const content = m.transcript || m.summary || '';
-  const date = new Date(m.create_time);
-  const dateStr = date.toISOString().slice(0, 10);
+  // create_time 可能是 0（拉详情失败 fallback）、字符串、或数字
+  // 用毫秒数判断：0 或负数 → 用今天日期
+  const ts = typeof m.create_time === 'number' ? m.create_time : 0;
+  const dateMs = ts > 0 ? (ts < 1e12 ? ts * 1000 : ts) : Date.now();
+  const dateStr = new Date(dateMs).toISOString().slice(0, 10);
   return {
     id: `feishu-${m.minutes_id}`,
     title: m.title,
