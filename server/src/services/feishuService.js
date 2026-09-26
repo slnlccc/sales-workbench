@@ -222,11 +222,16 @@ async function refreshUserToken(appId, appSecret, refreshToken) {
 async function searchMinutesAsUser(userAccessToken, options = {}) {
   const { pageSize = 30, days = 30, userOpenId } = options
 
-  // 时间格式：ISO 8601（UTC）
+  // 时间格式：ISO 8601（UTC）— 飞书要求精确格式 2026-08-26T00:00:00Z
+  // 注意不能用 toISOString().replace()，因为 .972Z 替换后格式会错乱
+  const pad = (n) => String(n).padStart(2, '0')
+  const fmtIso = (d, endOfDay = false) => {
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${endOfDay ? '23:59:59Z' : '00:00:00Z'}`
+  }
   const now = new Date()
   const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
-  const startTimeIso = start.toISOString().replace(/\.\d+Z$/, 'T00:00:00Z')
-  const endTimeIso = now.toISOString().replace(/\.\d+Z$/, 'T23:59:59Z')
+  const startTimeIso = fmtIso(start, false)
+  const endTimeIso = fmtIso(now, true)
 
   // 构造请求体：filter.create_time + filter.owner_ids（必须是 open_id）
   const body = {
