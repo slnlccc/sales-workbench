@@ -138,6 +138,10 @@ const request = async (url: string, options: RequestInit = {}): Promise<any> => 
 
 export { refreshTokenSilently }
 
+// 导出 request 函数供其他 service 模块复用（如 feishuService 调 /feishu/sync）
+// 这样能享受统一的 401 自动 refresh + 重试逻辑
+export { request }
+
 export const authApi = {
   login: (data: { username: string; password: string }) =>
     request('/users/login', { method: 'POST', body: JSON.stringify(data) }),
