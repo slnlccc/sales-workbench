@@ -135,7 +135,7 @@ async function syncMinutes(appId, appSecret, options = {}) {
 // ============================================================
 
 // 4) 用 OAuth code 换 user_access_token
-//    POST /open-apis/authen/v1/access_token/internal/user_access_token
+//    正确端点是 /authen/v1/access_token（不要用 /authen/v1/access_token/internal/user_access_token，那是旧版会 404）
 async function fetchUserAccessToken(appId, appSecret, code, redirectUri) {
   // 先拿 tenant_access_token（调 user token 接口需要 TAT 鉴权）
   const tat = await fetchTenantAccessToken(appId, appSecret)
@@ -143,7 +143,7 @@ async function fetchUserAccessToken(appId, appSecret, code, redirectUri) {
   let res
   try {
     res = await http.post(
-      `${FEISHU_BASE}/authen/v1/access_token/internal/user_access_token`,
+      `${FEISHU_BASE}/authen/v1/access_token`,
       {
         grant_type: 'authorization_code',
         code,
@@ -175,12 +175,13 @@ async function fetchUserAccessToken(appId, appSecret, code, redirectUri) {
 }
 
 // 5) 用 refresh_token 续期 user_access_token
+//    正确端点是 /authen/v1/refresh_access_token（旧版 /authen/v1/refresh_access_token/internal 会 404）
 async function refreshUserToken(appId, appSecret, refreshToken) {
   const tat = await fetchTenantAccessToken(appId, appSecret)
   let res
   try {
     res = await http.post(
-      `${FEISHU_BASE}/authen/v1/refresh_access_token/internal`,
+      `${FEISHU_BASE}/authen/v1/refresh_access_token`,
       {
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
