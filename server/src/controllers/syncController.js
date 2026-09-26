@@ -19,6 +19,8 @@ const syncUpload = async (req, res) => {
 }
 
 // 从云端拉取数据
+// 返回云端 data 字段，供前端写入 localStorage（前端真实数据源在 localStorage，
+// 不返回的话即使后端 MongoDB 写入了，前端仍看不到数据 → 数据隔离无法生效）
 const syncPull = async (req, res) => {
   try {
     const userId = getUserId(req)
@@ -29,6 +31,9 @@ const syncPull = async (req, res) => {
       message: '从云端拉取数据成功',
       imported,
       cloudExportedAt: cloudData.exportedAt,
+      // 关键：把当前用户的云端数据回传给前端，前端会写入 localStorage
+      // 这里天然按 username 隔离（cloudSync.downloadFromCloud 用 userdata/<username>/ 路径）
+      data: cloudData.data,
     })
   } catch (err) {
     res.status(500).json({ message: err.message || '云端拉取失败' })

@@ -35,6 +35,20 @@ const LOCAL_USERS_KEY = 'sw_local_users'
 const LOCAL_TOKEN_KEY = 'token'
 const TOKEN_REFRESH_AHEAD = 60 * 60 * 1000 // 提前 1 小时刷新，不等最后一刻
 
+// 业务数据 localStorage key：登出/切换账号时必须清空，
+// 否则下一个账号登录后会看到上一个账号的残留数据 → 数据隔离失败
+const BUSINESS_DATA_KEYS = [
+  'workbench.projects.v1',
+  'workbench.contracts.v1',
+  'workbench.customers.v1',
+  'workbench.schedules.v1',
+  'sw_workbench_data',
+]
+
+const clearBusinessData = () => {
+  BUSINESS_DATA_KEYS.forEach(k => localStorage.removeItem(k))
+}
+
 const getLocalUsers = (): LocalUser[] => {
   try {
     const raw = localStorage.getItem(LOCAL_USERS_KEY)
@@ -336,9 +350,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // ===== 本地 token 自动升级为后端 JWT =====
   // 当用户因 Render 冷启动等原因用 localLogin 兜底登录后，
-  // 后端恢复后自动用 sessionStorage 中保存的凭据重新登录，
+  // 后端恢复后自动用 localStorage 中保存的凭据重新登录，
   // 把 local.xxx token 升级为后端 JWT，从而启用云端同步。
   // 策略：先 10 秒探测一次（应对刚登录后端就起来），失败后改为 30 秒间隔。
+  // 注意：凭据存在 localStorage 而非 sessionStorage，确保关闭标签页重开后仍能升级。
   const upgradeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const upgradingRef = useRef(false)
 
@@ -352,8 +367,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // 仅当持有 local token 时启动升级流程
     if (!token || !token.startsWith('local.')) return
 
-    const pending = sessionStorage.getItem('sw_pending_login')
-    if (!pending) return // 没有保存的凭据（可能是 initAuth 恢复的旧 local token），无法升级
+    const pending = localStorage.getItem('sw_pending_login')
+    if (!pending) return // 没有保存的凭据，无法升级
 
     let credentials: { username: string; password: string } | null = null
     try {
@@ -377,7 +392,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // 同时清掉 pending 凭据（敏感信息用完即焚）
           localStorage.setItem(LOCAL_TOKEN_KEY, result.token)
           localStorage.setItem('sw_current_user', JSON.stringify(result.user))
-          sessionStorage.removeItem('sw_pending_login')
+          localStorage.removeItem('sw_pending_login') // 升级成功，清除保存的凭据
           setToken(result.token)
           setUser(result.user)
           // 通知 api.ts：新的 JWT token 已就绪
@@ -425,8 +440,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else {
         loggedInUser = localLogin(username, password)
         newToken = generateLocalToken(loggedInUser._id)
-        // 保存凭据到 sessionStorage，用于后端恢复后自动升级 token
-        sessionStorage.setItem('sw_pending_login', JSON.stringify({ username, password }))
+        // 保存凭据到 localStorage（不是 sessionStorage！），
+        // 这样即使用户关闭标签页再重新打开，依然能用凭据把 local token 升级为 JWT。
+        // 仅在本地模式兜底登录时保存，后端正常登录不保存。
+        localStorage.setItem('sw_pending_login', JSON.stringify({ username, password }))
       }
 
       localStorage.setItem(LOCAL_TOKEN_KEY, newToken)
@@ -470,6 +487,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     localStorage.removeItem(LOCAL_TOKEN_KEY)
     localStorage.removeItem('sw_current_user')
+    localStorage.removeItem('sw_pending_login') // 登出时清除保存的凭据
+    // 清空业务数据：切换账号时防止下一个账号看到上一个账号的残留数据
+    clearBusinessData()
     setUser(null)
     setToken(null)
   }

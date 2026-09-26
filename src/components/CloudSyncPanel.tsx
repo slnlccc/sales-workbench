@@ -7,6 +7,7 @@ export default function CloudSyncPanel({ compact = false }: { compact?: boolean 
   const { status, syncing, error, autoSync, upload, pull, refreshStatus, toggleAutoSync } = useCloudSync()
   const [showDetail, setShowDetail] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [retryMsg, setRetryMsg] = useState<string | null>(null)
 
   const configured = status?.configured ?? false
   const lastSync = status?.lastSyncAt
@@ -18,12 +19,22 @@ export default function CloudSyncPanel({ compact = false }: { compact?: boolean 
   // 触发 AuthContext 立即重试后端登录，把 local token 升级为 JWT
   const handleRetryUpgrade = async () => {
     setRetrying(true)
+    setRetryMsg(null)
     window.dispatchEvent(new CustomEvent('auth:retry-upgrade'))
-    // 等几秒让升级走完，再刷新同步状态
+    // 给后端登录留足时间（Render 冷启动可能需要 20-30 秒）
     setTimeout(async () => {
       await refreshStatus()
       setRetrying(false)
-    }, 2500)
+      // 通过检查 token 是否仍是 local token 判断升级是否成功
+      const token = localStorage.getItem('token')
+      if (token && token.startsWith('local.')) {
+        setRetryMsg('连接失败：后端可能仍在启动中，请稍后重试')
+      } else {
+        setRetryMsg('已连接云端，数据同步已启用')
+      }
+      // 3 秒后清除提示
+      setTimeout(() => setRetryMsg(null), 3000)
+    }, 3000)
   }
 
   const handleUpload = async () => {
@@ -85,6 +96,14 @@ export default function CloudSyncPanel({ compact = false }: { compact?: boolean 
                 {retrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wifi className="w-3 h-3" />}
                 {retrying ? '正在重连...' : '重试连接云端'}
               </button>
+            )}
+            {retryMsg && (
+              <div className={cn(
+                "mx-2 mt-1 text-xs px-2 py-1 rounded-lg text-center",
+                retryMsg.includes('失败') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+              )}>
+                {retryMsg}
+              </div>
             )}
           </>
         )}
