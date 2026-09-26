@@ -195,19 +195,15 @@ async function fetchFromBackend(cfg: FeishuConfig): Promise<FeishuMinutesItem[]>
 export async function syncMeetingsFromFeishu(force = false): Promise<MeetingItem[]> {
   const cfg = getFeishuConfig();
   if (!cfg.enabled || !cfg.appId || !cfg.appSecret) {
-    // 未配置时直接返回 mock
+    // 未配置时直接返回 mock（初始演示态，合理）
     return mockMeetings;
   }
-  try {
-    // 优先走后端代理（飞书开放平台 API 不允许浏览器跨域，必须经后端转发）
-    const items = await fetchFromBackend(cfg);
-    if (items.length === 0 && !force) return mockMeetings;
-    const meetingItems = items.map(feishuToMeetingItem);
-    // 与手动添加的合并
-    const manualItems = mockMeetings.filter((m) => m.source === 'manual');
-    return [...meetingItems, ...manualItems];
-  } catch (err) {
-    console.warn('[Feishu] 后端同步失败,使用本地 mock 数据:', err);
-    return mockMeetings;
-  }
+  // 配置了就走后端代理；失败时让错误冒泡到 UI，不再静默 fallback
+  // （否则 handleSync 走成功路径，syncError 永远是空，用户看不到任何反馈）
+  const items = await fetchFromBackend(cfg);
+  if (items.length === 0 && !force) return mockMeetings;
+  const meetingItems = items.map(feishuToMeetingItem);
+  // 与手动添加的合并
+  const manualItems = mockMeetings.filter((m) => m.source === 'manual');
+  return [...meetingItems, ...manualItems];
 }
