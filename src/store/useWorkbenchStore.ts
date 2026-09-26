@@ -53,6 +53,7 @@ interface WorkbenchState {
   addVoiceTask: (content: string) => void;
   addMemoWithVoice: (content: string) => void;
   addMemoKnowledge: (knowledge: MemoKnowledge) => void;
+  deleteMemoKnowledge: (id: string) => void;
   setJoinDate: (dateStr: string) => void;
   closeScheduleTask: (id: string) => void;
   deleteRecord: (id: string) => void;
@@ -355,6 +356,9 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
 
   addMemoKnowledge: (knowledge) => {
     persistSet((state) => ({ memoKnowledge: [knowledge, ...state.memoKnowledge] }));
+  },
+  deleteMemoKnowledge: (id) => {
+    persistSet((state) => ({ memoKnowledge: state.memoKnowledge.filter((k) => k.id !== id) }));
   },
 
   setJoinDate: (dateStr: string) => {

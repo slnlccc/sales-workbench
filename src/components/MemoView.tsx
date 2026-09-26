@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Calendar, CheckCircle2, RotateCcw, StickyNote, Mic, Square, BookOpen, Sparkles, X } from 'lucide-react';
+import { Plus, Calendar, CheckCircle2, RotateCcw, StickyNote, Mic, Square, BookOpen, Sparkles, X, Trash2 } from 'lucide-react';
 import { useWorkbenchStore } from '@/store/useWorkbenchStore';
 import { cn } from '@/lib/utils';
 
@@ -12,7 +12,7 @@ const mockVoiceTexts = [
 ];
 
 export default function MemoView() {
-  const { memos, memoKnowledge, addMemo, addMemoWithVoice, toggleMemoClosed, promoteMemoToSchedule, deleteMemo } = useWorkbenchStore();
+  const { memos, memoKnowledge, addMemo, addMemoWithVoice, toggleMemoClosed, promoteMemoToSchedule, deleteMemo, deleteMemoKnowledge } = useWorkbenchStore();
   const [inputValue, setInputValue] = useState('');
   const [isRecording, setIsRecording] = useState(false);
 
@@ -124,10 +124,17 @@ export default function MemoView() {
             {memoKnowledge.map((kb) => (
               <div
                 key={kb.id}
-                className="bg-white/80 rounded-2xl p-3.5 border border-coffee-100 hover:shadow-soft transition-all"
+                className="bg-white/80 rounded-2xl p-3.5 border border-coffee-100 hover:shadow-soft transition-all group"
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <h4 className="text-sm font-semibold text-coffee-800 truncate flex-1">{kb.title}</h4>
+                  <button
+                    onClick={() => deleteMemoKnowledge(kb.id)}
+                    title="删除知识条目"
+                    className="p-1 rounded text-coffee-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 ml-2 opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                   <span className="text-xs text-caramel bg-caramel/10 px-2 py-0.5 rounded-full flex-shrink-0 ml-2">
                     📝 {kb.source}
                   </span>

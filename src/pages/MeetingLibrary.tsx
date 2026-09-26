@@ -27,12 +27,58 @@ export default function MeetingLibrary() {
 
   // 跳转 + 工作台 store（用于把待办推到日程、知识沉淀推到知识库）
   const navigate = useNavigate();
-  const { setActiveTab, addScheduleFromTodo, addMemoKnowledge } = useWorkbenchStore();
+  const { setActiveTab, addScheduleFromTodo, addMemoKnowledge, memoKnowledge, records } = useWorkbenchStore();
 
   // 飞书配置弹窗
   const [showConfig, setShowConfig] = useState(false);
   const [cfg, setCfg] = useState<FeishuConfig>(getFeishuConfig());
   const [cfgSaved, setCfgSaved] = useState(false);
+
+  // 已删除的会议纪要 ID 持久化到 localStorage（避免每次同步都重新出现）
+  const DELETED_KEY = 'sw_meeting_deleted_ids';
+  const getDeletedIds = (): string[] => {
+    try { return JSON.parse(localStorage.getItem(DELETED_KEY) || '[]'); } catch { return []; }
+  };
+  const addDeletedId = (id: string) => {
+    const ids = getDeletedIds();
+    if (!ids.includes(id)) {
+      ids.push(id);
+      localStorage.setItem(DELETED_KEY, JSON.stringify(ids));
+    }
+  };
+
+  // 自动把会议的 todos 和 insights 推送到语音工作台（去重）
+  const autoPushToWorkbench = (meetings: MeetingItem[]) => {
+    const today = new Date().toISOString().slice(0, 10);
+    // 用 insights/todos 的文本去重，避免重复添加
+    const existingKbTitles = new Set(memoKnowledge.map((k: any) => k.title));
+    const existingScheduleContents = new Set(records.map((r: any) => r.content));
+
+    meetings.forEach((m) => {
+      // 待办 → 日程日历
+      m.todos.forEach((todo) => {
+        const text = todo.startsWith('✓ ') ? todo.slice(2) : todo;
+        if (!existingScheduleContents.has(text)) {
+          addScheduleFromTodo(text, today, undefined);
+          existingScheduleContents.add(text);
+        }
+      });
+      // 知识沉淀 → 知识库
+      m.insights.forEach((insight) => {
+        const title = insight.length > 24 ? insight.slice(0, 24) + '…' : insight;
+        if (!existingKbTitles.has(title) && !existingKbTitles.has(insight)) {
+          addMemoKnowledge({
+            id: `kb-meeting-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            title,
+            summary: insight,
+            source: '会议知识库',
+            createdAt: new Date().toISOString(),
+          });
+          existingKbTitles.add(title);
+        }
+      });
+    });
+  };
 
   // 初始化拉取（自动根据配置走 mock / 真实）
   useEffect(() => {
@@ -44,8 +90,13 @@ export default function MeetingLibrary() {
     setSyncError('');
     try {
       const data = await syncMeetingsFromFeishu();
-      setItems(data);
+      // 过滤掉已删除的会议纪要
+      const deletedIds = getDeletedIds();
+      const filtered = data.filter((m) => !deletedIds.includes(m.id));
+      setItems(filtered);
       setLastSync(new Date().toLocaleString('zh-CN', { hour12: false }));
+      // 同步成功后自动把 todos 和 insights 推送到语音工作台
+      autoPushToWorkbench(filtered);
     } catch (e: any) {
       // "Invalid time value" 是 RangeError，从 feishuToMeetingItem 抛出
       // 现在已经修复了 create_time 解析，如果还报错就把 stack 也展示出来
@@ -96,9 +147,10 @@ export default function MeetingLibrary() {
   const insightCount = items.reduce((acc, m) => acc + m.insights.length, 0);
   const feishuCount = items.filter((m) => m.source === 'feishu').length;
 
-  // 删除会议纪要
+  // 删除会议纪要：从列表移除 + 持久化到 localStorage（防止下次同步重新出现）
   const handleDelete = (itemId: string) => {
     if (!window.confirm('确定删除这条会议纪要？删除后不可恢复。')) return;
+    addDeletedId(itemId);
     setItems((prev) => prev.filter((m) => m.id !== itemId));
     if (selected?.id === itemId) setSelected(null);
   };
