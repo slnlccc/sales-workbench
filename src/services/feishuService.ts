@@ -297,7 +297,11 @@ async function fetchFromBackendAsUser(cfg: FeishuConfig): Promise<FeishuMinutesI
     });
   }
   if (data.source !== 'real' || !Array.isArray(data.items) || data.items.length === 0) {
-    throw new Error(data?.message || '后端未返回真实妙记数据');
+    // 把 user token 前缀附在错误信息里，方便定位 token 格式问题
+    const tokenPrefix = cfg.userAccessToken
+      ? `（token前缀: ${cfg.userAccessToken.substring(0, 15)}..., 长度: ${cfg.userAccessToken.length}）`
+      : '（无 user token）';
+    throw new Error((data?.message || '后端未返回真实妙记数据') + tokenPrefix);
   }
   return data.items as FeishuMinutesItem[];
 }
