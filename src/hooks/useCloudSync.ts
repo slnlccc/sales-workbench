@@ -18,7 +18,7 @@ interface SyncResult {
   imported?: { projects: number; contracts: number; schedules: number; customers: number }
 }
 
-const SYNC_INTERVAL = 5 * 1000 // 5秒周期性同步（兜底）
+const SYNC_INTERVAL = 60 * 1000 // 1分钟周期性同步（兜底）
 const AUTO_SYNC_DEBOUNCE = 3 * 1000  // 数据变更后防抖 3 秒再上传
 
 // 判断当前是否为本地降级登录（token 非后端 JWT），此时云同步不可用
