@@ -21,15 +21,44 @@ const axios = require('axios')
 
 const FEISHU_BASE = 'https://open.feishu.cn/open-apis'
 
-const http = axios.create({ timeout: 15000 })
+// axios 实例：不读环境变量代理（避免 sandbox HTTP_PROXY 把 HTTPS 请求劫持为明文）
+// Render 服务器没有 HTTP_PROXY，但本地 sandbox 有，会导致 400
+const http = axios.create({
+  timeout: 15000,
+  proxy: false, // 关键：禁用 axios 从 env 读取代理
+})
+
+// 把 axios 错误转换成更可读的消息（保留飞书 API 业务错误和 HTTP 层错误）
+function formatAxiosError(prefix, err) {
+  if (err.response) {
+    // 飞书 API 返回了 HTTP 响应
+    const status = err.response.status
+    const data = err.response.data
+    let detail = ''
+    if (typeof data === 'string') {
+      // HTML 错误页（如代理/网关错误）
+      detail = data.slice(0, 200)
+    } else if (data) {
+      detail = JSON.stringify(data).slice(0, 300)
+    }
+    return `${prefix}: HTTP ${status} ${detail}`
+  }
+  // 网络层错误（DNS/超时/代理）
+  return `${prefix}: ${err.code || err.message}`
+}
 
 // 1) 获取 tenant_access_token（应用凭证 → token）
 async function fetchTenantAccessToken(appId, appSecret) {
-  const res = await http.post(
-    `${FEISHU_BASE}/auth/v3/tenant_access_token/internal`,
-    { app_id: appId, app_secret: appSecret },
-    { headers: { 'Content-Type': 'application/json' } }
-  )
+  let res
+  try {
+    res = await http.post(
+      `${FEISHU_BASE}/auth/v3/tenant_access_token/internal`,
+      { app_id: appId, app_secret: appSecret },
+      { headers: { 'Content-Type': 'application/json' } }
+    )
+  } catch (err) {
+    throw new Error(formatAxiosError('飞书鉴权失败', err))
+  }
   const data = res.data || {}
   // 注意：tenant_access_token 接口成功时返回 { code: 0, tenant_access_token, expire }
   if (data.code !== 0) {
@@ -47,20 +76,25 @@ async function searchMinutes(token, options = {}) {
   const startTime = String(Math.floor((now - days * 24 * 60 * 60 * 1000) / 1000))
   const endTime = String(Math.floor(now / 1000))
 
-  const res = await http.post(
-    `${FEISHU_BASE}/minutes/v1/minutes/search`,
-    {
-      page_size: pageSize,
-      start_time: startTime,
-      end_time: endTime,
-    },
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
+  let res
+  try {
+    res = await http.post(
+      `${FEISHU_BASE}/minutes/v1/minutes/search`,
+      {
+        page_size: pageSize,
+        start_time: startTime,
+        end_time: endTime,
       },
-    }
-  )
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    )
+  } catch (err) {
+    throw new Error(formatAxiosError('拉取妙记列表失败', err))
+  }
   const data = res.data || {}
   if (data.code !== 0) {
     const msg = data.msg || ''
