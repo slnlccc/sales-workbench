@@ -170,6 +170,28 @@ async function registerWebhook(url: string) {
 // 6) 兜底：环境无配置时返回 mock 数据（保证 UI 可演示）
 import { mockMeetings } from '@/data/meetings';
 
+// 调后端代理拉取真实妙记（后端用 axios 调飞书 API，绕过浏览器 CORS）
+async function fetchFromBackend(cfg: FeishuConfig): Promise<FeishuMinutesItem[]> {
+  const token = localStorage.getItem('token') || '';
+  const res = await fetch('/api/feishu/sync', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ appId: cfg.appId, appSecret: cfg.appSecret }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.message || `HTTP ${res.status}`);
+  }
+  if (data.source !== 'real' || !Array.isArray(data.items) || data.items.length === 0) {
+    // 后端拉失败或返回空 → 抛错让上层走 mock 兜底
+    throw new Error(data?.message || '后端未返回真实妙记数据');
+  }
+  return data.items as FeishuMinutesItem[];
+}
+
 export async function syncMeetingsFromFeishu(force = false): Promise<MeetingItem[]> {
   const cfg = getFeishuConfig();
   if (!cfg.enabled || !cfg.appId || !cfg.appSecret) {
@@ -177,14 +199,15 @@ export async function syncMeetingsFromFeishu(force = false): Promise<MeetingItem
     return mockMeetings;
   }
   try {
-    const items = await fetchFeishuMinutes(cfg);
+    // 优先走后端代理（飞书开放平台 API 不允许浏览器跨域，必须经后端转发）
+    const items = await fetchFromBackend(cfg);
     if (items.length === 0 && !force) return mockMeetings;
     const meetingItems = items.map(feishuToMeetingItem);
     // 与手动添加的合并
     const manualItems = mockMeetings.filter((m) => m.source === 'manual');
     return [...meetingItems, ...manualItems];
   } catch (err) {
-    console.warn('[Feishu] 同步失败,使用本地数据:', err);
+    console.warn('[Feishu] 后端同步失败,使用本地 mock 数据:', err);
     return mockMeetings;
   }
 }

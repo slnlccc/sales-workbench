@@ -184,6 +184,7 @@ app.use('/api/customers', require('./routes/customerRoutes'))
 app.use('/api/sync', require('./routes/syncRoutes'))
 app.use('/api/ai', require('./routes/aiRoutes'))
 app.use('/api/data', require('./routes/dataRoutes'))
+app.use('/api/feishu', require('./routes/feishuRoutes'))
 
 app.get('*', (req, res, next) => {
   const urlPath = req.path
