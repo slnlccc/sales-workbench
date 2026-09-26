@@ -239,11 +239,34 @@ export function extractInsightsFromText(text: string): string[] {
 // 4) 把飞书妙记转成 MeetingItem
 export function feishuToMeetingItem(m: FeishuMinutesItem): MeetingItem {
   const content = m.transcript || m.summary || '';
-  // create_time 可能是 0（拉详情失败 fallback）、字符串、或数字
-  // 用毫秒数判断：0 或负数 → 用今天日期
-  const ts = typeof m.create_time === 'number' ? m.create_time : 0;
-  const dateMs = ts > 0 ? (ts < 1e12 ? ts * 1000 : ts) : Date.now();
-  const dateStr = new Date(dateMs).toISOString().slice(0, 10);
+
+  // create_time 可能是：0（拉详情失败 fallback）、数字秒、数字毫秒、ISO 字符串、或无效值
+  // 用 try-catch 兜底，任何异常都 fallback 用今天日期
+  let dateStr: string;
+  try {
+    const ct = m.create_time as any;
+    let dateMs: number = Date.now(); // 默认用今天
+
+    if (typeof ct === 'number' && ct > 0) {
+      // 数字：判断是秒还是毫秒
+      dateMs = ct < 1e12 ? ct * 1000 : ct;
+    } else if (typeof ct === 'string' && ct) {
+      // 字符串：可能是 ISO 或 unix 字符串
+      const parsed = Date.parse(ct);
+      if (!isNaN(parsed)) dateMs = parsed;
+      else {
+        // 尝试作为 unix 时间戳解析
+        const n = Number(ct);
+        if (!isNaN(n) && n > 0) dateMs = n < 1e12 ? n * 1000 : n;
+      }
+    }
+    // dateMs 一定是有效毫秒数
+    dateStr = new Date(dateMs).toISOString().slice(0, 10);
+  } catch (e) {
+    // 任何异常都用今天日期兜底
+    dateStr = new Date().toISOString().slice(0, 10);
+  }
+
   return {
     id: `feishu-${m.minutes_id}`,
     title: m.title,

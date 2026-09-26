@@ -41,7 +41,11 @@ export default function MeetingLibrary() {
       setItems(data);
       setLastSync(new Date().toLocaleString('zh-CN', { hour12: false }));
     } catch (e: any) {
-      setSyncError(e.message || '同步失败');
+      // "Invalid time value" 是 RangeError，从 feishuToMeetingItem 抛出
+      // 现在已经修复了 create_time 解析，如果还报错就把 stack 也展示出来
+      const errMsg = e?.message || '同步失败';
+      console.error('[handleSync] 同步失败:', e);
+      setSyncError(errMsg);
     } finally {
       setSyncing(false);
     }
