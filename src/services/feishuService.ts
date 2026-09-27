@@ -386,6 +386,39 @@ async function fetchFromBackend(cfg: FeishuConfig): Promise<FeishuMinutesItem[]>
   return data.items as FeishuMinutesItem[];
 }
 
+// 调用后端 AI 接口，批量提取待办事项和知识沉淀
+async function extractWithAI(meetings: MeetingItem[]): Promise<MeetingItem[]> {
+  if (!meetings.length) return meetings;
+  try {
+    const payload = meetings.map((m) => ({
+      id: m.id,
+      title: m.title,
+      content: m.content,
+    }));
+    const data = await request('/feishu/extract-ai', {
+      method: 'POST',
+      body: JSON.stringify({ meetings: payload }),
+    });
+    if (!data?.results || !Array.isArray(data.results)) return meetings;
+
+    const resultMap = new Map(data.results.map((r: any) => [r.id, r]));
+    return meetings.map((m) => {
+      const r = resultMap.get(m.id);
+      if (!r) return m;
+      return {
+        ...m,
+        // AI 提取结果覆盖正则提取；若 AI 失败（error），保留原正则结果
+        todos: r.todos && r.todos.length > 0 ? r.todos : m.todos,
+        insights: r.insights && r.insights.length > 0 ? r.insights : m.insights,
+      };
+    });
+  } catch (e: any) {
+    // AI 提取失败不阻断同步，保留正则提取的结果
+    console.warn('[extractWithAI] AI 提取失败，使用正则结果:', e?.message);
+    return meetings;
+  }
+}
+
 export async function syncMeetingsFromFeishu(force = false): Promise<MeetingItem[]> {
   const cfg = getFeishuConfig();
   if (!cfg.enabled || !cfg.appId || !cfg.appSecret) {
@@ -397,9 +430,11 @@ export async function syncMeetingsFromFeishu(force = false): Promise<MeetingItem
   if (cfg.userAccessToken) {
     const items = await fetchFromBackendAsUser(cfg);
     if (items.length === 0 && !force) return mockMeetings;
-    const meetingItems = items.map(feishuToMeetingItem);
+    let meetingItems = items.map(feishuToMeetingItem);
     const manualItems = mockMeetings.filter((m) => m.source === 'manual');
-    return [...meetingItems, ...manualItems];
+    const allItems = [...meetingItems, ...manualItems];
+    // 用 AI 精准提取待办事项和知识沉淀（失败则保留正则结果）
+    return await extractWithAI(allItems);
   }
   // 没授权 → 提示用户去授权（而不是默默用 bot token 搜不到）
   throw new Error('请先点击"飞书授权登录"完成 OAuth 授权，飞书妙记是用户私有数据，必须用 user token 才能拉取');

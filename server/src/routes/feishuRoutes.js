@@ -7,6 +7,7 @@ const {
   refreshUserToken,
   searchMinutesAsUser,
 } = require('../services/feishuService')
+const { isConfigured: isAIConfigured, chatJSON } = require('../services/baiduService')
 
 // =====================================
 // 路由分组 1：OAuth 用户授权流程（无需登录，但要 state 校验）
@@ -208,6 +209,87 @@ router.post('/sync-user', async (req, res) => {
       items: [],
       message: err.message || '拉取妙记失败',
     })
+  }
+})
+
+// =====================================
+// AI 智能提取待办事项 & 知识沉淀
+// =====================================
+
+/**
+ * 用 AI 从会议内容中精准提取待办事项和知识沉淀
+ * POST /api/feishu/extract-ai
+ * body: { meetings: [{ id, title, content }] }
+ * 返回: { results: [{ id, todos: string[], insights: string[] }] }
+ */
+router.post('/extract-ai', protect, async (req, res) => {
+  try {
+    const { meetings } = req.body
+    if (!Array.isArray(meetings) || meetings.length === 0) {
+      return res.json({ results: [] })
+    }
+
+    if (!isAIConfigured()) {
+      return res.status(503).json({ message: 'AI 服务未配置' })
+    }
+
+    const systemPrompt = `你是一个专业的会议纪要分析助手。请从会议内容中提取【待办事项】和【知识沉淀】。
+
+【待办事项】提取规则（非常重要，严格执行）：
+1. 只提取明确需要某人去执行、有动作指向的事项
+2. 必须包含动作词（如：提交、准备、安排、跟进、确认、完成、编写、整理、拜访、联系、推进、落实、出具、对接、协调等）
+3. 以下内容绝对不能作为待办事项：
+   - 会议议题、背景介绍、内容概括
+   - 检测结果、数据指标、参数描述（如"硫磷达标，钛控制在0.18-0.23区间"）
+   - 工艺说明、技术方案描述（如"马扩至1.2米后直接轧环"）
+   - 已完成事项的陈述
+   - 问题、疑问、讨论内容
+4. 每条待办不超过60字，去掉前缀标点
+5. 最多提取8条，宁缺毋滥
+
+【知识沉淀】提取规则：
+1. 提取可复用的方法论、经验总结、关键洞察
+2. 必须是有启发性的结论，不是简单的事实陈述
+3. 最多提取5条
+
+请只返回 JSON，格式为：{"todos": ["..."], "insights": ["..."]}`
+
+    // 限制并发，避免 API 限流
+    const BATCH = 3
+    const results = []
+
+    for (let i = 0; i < meetings.length; i += BATCH) {
+      const batch = meetings.slice(i, i + BATCH)
+      const promises = batch.map(async (m) => {
+        try {
+          // 截断超长内容，避免 token 超限
+          const content = (m.content || '').slice(0, 4000)
+          const userMsg = `会议标题：${m.title || ''}\n\n会议内容：\n${content}`
+
+          const data = await chatJSON([
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMsg },
+          ])
+
+          return {
+            id: m.id,
+            todos: Array.isArray(data.todos) ? data.todos.filter(t => typeof t === 'string' && t.trim()).slice(0, 8) : [],
+            insights: Array.isArray(data.insights) ? data.insights.filter(t => typeof t === 'string' && t.trim()).slice(0, 5) : [],
+          }
+        } catch (e) {
+          console.error(`[extract-ai] 会议 ${m.id} 提取失败:`, e.message)
+          return { id: m.id, todos: [], insights: [], error: e.message }
+        }
+      })
+
+      const batchResults = await Promise.all(promises)
+      results.push(...batchResults)
+    }
+
+    res.json({ results })
+  } catch (err) {
+    console.error('[extract-ai] 批量提取失败:', err)
+    res.status(500).json({ message: 'AI 提取失败: ' + err.message })
   }
 })
 
