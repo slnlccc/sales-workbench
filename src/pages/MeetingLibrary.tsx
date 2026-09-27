@@ -476,6 +476,17 @@ export default function MeetingLibrary() {
                     <p className="text-sm text-coffee-700 leading-relaxed whitespace-pre-wrap">{selected.content}</p>
                   </div>
 
+                  {selected.aiComment && (
+                    <div className="p-5 border-b border-coffee-100 bg-gradient-to-r from-violet-50 to-fuchsia-50/50">
+                      <h4 className="text-sm font-semibold text-coffee-900 mb-2 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-violet-500" />
+                        AI 点评
+                        <span className="text-xs font-normal text-coffee-400 ml-auto">智能分析</span>
+                      </h4>
+                      <p className="text-sm text-coffee-700 leading-relaxed">{selected.aiComment}</p>
+                    </div>
+                  )}
+
                   <div className="p-5 border-b border-coffee-100 bg-amber-50/30">
                     <h4 className="text-sm font-semibold text-coffee-900 mb-3 flex items-center gap-2">
                       <ListTodo className="w-4 h-4 text-amber-500" />

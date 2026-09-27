@@ -410,6 +410,7 @@ async function extractWithAI(meetings: MeetingItem[]): Promise<MeetingItem[]> {
         // AI 提取结果覆盖正则提取；若 AI 失败（error），保留原正则结果
         todos: r.todos && r.todos.length > 0 ? r.todos : m.todos,
         insights: r.insights && r.insights.length > 0 ? r.insights : m.insights,
+        aiComment: r.aiComment || m.aiComment,
       };
     });
   } catch (e: any) {

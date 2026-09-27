@@ -233,9 +233,9 @@ router.post('/extract-ai', protect, async (req, res) => {
       return res.status(503).json({ message: 'AI 服务未配置' })
     }
 
-    const systemPrompt = `你是一个专业的会议纪要分析助手。请从会议内容中提取【待办事项】和【知识沉淀】。
+    const systemPrompt = `你是一个资深的销售与技术会议分析专家。请从会议内容中精准提取【待办事项】和【知识沉淀】，并给出【AI点评】。
 
-【待办事项】提取规则（非常重要，严格执行）：
+【待办事项】提取规则（严格执行）：
 1. 只提取明确需要某人去执行、有动作指向的事项
 2. 必须包含动作词（如：提交、准备、安排、跟进、确认、完成、编写、整理、拜访、联系、推进、落实、出具、对接、协调等）
 3. 以下内容绝对不能作为待办事项：
@@ -247,12 +247,24 @@ router.post('/extract-ai', protect, async (req, res) => {
 4. 每条待办不超过60字，去掉前缀标点
 5. 最多提取8条，宁缺毋滥
 
-【知识沉淀】提取规则：
-1. 提取可复用的方法论、经验总结、关键洞察
-2. 必须是有启发性的结论，不是简单的事实陈述
-3. 最多提取5条
+【知识沉淀】提取规则（精简提炼，严禁参数重述）：
+1. 只提取可复用的方法论、经验总结、关键洞察，绝对不能罗列技术参数或指标要求
+2. 以下类型一律禁止作为知识沉淀：
+   - "X需满足Y标准/要求"（如"热处理工艺需满足ASTM 5级以上"）—— 这是要求，不是洞察
+   - "X控制在Y范围内"（如"硫磷控制在0.18-0.23区间"）—— 这是参数，不是洞察
+   - "X采用Y工艺"（如"马扩至1.2米后直接轧环"）—— 这是工艺描述，不是洞察
+3. 好的知识沉淀必须是从具体内容中抽象出的通用规律或经验判断，例如：
+   - "高温合金锻件应先锁定晶粒尺寸指标，再倒推热处理工艺窗口"
+   - "一火成型工艺可降低能耗，但需严格控制始锻温度区间"
+   - "技术评审节点前置，能有效规避后期工艺返工风险"
+4. 每条不超过50字，最多3条，宁缺毋滥（没有合格的洞察就返回空数组）
 
-请只返回 JSON，格式为：{"todos": ["..."], "insights": ["..."]}`
+【AI点评】规则：
+1. 用2-3句话对会议整体做点评，包括：会议质量、关键风险、建议关注方向
+2. 语气专业中肯，既要肯定也要指出不足
+3. 不超过120字
+
+请只返回 JSON，格式为：{"todos": ["..."], "insights": ["..."], "aiComment": "..."}`
 
     // 限制并发，避免 API 限流
     const BATCH = 3
@@ -275,6 +287,7 @@ router.post('/extract-ai', protect, async (req, res) => {
             id: m.id,
             todos: Array.isArray(data.todos) ? data.todos.filter(t => typeof t === 'string' && t.trim()).slice(0, 8) : [],
             insights: Array.isArray(data.insights) ? data.insights.filter(t => typeof t === 'string' && t.trim()).slice(0, 5) : [],
+            aiComment: typeof data.aiComment === 'string' ? data.aiComment.trim() : '',
           }
         } catch (e) {
           console.error(`[extract-ai] 会议 ${m.id} 提取失败:`, e.message)

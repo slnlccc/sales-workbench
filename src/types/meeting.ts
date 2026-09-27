@@ -13,6 +13,7 @@ export interface MeetingItem {
   tags: string[];
   todos: string[];
   insights: string[];
+  aiComment?: string;          // AI 对会议的整体点评
   completed: boolean;
   url?: string;              // 飞书妙记原文链接
 }
