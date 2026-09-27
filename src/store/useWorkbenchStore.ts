@@ -229,7 +229,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
       createdAt: '2026-07-07T15:35:00Z',
     },
   ],
-  user: mockUser,
+  user: persisted.user || mockUser,
   activeTab: 'voice',
   inputText: '',
   isRecording: false,
