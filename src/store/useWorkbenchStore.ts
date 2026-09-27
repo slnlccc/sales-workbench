@@ -510,6 +510,19 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
     window.addEventListener('auth:logout', () => {
       get().resetUser();
     });
+    // 云同步拉取完成后，从 sw_workbench_data 重新读取 user（含入职日期），
+    // 实现跨设备同步入职日期
+    window.addEventListener('data:synced-from-cloud', () => {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const data = JSON.parse(raw);
+          if (data.user) {
+            set((state) => ({ user: { ...state.user, ...data.user } }));
+          }
+        }
+      } catch { /* 忽略 */ }
+    });
   }
 
   return store;
