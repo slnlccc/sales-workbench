@@ -511,6 +511,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(loggedInUser)
       setToken(newToken)
       setLogoutMessage(null)
+      // 通知工作台 store 恢复该用户的入职日期等设定
+      window.dispatchEvent(new CustomEvent('auth:login-success'))
     } finally {
       setLoading(false)
     }
@@ -535,6 +537,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(registeredUser)
       setToken(newToken)
       setLogoutMessage(null)
+      // 通知工作台 store 恢复该用户的入职日期等设定
+      window.dispatchEvent(new CustomEvent('auth:login-success'))
     } finally {
       setLoading(false)
     }
@@ -550,6 +554,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.removeItem('sw_pending_login') // 登出时清除保存的凭据
     // 清空业务数据：切换账号时防止下一个账号看到上一个账号的残留数据
     clearBusinessData()
+    // 通知工作台 store 重置用户设定（入职日期等）
+    window.dispatchEvent(new CustomEvent('auth:logout'))
     setUser(null)
     setToken(null)
   }

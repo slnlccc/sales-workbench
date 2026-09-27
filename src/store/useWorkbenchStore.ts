@@ -5,6 +5,10 @@ import { mockRecords, mockUser } from '@/data/mock';
 // localStorage 持久化辅助
 const STORAGE_KEY = 'sw_workbench_data';
 
+// 按用户名保存入职日期的独立 key：登出时不清除（不在 BUSINESS_DATA_KEYS 里），
+// 确保同一账号再次登录后能恢复自己设定的入职日期，不会被重置成默认的 4月28号。
+const getJoinDateKey = (username: string) => `sw_join_date_${username}`;
+
 const loadFromStorage = (): Partial<WorkbenchState> => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -14,6 +18,7 @@ const loadFromStorage = (): Partial<WorkbenchState> => {
       records: data.records || mockRecords,
       memos: data.memos || [],
       memoKnowledge: data.memoKnowledge || [],
+      user: data.user || mockUser, // 恢复用户设定（含入职日期）
     };
   } catch {
     return {};
@@ -26,6 +31,7 @@ const saveToStorage = (state: WorkbenchState) => {
       records: state.records,
       memos: state.memos,
       memoKnowledge: state.memoKnowledge,
+      user: state.user, // 持久化用户设定（含入职日期）
     }));
   } catch {
     // 存储空间不足时静默失败
@@ -55,6 +61,8 @@ interface WorkbenchState {
   addMemoKnowledge: (knowledge: MemoKnowledge) => void;
   deleteMemoKnowledge: (id: string) => void;
   setJoinDate: (dateStr: string) => void;
+  loadJoinDateForCurrentUser: () => void;
+  resetUser: () => void;
   closeScheduleTask: (id: string) => void;
   deleteRecord: (id: string) => void;
   deleteExpiredRecords: () => void;
@@ -187,7 +195,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
     saveToStorage(get());
   };
 
-  return {
+  const store = {
   records: persisted.records || mockRecords,
   memos: persisted.memos || [
     {
@@ -362,7 +370,37 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
   },
 
   setJoinDate: (dateStr: string) => {
-    set((state) => ({ user: { ...state.user, joinDate: dateStr } }));
+    persistSet((state) => {
+      const newUser = { ...state.user, joinDate: dateStr };
+      // 同时按用户名保存到独立 key（登出不清除），确保跨登录持久化
+      try {
+        const cu = JSON.parse(localStorage.getItem('sw_current_user') || '{}');
+        if (cu?.username) {
+          localStorage.setItem(getJoinDateKey(cu.username), dateStr);
+        }
+      } catch { /* 忽略 */ }
+      return { user: newUser };
+    });
+  },
+
+  // 登录后调用：从按用户名保存的独立 key 中恢复该用户的入职日期
+  loadJoinDateForCurrentUser: () => {
+    try {
+      const cu = JSON.parse(localStorage.getItem('sw_current_user') || '{}');
+      if (cu?.username) {
+        const saved = localStorage.getItem(getJoinDateKey(cu.username));
+        if (saved) {
+          set((state) => ({ user: { ...state.user, joinDate: saved } }));
+        } else {
+          set((state) => ({ user: { ...state.user, joinDate: mockUser.joinDate } }));
+        }
+      }
+    } catch { /* 忽略 */ }
+  },
+
+  // 登出时调用：重置为默认用户设定，防止下一个账号看到上一个账号的入职日期
+  resetUser: () => {
+    set({ user: mockUser });
   },
 
   // 日历事项闭环：toggle 切换完成状态
@@ -462,4 +500,17 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => {
     }));
   },
   };
+
+  // 监听登录/登出事件：登录后恢复该用户的入职日期，登出时重置为默认值
+  // （防止下一个账号看到上一个账号的入职日期 → 数据隔离）
+  if (typeof window !== 'undefined') {
+    window.addEventListener('auth:login-success', () => {
+      get().loadJoinDateForCurrentUser();
+    });
+    window.addEventListener('auth:logout', () => {
+      get().resetUser();
+    });
+  }
+
+  return store;
 });
