@@ -70,7 +70,7 @@ async function fetchTenantAccessToken(appId, appSecret) {
 // 2) 搜索妙记列表（bot/tenant 身份）
 //    bot 身份没有 "me"，必须传一个过滤条件；默认用最近 N 天作为时间范围
 async function searchMinutes(token, options = {}) {
-  const { pageSize = 30, days = 90 } = options
+  const { pageSize = 20, days = 90 } = options
   const now = Date.now()
   // 飞书 API 时间戳为秒级字符串
   const startTime = String(Math.floor((now - days * 24 * 60 * 60 * 1000) / 1000))
@@ -220,7 +220,7 @@ async function refreshUserToken(appId, appSecret, refreshToken) {
 //      }
 //    时间格式：ISO 8601 字符串（YYYY-MM-DDTHH:MM:SSZ），不是 unix 时间戳
 async function searchMinutesAsUser(userAccessToken, options = {}) {
-  const { pageSize = 50, days = 90, userOpenId } = options
+  const { pageSize = 20, days = 90, userOpenId } = options
 
   // 时间格式：ISO 8601（UTC）— 飞书要求精确格式 2026-08-26T00:00:00Z
   // 注意不能用 toISOString().replace()，因为 .972Z 替换后格式会错乱
