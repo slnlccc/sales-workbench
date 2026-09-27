@@ -220,7 +220,7 @@ async function refreshUserToken(appId, appSecret, refreshToken) {
 //      }
 //    时间格式：ISO 8601 字符串（YYYY-MM-DDTHH:MM:SSZ），不是 unix 时间戳
 async function searchMinutesAsUser(userAccessToken, options = {}) {
-  const { pageSize = 30, days = 30, userOpenId } = options
+  const { pageSize = 50, days = 90, userOpenId } = options
 
   // 时间格式：ISO 8601（UTC）— 飞书要求精确格式 2026-08-26T00:00:00Z
   // 注意不能用 toISOString().replace()，因为 .972Z 替换后格式会错乱
@@ -234,7 +234,7 @@ async function searchMinutesAsUser(userAccessToken, options = {}) {
   const endTimeIso = fmtIso(now, true)
 
   // 构造请求体：filter.create_time + filter.owner_ids（必须是 open_id）
-  const body = {
+  const baseBody = {
     filter: {
       create_time: {
         start_time: startTimeIso,
@@ -243,38 +243,59 @@ async function searchMinutesAsUser(userAccessToken, options = {}) {
     },
   }
   if (userOpenId) {
-    body.filter.owner_ids = [userOpenId]
+    baseBody.filter.owner_ids = [userOpenId]
   }
 
-  console.log('[searchMinutesAsUser] 调飞书 search:', {
-    tokenPrefix: userAccessToken ? userAccessToken.substring(0, 15) + '...' : '(none)',
-    tokenLength: userAccessToken ? userAccessToken.length : 0,
-    userOpenId: userOpenId || '(none)',
-    startTimeIso, endTimeIso,
-    bodyStructure: Object.keys(body.filter),
-  })
+  // 分页拉取所有妙记（飞书 search 默认 page_size 最大 50）
+  let allItems = []
+  let pageToken = ''
+  let pageCount = 0
 
-  let res
-  try {
-    res = await http.post(
-      `${FEISHU_BASE}/minutes/v1/minutes/search`,
-      body,
-      {
-        params: { page_size: String(pageSize) },
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${userAccessToken}`,
-        },
-      }
-    )
-  } catch (err) {
-    throw new Error(formatAxiosError('拉取用户妙记失败', err))
-  }
-  const data = res.data || {}
-  if (data.code !== 0) {
-    throw new Error(`拉取用户妙记失败: ${data.msg || 'code=' + data.code}`)
-  }
-  const items = data.data?.items || []
+  do {
+    pageCount++
+    const body = { ...baseBody }
+    if (pageToken) body.page_token = pageToken
+
+    console.log(`[searchMinutesAsUser] 第${pageCount}页 请求飞书 search:`, {
+      tokenPrefix: userAccessToken ? userAccessToken.substring(0, 15) + '...' : '(none)',
+      userOpenId: userOpenId || '(none)',
+      startTimeIso, endTimeIso,
+      pageToken: pageToken || '(first page)',
+    })
+
+    let res
+    try {
+      res = await http.post(
+        `${FEISHU_BASE}/minutes/v1/minutes/search`,
+        body,
+        {
+          params: { page_size: String(pageSize) },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${userAccessToken}`,
+          },
+        }
+      )
+    } catch (err) {
+      throw new Error(formatAxiosError('拉取用户妙记失败', err))
+    }
+    const data = res.data || {}
+    if (data.code !== 0) {
+      throw new Error(`拉取用户妙记失败: ${data.msg || 'code=' + data.code}`)
+    }
+    const pageItems = data.data?.items || []
+    allItems = allItems.concat(pageItems)
+    pageToken = data.data?.page_token || ''
+    const hasMore = data.data?.has_more
+
+    console.log(`[searchMinutesAsUser] 第${pageCount}页 返回 ${pageItems.length} 条, has_more=${hasMore}, total=${allItems.length}`)
+
+    if (!hasMore || !pageToken) break
+    // 安全限制：最多拉 10 页（500 条），防止死循环
+    if (pageCount >= 10) break
+  } while (pageToken)
+
+  const items = allItems
   const nowSec = Math.floor(Date.now() / 1000)
 
   // 飞书 search API 只返回 display_info + meta_data + token，没有 title/summary

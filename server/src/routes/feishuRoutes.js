@@ -194,7 +194,7 @@ router.post('/sync-user', async (req, res) => {
   }
 
   try {
-    const items = await searchMinutesAsUser(userAccessToken, { days: 30 })
+    const items = await searchMinutesAsUser(userAccessToken, { days: 90 })
     res.json({
       source: 'real',
       items,

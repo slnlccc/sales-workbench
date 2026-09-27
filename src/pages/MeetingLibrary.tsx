@@ -82,14 +82,14 @@ export default function MeetingLibrary() {
 
   // 初始化拉取（自动根据配置走 mock / 真实）
   useEffect(() => {
-    handleSync();
+    handleSync(false);
   }, []);
 
-  const handleSync = async () => {
+  const handleSync = async (force = true) => {
     setSyncing(true);
     setSyncError('');
     try {
-      const data = await syncMeetingsFromFeishu();
+      const data = await syncMeetingsFromFeishu(force);
       // 过滤掉已删除的会议纪要
       const deletedIds = getDeletedIds();
       const filtered = data.filter((m) => !deletedIds.includes(m.id));
